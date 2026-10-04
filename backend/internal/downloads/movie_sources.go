@@ -48,7 +48,7 @@ func (m *Manager) RSS(ctx context.Context) ([]indexer.Release, error) {
 
 func (m *Manager) UnlinkedMovies(ctx context.Context) ([]Job, error) {
 	rows, err := m.pool.Query(ctx, `SELECT `+jobColumns+` FROM downloads
-	 WHERE status = 'completed' AND movie_adopted = false AND NOT EXISTS
+	 WHERE status = 'completed' AND movie_adopted = false AND media_type <> 'tv' AND NOT EXISTS
 	 (SELECT 1 FROM movie_acquisitions WHERE job_id = downloads.id) ORDER BY created_at LIMIT 20`)
 	if err != nil {
 		return nil, dbError("load unimported movies", err)

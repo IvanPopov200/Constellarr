@@ -52,7 +52,8 @@ type querier interface {
 }
 
 type Store struct {
-	pool *pgxpool.Pool
+	pool           *pgxpool.Pool
+	operationSlots chan struct{}
 }
 
 func NewStore(ctx context.Context, pool *pgxpool.Pool, defaults Config) (*Store, error) {
@@ -62,7 +63,11 @@ func NewStore(ctx context.Context, pool *pgxpool.Pool, defaults Config) (*Store,
 	if err := seed(ctx, pool, defaults); err != nil {
 		return nil, err
 	}
-	return &Store{pool: pool}, nil
+	return &Store{pool: pool, operationSlots: make(chan struct{}, max(1, int(pool.Config().MaxConns-4)/2))}, nil
+}
+
+func (s *Store) OperationSlots() chan struct{} {
+	return s.operationSlots
 }
 
 func seed(ctx context.Context, pool *pgxpool.Pool, defaults Config) error {
@@ -641,6 +646,7 @@ func (s *Store) DeleteProfile(ctx context.Context, id string) error {
 	tag, err := s.pool.Exec(ctx,
 		`DELETE FROM movie_profiles WHERE id = $1
 		 AND NOT EXISTS (SELECT 1 FROM movies WHERE data->>'profileId' = $1)
+		 AND NOT EXISTS (SELECT 1 FROM tv_series WHERE profile_id = $1)
 		 AND NOT EXISTS (SELECT 1 FROM movie_watchlists WHERE data->>'profileId' = $1)`, id)
 	if err != nil {
 		return dbError("delete profile", err)
@@ -925,8 +931,26 @@ func (s *Store) SaveAcquisition(ctx context.Context, acquisition Acquisition) er
 	if err != nil {
 		return err
 	}
-	// A job keeps its original movie; later updates can only refresh the release state.
-	tag, err := s.pool.Exec(ctx,
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return dbError("claim movie download", err)
+	}
+	defer tx.Rollback(ctx)
+	var mediaType string
+	if err := tx.QueryRow(ctx, `SELECT media_type FROM downloads WHERE id=$1 FOR UPDATE`, acquisition.JobID).Scan(&mediaType); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return dbError("claim movie download", err)
+	}
+	var tvOwned bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM tv_acquisitions WHERE job_id=$1)`, acquisition.JobID).Scan(&tvOwned); err != nil {
+		return dbError("claim movie download", err)
+	}
+	if tvOwned || mediaType == "tv" {
+		return ErrConflict
+	}
+	tag, err := tx.Exec(ctx,
 		`INSERT INTO movie_acquisitions (movie_id, job_id, release, status, error, updated_at)
 		 VALUES ($1, $2, $3::jsonb, $4, $5, now())
 		 ON CONFLICT (job_id) DO UPDATE SET release = EXCLUDED.release, status = EXCLUDED.status,
@@ -941,6 +965,9 @@ func (s *Store) SaveAcquisition(ctx context.Context, acquisition Acquisition) er
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrConflict
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return dbError("claim movie download", err)
 	}
 	return nil
 }

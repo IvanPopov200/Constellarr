@@ -351,6 +351,25 @@ func (s *Service) syncLegacy(ctx context.Context, cfg Config) (int, error) {
 	imported := 0
 	var problems []error
 	for _, job := range jobs {
+		if _, episodic := library.ParseEpisode(job.Title); episodic {
+			if _, err := s.Store.pool.Exec(ctx, `UPDATE downloads SET media_type='tv' WHERE id=$1 AND movie_adopted=false`, job.ID); err != nil {
+				return imported, err
+			}
+			continue
+		}
+		containsTV := false
+		for _, file := range job.Files {
+			if _, episodic := library.ParseEpisode(file.Name); episodic {
+				containsTV = true
+				break
+			}
+		}
+		if containsTV {
+			if _, err := s.Store.pool.Exec(ctx, `UPDATE downloads SET media_type='tv' WHERE id=$1 AND movie_adopted=false`, job.ID); err != nil {
+				return imported, err
+			}
+			continue
+		}
 		outputDir, err := s.Downloads.OutputDirectory(job.ID)
 		if err != nil {
 			continue

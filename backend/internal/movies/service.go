@@ -50,7 +50,7 @@ func New(ctx context.Context, pool *pgxpool.Pool, manager *downloads.Manager) (*
 	if err := os.MkdirAll(defaults.RootFolders[0].Path, 0o755); err != nil {
 		return nil, errors.New("movies: the default library root could not be created")
 	}
-	return &Service{Store: store, Downloads: manager, lockSlots: make(chan struct{}, max(1, int(pool.Config().MaxConns-2)/2))}, nil
+	return &Service{Store: store, Downloads: manager, lockSlots: store.OperationSlots()}, nil
 }
 
 func defaultConfig(directory string) Config {
@@ -1052,6 +1052,9 @@ func (s *Service) Import(ctx context.Context, input ImportInput) (Movie, error) 
 		return Movie{}, fmt.Errorf("%w: source root folder does not exist", ErrInvalid)
 	}
 	path := strings.TrimSpace(input.Path)
+	if _, episodic := library.ParseEpisode(path); episodic {
+		return Movie{}, fmt.Errorf("%w: import episode files from TV Shows", ErrInvalid)
+	}
 	if path == "" || len(path) > maxPathBytes {
 		return Movie{}, fmt.Errorf("%w: a movie file path is required", ErrInvalid)
 	}
@@ -1227,6 +1230,9 @@ func (s *Service) Scan(ctx context.Context, rootID string) ([]Candidate, error) 
 	}
 	results := make([]Candidate, 0, len(candidates))
 	for _, candidate := range candidates {
+		if _, episodic := library.ParseEpisode(candidate.Path); episodic {
+			continue
+		}
 		item := Candidate{Candidate: candidate}
 		if candidate.IMDbID != "" {
 			item.MatchedMovieID = byIMDb[strings.ToLower(candidate.IMDbID)]
