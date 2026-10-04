@@ -558,7 +558,7 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
               <CardDescription>Scheduled searches and how missing movies are handled.</CardDescription>
             </CardHeader>
             <CardContent className="gap-5">
-              <Field id="poll-minutes" label="Library refresh interval (minutes)" hint="How often Constellarr checks for new imports and removed files.">
+              <Field id="poll-minutes" label="RSS check interval (minutes)" hint="How often Constellarr checks indexer feeds for monitored movies.">
                 <Input
                   id="poll-minutes"
                   type="number"

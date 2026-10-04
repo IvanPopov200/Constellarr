@@ -762,6 +762,7 @@ func movieRootsConfigBody(t *testing.T, incoming, libraryRoot string) string {
 func movieRequest(t *testing.T, handler http.Handler, method, target, body string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	req.Host = "localhost"
 	req.Header.Set("Content-Type", "application/json")
 	for key, value := range headers {
 		req.Header.Set(key, value)

@@ -305,7 +305,7 @@ func TestSettingsValidationAndRequestEnforcement(t *testing.T) {
 	if status, raw := request(t, handler, http.MethodPost, "/api/v1/sources/test", validBody, evil); status != http.StatusForbidden {
 		t.Errorf("POST from a foreign origin: status %d, body %s; want 403", status, raw)
 	}
-	status, raw := request(t, handler, http.MethodPut, "/api/v1/settings", validBody, map[string]string{"Origin": "http://example.com"})
+	status, raw := request(t, handler, http.MethodPut, "/api/v1/settings", validBody, map[string]string{"Origin": "http://localhost"})
 	if status != http.StatusOK {
 		t.Fatalf("PUT from the request origin: status %d, body %s", status, raw)
 	}
@@ -313,7 +313,7 @@ func TestSettingsValidationAndRequestEnforcement(t *testing.T) {
 
 	for name, origin := range map[string]string{
 		"foreign host":   "http://other.example",
-		"invalid scheme": "ftp://example.com",
+		"invalid scheme": "ftp://localhost",
 		"opaque origin":  "null",
 	} {
 		if status, raw := request(t, handler, http.MethodPut, "/api/v1/settings", validBody, map[string]string{"Origin": origin}); status != http.StatusForbidden {
@@ -322,8 +322,8 @@ func TestSettingsValidationAndRequestEnforcement(t *testing.T) {
 	}
 	// Scheme is not compared with the request so TLS-terminating proxies keep working.
 	for name, origin := range map[string]string{
-		"case-insensitive host": "HTTP://EXAMPLE.COM",
-		"proxy-terminated TLS":  "https://example.com",
+		"case-insensitive host": "HTTP://LOCALHOST",
+		"proxy-terminated TLS":  "https://localhost",
 	} {
 		if status, raw := request(t, handler, http.MethodPut, "/api/v1/settings", validBody, map[string]string{"Origin": origin}); status != http.StatusOK {
 			t.Errorf("%s: status %d, body %s; want 200", name, status, raw)
@@ -485,6 +485,7 @@ func assertHidden(t *testing.T, body []byte, secrets ...string) {
 func request(t *testing.T, handler http.Handler, method, path, body string, headers map[string]string) (int, []byte) {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Host = "localhost"
 	req.Header.Set("Content-Type", "application/json")
 	for key, value := range headers {
 		req.Header.Set(key, value)
