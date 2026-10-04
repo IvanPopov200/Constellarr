@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+backend/internal/web/dist/*
+!backend/internal/web/dist/.gitkeep
+bin/
+data/
+coverage/
+*.log

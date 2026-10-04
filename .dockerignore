@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+node_modules
+**/node_modules
+frontend/dist
+backend/internal/web/dist
+bin
+data
+**/data
+coverage
+*.log

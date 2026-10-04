@@ -1,0 +1,51 @@
+name: constellarr
+
+services:
+  app:
+    build: .
+    user: ${APP_UID:-1000}:${APP_GID:-1000}
+    restart: unless-stopped
+    environment:
+      HTTP_ADDR: :8080
+      DATABASE_URL: postgresql://postgres:5432/${POSTGRES_DB:-constellarr}?sslmode=disable
+      PGUSER: ${POSTGRES_USER:-constellarr}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Run make setup to create .env}
+      NZBGEEK_URL: ${NZBGEEK_URL:-https://api.nzbgeek.info/api}
+      NZBGEEK_API_KEY: ${NZBGEEK_API_KEY:-}
+      USENET_HOST: ${USENET_HOST:-eunews.frugalusenet.com}
+      USENET_PORT: ${USENET_PORT:-563}
+      USENET_USERNAME: ${USENET_USERNAME:-}
+      USENET_PASSWORD: ${USENET_PASSWORD:-}
+      USENET_CONNECTIONS: ${USENET_CONNECTIONS:-8}
+      USENET_FALLBACK_HOSTS: ${USENET_FALLBACK_HOSTS:-news.frugalusenet.com}
+      DOWNLOAD_DIR: /data
+    volumes:
+      - ${DOWNLOAD_DIR:-./data}:/data
+    ports:
+      - 127.0.0.1:${APP_PORT:-8080}:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, --spider, -q, http://127.0.0.1:8080/healthz]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  postgres:
+    image: postgres:18.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-constellarr}
+      POSTGRES_USER: ${POSTGRES_USER:-constellarr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run make setup to create .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
