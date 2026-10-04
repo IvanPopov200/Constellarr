@@ -93,6 +93,25 @@ func postWebhook(ctx context.Context, cfg Config, movie Movie, paths []string) e
 		Quality: bestFileQuality(movie.Files),
 		Files:   paths,
 	}
+	return sendWebhook(ctx, cfg, payload)
+}
+
+func NotifyImport(ctx context.Context, cfg Config, payload any) []error {
+	var failures []error
+	if cfg.JellyfinURL != "" && strings.TrimSpace(cfg.JellyfinAPIKey) != "" {
+		if err := jellyfinRefresh(ctx, cfg); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	if cfg.WebhookURL != "" {
+		if err := sendWebhook(ctx, cfg, payload); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return failures
+}
+
+func sendWebhook(ctx context.Context, cfg Config, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return errors.New("webhook payload could not be encoded")

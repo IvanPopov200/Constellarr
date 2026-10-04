@@ -365,7 +365,7 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
                 Metadata provider (OMDb)
               </CardTitle>
               <CardDescription>
-                Search ratings, posters, and details for your movie catalog.
+                Search ratings, posters, and details for your movie and TV catalogs.
               </CardDescription>
             </CardHeader>
             <CardContent className="gap-5">
@@ -388,7 +388,7 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
               />
               <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 <ShieldCheck className="size-4 shrink-0" />
-                Without a provider you can still add movies by entering details manually.
+                Without a provider you can still add movies and series by entering details manually.
               </p>
             </CardContent>
           </Card>
@@ -404,7 +404,7 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
               </CardDescription>
             </CardHeader>
             <CardContent className="gap-5">
-              <Field id="jellyfin-url" label="Jellyfin URL" hint="Constellarr asks Jellyfin to refresh the movie library after an import.">
+              <Field id="jellyfin-url" label="Jellyfin URL" hint="Constellarr asks Jellyfin to refresh the media library after an import.">
                 <Input
                   id="jellyfin-url"
                   type="url"

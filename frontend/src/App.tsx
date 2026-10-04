@@ -6,6 +6,7 @@ import { DownloadQueue } from '@/components/download-queue'
 import { Overview } from '@/components/overview'
 import { ReleaseSearch } from '@/components/release-search'
 import { MoviesPage } from '@/components/movies-page'
+import { TVPage } from '@/components/tv-page'
 import { SettingsPage } from '@/components/settings-page'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -19,7 +20,6 @@ const routeIds = Object.keys(routeLabels) as Route[]
 const routeAliases: Record<string, Route> = { search: 'movies', downloads: 'usenet', settings: 'connections' }
 const plannedSections: Partial<Record<Route, string>> = {
   requests: 'Track requests for movies, shows, and music.',
-  'tv-shows': 'Manage series, episodes, and upcoming releases.',
   music: 'Manage artists, albums, and your music library.',
   subtitles: 'Find and manage subtitles for your movies and shows.',
   torrents: 'Manage torrent downloads and seeding.',
@@ -78,6 +78,10 @@ function App() {
               <div className="mt-4"><ReleaseSearch jobs={jobs ?? []} onDownload={download} /></div>
             </details>
           </div>
+        </div>
+
+        <div hidden={route !== 'tv-shows'} inert={route !== 'tv-shows'}>
+          <TVPage active={route === 'tv-shows'} />
         </div>
 
         {route === 'usenet' && (

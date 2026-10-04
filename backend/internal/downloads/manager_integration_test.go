@@ -104,8 +104,8 @@ func TestManagerMigrationsAndDuplicateRelease(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*), coalesce(max(version), 0) FROM schema_migrations`).Scan(&migrations, &version); err != nil {
 		t.Fatalf("read schema_migrations: %v", err)
 	}
-	if migrations != 5 || version != 5 {
-		t.Fatalf("schema_migrations has %d rows and version %d, want migrations 1-5 applied once", migrations, version)
+	if migrations != 6 || version != 6 {
+		t.Fatalf("schema_migrations has %d rows and version %d, want migrations 1-6 applied once", migrations, version)
 	}
 	if _, err := pool.Exec(ctx, `SELECT 1 FROM downloads LIMIT 1`); err != nil {
 		t.Fatalf("downloads table is missing: %v", err)

@@ -124,6 +124,130 @@ func Scan(ctx context.Context, rootPath string) ([]Candidate, error) {
 	return candidates, nil
 }
 
+type TVCandidate struct {
+	Candidate
+	Season  int    `json:"season"`
+	Numbers []int  `json:"episodes"`
+	AirDate string `json:"airDate"`
+	Pack    bool   `json:"pack"`
+}
+
+// ScanTV keeps one candidate per file instead of grouping multipart files like Scan.
+func ScanTV(ctx context.Context, rootPath string) ([]TVCandidate, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if rootPath == "" {
+		return nil, fmt.Errorf("%w: scan root must be configured", ErrUnsafe)
+	}
+	root, err := os.OpenRoot(rootPath)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+
+	type entry struct {
+		rel  string
+		size int64
+	}
+	var entries []entry
+	err = fs.WalkDir(root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		if d.IsDir() {
+			if p != "." && skipDir(d.Name()) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !d.Type().IsRegular() || !isVideo(p) || isSampleOrTrailer(p) {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		entries = append(entries, entry{rel: filepath.ToSlash(p), size: info.Size()})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].rel < entries[j].rel })
+
+	candidates := make([]TVCandidate, 0, len(entries))
+	for _, e := range entries {
+		identity, ok := ParseEpisode(e.rel)
+		if !ok {
+			continue
+		}
+		title, year := identity.Title, identity.Year
+		_, _, imdb := inferName(baseNoExt(e.rel))
+		if dir := seriesFolderFor(e.rel); dir != "." && dir != "" {
+			folderTitle, folderYear, folderIMDb := inferName(path.Base(dir))
+			if title == "" {
+				title = folderTitle
+			}
+			if year == 0 && folderYear > 0 {
+				year = folderYear
+			}
+			if imdb == "" {
+				imdb = folderIMDb
+			}
+		}
+		candidates = append(candidates, TVCandidate{
+			Candidate: Candidate{
+				Path:    e.rel,
+				Size:    e.size,
+				Title:   title,
+				Year:    year,
+				IMDbID:  imdb,
+				Quality: parseQuality(path.Base(e.rel)),
+			},
+			Season:  identity.Season,
+			Numbers: identity.Numbers,
+			AirDate: identity.AirDate,
+			Pack:    identity.Pack,
+		})
+	}
+	return candidates, nil
+}
+
+// seriesFolderFor skips a season folder so it is never used as the series.
+func seriesFolderFor(rel string) string {
+	dir := path.Dir(rel)
+	if dir == "." {
+		return "."
+	}
+	if _, ok := seasonFolderNumber(path.Base(dir)); ok {
+		return path.Dir(dir)
+	}
+	return dir
+}
+
+func seasonFolderNumber(name string) (int, bool) {
+	match := seasonFolder.FindStringSubmatch(name)
+	if match == nil {
+		return 0, false
+	}
+	if strings.EqualFold(name, "specials") {
+		return 0, true
+	}
+	text := match[2]
+	if match[1] != "" {
+		text = match[1]
+	}
+	season, err := strconv.Atoi(text)
+	if err != nil || season > maxEpisodeSeason {
+		return 0, false
+	}
+	return season, true
+}
+
 // inferName guesses title, year, and IMDb identity from a file or folder stem.
 func inferName(stem string) (string, int, string) {
 	imdb := ""

@@ -12,6 +12,7 @@ import (
 
 	"github.com/IvanPopov200/Constellarr/backend/internal/metadata"
 	"github.com/IvanPopov200/Constellarr/backend/internal/movies"
+	"github.com/IvanPopov200/Constellarr/backend/internal/tv"
 )
 
 func registerMoviePosters(mux *http.ServeMux, service *movies.Service) {
@@ -153,6 +154,24 @@ func posterURLs(body any) any {
 		return title
 	}
 	switch value := body.(type) {
+	case tv.Series:
+		value.Metadata = convert(value.Metadata)
+		return value
+	case []tv.Series:
+		result := make([]tv.Series, len(value))
+		for i, series := range value {
+			series.Metadata = convert(series.Metadata)
+			result[i] = series
+		}
+		return result
+	case []tv.CalendarEntry:
+		result := append([]tv.CalendarEntry{}, value...)
+		for i := range result {
+			if result[i].Poster != "" {
+				result[i].Poster = convert(metadata.Title{IMDbID: result[i].SeriesIMDbID, Poster: result[i].Poster}).Poster
+			}
+		}
+		return result
 	case metadata.Title:
 		return convert(value)
 	case []metadata.Title:

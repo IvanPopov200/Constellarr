@@ -33,7 +33,7 @@ type publishedFile struct {
 type rollback struct {
 	published  []publishedFile
 	archives   []archiveRecord
-	nfoWritten *publishedFile
+	nfoWritten []publishedFile
 }
 
 func stage(ctx context.Context, p *plan, t *target, root, srcRoot *os.Root, created *[]string) error {
