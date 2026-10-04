@@ -7,6 +7,7 @@ require (
 	github.com/javi11/nntppool/v5 v5.0.0
 	github.com/mnightingale/rapidyenc v0.0.0-20251128204712-7aafef1eaf1c
 	github.com/nwaples/rardecode/v2 v2.4.1
+	golang.org/x/sys v0.39.0
 )
 
 require (
