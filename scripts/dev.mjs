@@ -21,8 +21,12 @@ if (process.argv.includes("--test")) {
   if (!suppliedURL && databaseCommand("createdb").status !== 0) process.exit(1);
   let code = 1;
   try {
+    const testEnvironment = { ...environment, TEST_DATABASE_URL: suppliedURL || url.href };
+    for (const name of ['OMDB_URL', 'OMDB_API_KEY', 'OMDB_POSTER_URL', 'JELLYFIN_URL', 'JELLYFIN_API_KEY', 'IMPORT_WEBHOOK_URL']) {
+      testEnvironment[name] = '';
+    }
     const result = spawnSync("go", ["-C", "backend", "test", "-count=1", "-v", "./..."], {
-      stdio: "inherit", env: { ...environment, TEST_DATABASE_URL: suppliedURL || url.href },
+      stdio: "inherit", env: testEnvironment,
     });
     code = result.status ?? 1;
   } finally {

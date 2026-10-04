@@ -269,12 +269,12 @@ func (m *Manager) OpenFile(ctx context.Context, id, name string) (*os.File, erro
 	}
 	root, err := os.OpenRoot(directory)
 	if err != nil {
-		return nil, ErrNotFound
+		return m.openLibraryFile(ctx, id, name)
 	}
 	defer root.Close()
 	handle, err := root.Open(name)
 	if err != nil {
-		return nil, ErrNotFound
+		return m.openLibraryFile(ctx, id, name)
 	}
 	info, err := handle.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 {

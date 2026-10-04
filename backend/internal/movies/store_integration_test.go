@@ -245,6 +245,17 @@ func TestStoreBootstrapAndDefaults(t *testing.T) {
 	if count := countRows(t, ctx, pool, `SELECT count(*) FROM movie_profiles`); count != len(quality.Defaults()) {
 		t.Fatalf("second bootstrap duplicated profiles: %d rows", count)
 	}
+	removed := quality.Defaults()[0].ID
+	if err := second.DeleteProfile(ctx, removed); err != nil {
+		t.Fatalf("delete starter profile: %v", err)
+	}
+	third, err := movies.NewStore(ctx, pool, other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := third.Profile(ctx, removed); !errors.Is(err, movies.ErrNotFound) {
+		t.Fatalf("restart recreated a deleted starter profile: %v", err)
+	}
 
 	catalog, err := store.List(ctx)
 	if err != nil {
@@ -622,6 +633,18 @@ func TestStoreConfigSaveAndSecrets(t *testing.T) {
 	if stored.MetadataAPIKey != "rotated-metadata-key" || stored.JellyfinAPIKey != "rotated-jellyfin-key" {
 		t.Fatalf("blank secrets were not retained: %+v", stored)
 	}
+	for _, provider := range []string{"metadata", "jellyfin"} {
+		repointed := cloneConfig(stored)
+		repointed.MetadataAPIKey, repointed.JellyfinAPIKey = "", ""
+		if provider == "metadata" {
+			repointed.MetadataURL = "https://other.example/"
+		} else {
+			repointed.JellyfinURL = "https://other.example/"
+		}
+		if _, err := store.SaveConfig(ctx, repointed); !errors.Is(err, movies.ErrInvalid) {
+			t.Fatalf("%s secret moved to another origin: %v", provider, err)
+		}
+	}
 	var raw []byte
 	if err := pool.QueryRow(ctx, `SELECT data FROM movie_config WHERE id`).Scan(&raw); err != nil {
 		t.Fatalf("read config row: %v", err)
@@ -748,7 +771,7 @@ func TestStoreAcquisitions(t *testing.T) {
 	acquisition := movies.Acquisition{
 		MovieID: first.ID, JobID: "job-a", ReleaseID: "release-a", Title: "The Matrix 1999 1080p",
 		Decision: quality.Decision{Score: 1200, Rank: 1, Allowed: true, Reasons: []string{"preferred group"}},
-		Status:   "queued",
+		Status:   "queued", Override: true,
 	}
 	if err := store.SaveAcquisition(ctx, acquisition); err != nil {
 		t.Fatalf("SaveAcquisition: %v", err)
@@ -759,7 +782,7 @@ func TestStoreAcquisitions(t *testing.T) {
 	}
 	if list[0].MovieID != first.ID || list[0].JobID != "job-a" || list[0].ReleaseID != "release-a" ||
 		list[0].Title != "The Matrix 1999 1080p" || list[0].Status != "queued" || list[0].Decision.Score != 1200 ||
-		len(list[0].Decision.Reasons) != 1 {
+		len(list[0].Decision.Reasons) != 1 || !list[0].Override {
 		t.Fatalf("stored acquisition = %+v", list[0])
 	}
 

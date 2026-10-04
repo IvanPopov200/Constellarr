@@ -56,6 +56,7 @@ func testSchema(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("TEST_DATABASE_URL is invalid: %v", err)
 	}
 	config.ConnConfig.RuntimeParams["search_path"] = schema
+	config.ConnConfig.RuntimeParams["application_name"] = schema
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		admin.Close()
@@ -78,7 +79,7 @@ func TestManagerMigrationsAndDuplicateRelease(t *testing.T) {
 	ctx := context.Background()
 	directory := t.TempDir()
 
-	// Concurrent startup on a fresh schema must apply migrations 001-002 exactly once.
+	// Concurrent startup on a fresh schema must apply every migration exactly once.
 	var starts sync.WaitGroup
 	errs := make(chan error, 2)
 	for i := 0; i < 2; i++ {
@@ -103,8 +104,8 @@ func TestManagerMigrationsAndDuplicateRelease(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*), coalesce(max(version), 0) FROM schema_migrations`).Scan(&migrations, &version); err != nil {
 		t.Fatalf("read schema_migrations: %v", err)
 	}
-	if migrations != 2 || version != 2 {
-		t.Fatalf("schema_migrations has %d rows and version %d, want migrations 1-2 applied once", migrations, version)
+	if migrations != 5 || version != 5 {
+		t.Fatalf("schema_migrations has %d rows and version %d, want migrations 1-5 applied once", migrations, version)
 	}
 	if _, err := pool.Exec(ctx, `SELECT 1 FROM downloads LIMIT 1`); err != nil {
 		t.Fatalf("downloads table is missing: %v", err)
@@ -520,7 +521,8 @@ func TestManagerLockBackendLossRecovery(t *testing.T) {
 		t.Fatal("Close did not stop the coordinator")
 	}
 	var locks int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_locks JOIN pg_stat_activity USING (pid) WHERE locktype = 'advisory'
+	 AND application_name = current_setting('application_name')
 	 AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`).Scan(&locks); err != nil {
 		t.Fatalf("count advisory locks: %v", err)
 	}
@@ -535,7 +537,8 @@ func waitForLockBackend(t *testing.T, ctx context.Context, pool *pgxpool.Pool, e
 	for time.Now().Before(deadline) {
 		var pid int
 		err := pool.QueryRow(ctx,
-			`SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND pid <> $1
+			`SELECT pid FROM pg_locks JOIN pg_stat_activity USING (pid) WHERE locktype = 'advisory' AND pid <> $1
+			 AND application_name = current_setting('application_name')
 			 AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
 			 ORDER BY pid LIMIT 1`, exclude).Scan(&pid)
 		if err == nil {

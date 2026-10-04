@@ -17,6 +17,7 @@ type Service struct {
 	startOnce sync.Once
 	cancel    context.CancelFunc
 	workers   sync.WaitGroup
+	lockSlots chan struct{}
 }
 
 type Release struct {

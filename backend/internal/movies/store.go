@@ -76,10 +76,17 @@ func seed(ctx context.Context, pool *pgxpool.Pool, defaults Config) error {
 		return dbError("initialize movies", err)
 	}
 	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx,
+	initialized, err := tx.Exec(ctx,
 		`INSERT INTO movie_config (id, data) VALUES (true, $1::jsonb) ON CONFLICT (id) DO NOTHING`,
-		string(encoded)); err != nil {
+		string(encoded))
+	if err != nil {
 		return dbError("initialize movies", err)
+	}
+	if initialized.RowsAffected() == 0 {
+		if err := tx.Commit(ctx); err != nil {
+			return dbError("initialize movies", err)
+		}
+		return nil
 	}
 	for _, profile := range quality.Defaults() {
 		if strings.TrimSpace(profile.Name) == "" {
@@ -383,6 +390,50 @@ func (s *Store) Get(ctx context.Context, id string) (Movie, error) {
 	return movieByID(ctx, s.pool, strings.TrimSpace(id))
 }
 
+func (s *Store) Patch(ctx context.Context, id string, fields map[string]any) (Movie, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Movie{}, dbError("update movie", err)
+	}
+	defer tx.Rollback(ctx)
+	movie, err := patchMovie(ctx, tx, id, fields)
+	if err != nil {
+		return Movie{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Movie{}, dbError("update movie", err)
+	}
+	return movie, nil
+}
+
+// Merge only changed fields so independent catalog edits and imports cannot overwrite one another.
+func patchMovie(ctx context.Context, q querier, id string, fields map[string]any) (Movie, error) {
+	body, err := encode(fields)
+	if err != nil {
+		return Movie{}, err
+	}
+	movie, err := scanMovie(q.QueryRow(ctx,
+		`UPDATE movies SET data = data || $2::jsonb, updated_at = now() WHERE id = $1 RETURNING `+movieColumns,
+		id, string(body)))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Movie{}, ErrNotFound
+	}
+	if err != nil {
+		return Movie{}, dbError("update movie", err)
+	}
+	if err := validateMovie(movie); err != nil {
+		return Movie{}, err
+	}
+	roots := []string{movie.RootID}
+	for _, file := range movie.Files {
+		roots = append(roots, file.RootID)
+	}
+	if err := validateReferences(ctx, q, movie.ProfileID, roots); err != nil {
+		return Movie{}, err
+	}
+	return movie, nil
+}
+
 func (s *Store) FindIMDb(ctx context.Context, imdbID string) (Movie, error) {
 	imdbID, ok := normalizeIMDb(imdbID)
 	if !ok || imdbID == "" {
@@ -653,7 +704,13 @@ func (s *Store) SaveConfig(ctx context.Context, cfg Config) (Config, error) {
 	} else if err != nil {
 		return Config{}, err
 	}
-	// Blank or unchanged secrets keep the row written by any process while other fields are replaced.
+	if strings.TrimSpace(cfg.MetadataAPIKey) == "" && current.MetadataAPIKey != "" && cfg.MetadataURL != "" && providerOrigin(cfg.MetadataURL) != providerOrigin(current.MetadataURL) {
+		return Config{}, fmt.Errorf("%w: provide the metadata API key when changing its server", ErrInvalid)
+	}
+	if strings.TrimSpace(cfg.JellyfinAPIKey) == "" && current.JellyfinAPIKey != "" && cfg.JellyfinURL != "" && providerOrigin(cfg.JellyfinURL) != providerOrigin(current.JellyfinURL) {
+		return Config{}, fmt.Errorf("%w: provide the Jellyfin API key when changing its server", ErrInvalid)
+	}
+	// Blank keys stay bound to their configured origin.
 	if key := strings.TrimSpace(cfg.MetadataAPIKey); key == "" || key == current.MetadataAPIKey {
 		cfg.MetadataAPIKey = current.MetadataAPIKey
 	} else if len(cfg.MetadataAPIKey) > maxSecretBytes {
@@ -733,6 +790,14 @@ func validateConfig(cfg Config) error {
 	return validateTemplate("file", cfg.FileTemplate)
 }
 
+func providerOrigin(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(parsed.Scheme + "://" + parsed.Host)
+}
+
 func validateHTTPURL(label, raw string, allowQuery bool) error {
 	if raw == "" {
 		return nil
@@ -794,6 +859,7 @@ type acquisitionRelease struct {
 	ReleaseID string           `json:"releaseId"`
 	Title     string           `json:"title"`
 	Decision  quality.Decision `json:"decision"`
+	Override  bool             `json:"override,omitempty"`
 }
 
 const acquisitionColumns = `movie_id, job_id, release, status, error`
@@ -812,6 +878,7 @@ func scanAcquisition(row rowScanner) (Acquisition, error) {
 			return Acquisition{}, errors.New("movies: saved acquisition data is invalid")
 		}
 		acquisition.ReleaseID, acquisition.Title, acquisition.Decision = release.ReleaseID, release.Title, release.Decision
+		acquisition.Override = release.Override
 	}
 	if acquisition.Decision.Reasons == nil {
 		acquisition.Decision.Reasons = []string{}
@@ -853,7 +920,7 @@ func (s *Store) SaveAcquisition(ctx context.Context, acquisition Acquisition) er
 	acquisition.Error = truncate(acquisition.Error, maxTextRunes)
 	acquisition.Title = truncate(strings.TrimSpace(acquisition.Title), maxTitleRunes)
 	release, err := encode(acquisitionRelease{
-		ReleaseID: acquisition.ReleaseID, Title: acquisition.Title, Decision: acquisition.Decision,
+		ReleaseID: acquisition.ReleaseID, Title: acquisition.Title, Decision: acquisition.Decision, Override: acquisition.Override,
 	})
 	if err != nil {
 		return err

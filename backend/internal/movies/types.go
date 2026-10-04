@@ -77,6 +77,7 @@ type Acquisition struct {
 	ReleaseID string           `json:"releaseId"`
 	Title     string           `json:"title"`
 	Decision  quality.Decision `json:"decision"`
+	Override  bool             `json:"override,omitempty"`
 	Status    string           `json:"status"`
 	Error     string           `json:"error"`
 }
