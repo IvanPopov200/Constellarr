@@ -42,6 +42,8 @@ const (
 	historyLimit     = 200
 	maxSeason        = 100
 	maxEpisodeNumber = 1000
+	maxEditSeries    = 500
+	maxEditEpisodes  = 50000
 	dateLayout       = "2006-01-02"
 )
 
@@ -696,6 +698,22 @@ func (s *Store) Patch(ctx context.Context, id string, fields map[string]any) (Se
 	if !validID(id) {
 		return Series{}, ErrNotFound
 	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Series{}, dbError("update series", err)
+	}
+	defer tx.Rollback(ctx)
+	series, err := patchSeries(ctx, tx, id, fields)
+	if err != nil {
+		return Series{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Series{}, dbError("update series", err)
+	}
+	return series, nil
+}
+
+func patchSeries(ctx context.Context, q querier, id string, fields map[string]any) (Series, error) {
 	for name := range fields {
 		if !seriesPatchFields[name] {
 			return Series{}, fmt.Errorf("%w: series field %q cannot be patched", ErrInvalid, name)
@@ -705,12 +723,7 @@ func (s *Store) Patch(ctx context.Context, id string, fields map[string]any) (Se
 	if err != nil {
 		return Series{}, err
 	}
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return Series{}, dbError("update series", err)
-	}
-	defer tx.Rollback(ctx)
-	series, err := scanSeries(tx.QueryRow(ctx,
+	series, err := scanSeries(q.QueryRow(ctx,
 		`UPDATE tv_series SET data = data || $2::jsonb,
 		     imdb_id = CASE WHEN ($2::jsonb -> 'metadata') ? 'imdbId'
 		                    THEN nullif(lower((data || $2::jsonb) #>> '{metadata,imdbId}'), '') ELSE imdb_id END,
@@ -727,6 +740,9 @@ func (s *Store) Patch(ctx context.Context, id string, fields map[string]any) (Se
 		if uniqueViolation(err) {
 			return Series{}, ErrConflict
 		}
+		if missingReference(err) {
+			return Series{}, fmt.Errorf("%w: quality profile does not exist", ErrInvalid)
+		}
 		return Series{}, dbError("update series", err)
 	}
 	if err := validateSeries(series); err != nil {
@@ -736,20 +752,128 @@ func (s *Store) Patch(ctx context.Context, id string, fields map[string]any) (Se
 	if series.RootID != "" {
 		rootIDs = append(rootIDs, series.RootID)
 	}
-	if err := validateReferences(ctx, tx, series.ProfileID, rootIDs); err != nil {
+	if err := validateReferences(ctx, q, series.ProfileID, rootIDs); err != nil {
 		return Series{}, err
 	}
 	encoded, err := encode(storedSeriesOf(series))
 	if err != nil {
 		return Series{}, err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE tv_series SET data = $2::jsonb WHERE id = $1`, series.ID, string(encoded)); err != nil {
-		return Series{}, dbError("update series", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
+	if _, err := q.Exec(ctx, `UPDATE tv_series SET data = $2::jsonb WHERE id = $1`, series.ID, string(encoded)); err != nil {
 		return Series{}, dbError("update series", err)
 	}
 	return series, nil
+}
+
+// Edit applies series patches and explicit episode monitor flags in one transaction.
+func (s *Store) Edit(ctx context.Context, changes map[string]map[string]any, monitors map[string]bool) ([]Series, error) {
+	if len(changes) > maxEditSeries {
+		return nil, fmt.Errorf("%w: too many series in one edit", ErrInvalid)
+	}
+	if len(monitors) > maxEditEpisodes {
+		return nil, fmt.Errorf("%w: too many episodes in one edit", ErrInvalid)
+	}
+	normalized := make(map[string]map[string]any, len(changes))
+	seriesIDs := make([]string, 0, len(changes))
+	for rawID, fields := range changes {
+		id := strings.TrimSpace(rawID)
+		if !validID(id) {
+			return nil, fmt.Errorf("%w: series ID is invalid", ErrInvalid)
+		}
+		if _, exists := normalized[id]; exists {
+			return nil, fmt.Errorf("%w: series IDs must be unique", ErrInvalid)
+		}
+		if fields == nil {
+			fields = map[string]any{}
+		}
+		normalized[id] = fields
+		seriesIDs = append(seriesIDs, id)
+	}
+	sort.Strings(seriesIDs)
+	flags := make(map[string]bool, len(monitors))
+	episodeIDs := make([]string, 0, len(monitors))
+	for rawID, monitored := range monitors {
+		id := strings.TrimSpace(rawID)
+		if !validID(id) {
+			return nil, fmt.Errorf("%w: episode ID is invalid", ErrInvalid)
+		}
+		if _, exists := flags[id]; exists {
+			return nil, fmt.Errorf("%w: episode IDs must be unique", ErrInvalid)
+		}
+		flags[id] = monitored
+		episodeIDs = append(episodeIDs, id)
+	}
+	sort.Strings(episodeIDs)
+	if len(seriesIDs) == 0 && len(episodeIDs) == 0 {
+		return []Series{}, nil
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, dbError("edit series", err)
+	}
+	defer tx.Rollback(ctx)
+	for _, id := range seriesIDs {
+		var locked string
+		switch err := tx.QueryRow(ctx, `SELECT id FROM tv_series WHERE id = $1 FOR UPDATE`, id).Scan(&locked); {
+		case errors.Is(err, pgx.ErrNoRows):
+			return nil, fmt.Errorf("%w: series does not exist", ErrNotFound)
+		case err != nil:
+			return nil, dbError("edit series", err)
+		}
+	}
+	if len(episodeIDs) > 0 {
+		owned := make(map[string]bool, len(seriesIDs))
+		for _, id := range seriesIDs {
+			owned[id] = true
+		}
+		found := 0
+		rows, err := tx.Query(ctx, `SELECT id, series_id FROM tv_episodes WHERE id = ANY($1) ORDER BY id FOR UPDATE`, episodeIDs)
+		if err != nil {
+			return nil, dbError("edit episodes", err)
+		}
+		for rows.Next() {
+			var id, seriesID string
+			if err := rows.Scan(&id, &seriesID); err != nil {
+				rows.Close()
+				return nil, dbError("edit episodes", err)
+			}
+			found++
+			if !owned[seriesID] {
+				rows.Close()
+				return nil, fmt.Errorf("%w: episode %q does not belong to an edited series", ErrInvalid, id)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, dbError("edit episodes", err)
+		}
+		rows.Close()
+		if found != len(episodeIDs) {
+			return nil, fmt.Errorf("%w: episode does not exist", ErrNotFound)
+		}
+		values := make([]bool, len(episodeIDs))
+		for i, id := range episodeIDs {
+			values[i] = flags[id]
+		}
+		if _, err := tx.Exec(ctx,
+			`UPDATE tv_episodes SET data = data || jsonb_build_object('monitored', flags.monitored)
+			 FROM unnest($1::text[], $2::boolean[]) AS flags(id, monitored)
+			 WHERE tv_episodes.id = flags.id`, episodeIDs, values); err != nil {
+			return nil, dbError("edit episodes", err)
+		}
+	}
+	edited := make([]Series, 0, len(seriesIDs))
+	for _, id := range seriesIDs {
+		series, err := patchSeries(ctx, tx, id, normalized[id])
+		if err != nil {
+			return nil, err
+		}
+		edited = append(edited, series)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, dbError("edit series", err)
+	}
+	return edited, nil
 }
 
 func (s *Store) Delete(ctx context.Context, id string) error {

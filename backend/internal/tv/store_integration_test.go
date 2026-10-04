@@ -896,3 +896,145 @@ func TestStoreAcquisitionMediaClaimRace(t *testing.T) {
 		t.Fatalf("media claim = type %q, tv %d, movie %d; want one matching claim", mediaType, tvRows, movieRows)
 	}
 }
+
+func TestStoreEditAtomicSeriesAndMonitors(t *testing.T) {
+	ctx := context.Background()
+	pool, store := testStore(t, testConfig(t))
+	seedProfile(t, ctx, pool, "profile-a")
+	createSeries(t, ctx, store, newSeries("series-a"))
+	createSeries(t, ctx, store, withIMDb(newSeries("series-b"), "tt2222222"))
+	file := movies.File{RootID: "root-a", Path: "Show/S01E01.mkv", Size: 2048, Quality: "WEB-1080p", ImportedAt: time.Now().UTC()}
+	upsertEpisode(t, ctx, store, tv.Episode{
+		ID: "ep-a1", SeriesID: "series-a", IMDbID: "tt7654321", Title: "One", Season: 1, Number: 1,
+		AirDate: "2020-03-01", Rating: float64Ptr(8), Monitored: true, Files: []movies.File{file},
+	})
+	upsertEpisode(t, ctx, store, tv.Episode{ID: "ep-a2", SeriesID: "series-a", Title: "Two", Season: 1, Number: 2})
+	upsertEpisode(t, ctx, store, tv.Episode{ID: "ep-b1", SeriesID: "series-b", Title: "Other", Season: 1, Number: 1, Monitored: true})
+	if _, err := store.Patch(ctx, "series-b", map[string]any{"monitorMode": "none", "monitored": false}); err != nil {
+		t.Fatalf("Patch series-b: %v", err)
+	}
+	state := func() (tv.Series, tv.Series, tv.Episode, tv.Episode, tv.Episode) {
+		t.Helper()
+		seriesA, err := store.Get(ctx, "series-a")
+		if err != nil {
+			t.Fatalf("Get series-a: %v", err)
+		}
+		seriesB, err := store.Get(ctx, "series-b")
+		if err != nil {
+			t.Fatalf("Get series-b: %v", err)
+		}
+		episodeA1, err := store.Episode(ctx, "ep-a1")
+		if err != nil {
+			t.Fatalf("Episode ep-a1: %v", err)
+		}
+		episodeA2, err := store.Episode(ctx, "ep-a2")
+		if err != nil {
+			t.Fatalf("Episode ep-a2: %v", err)
+		}
+		episodeB1, err := store.Episode(ctx, "ep-b1")
+		if err != nil {
+			t.Fatalf("Episode ep-b1: %v", err)
+		}
+		return seriesA, seriesB, episodeA1, episodeA2, episodeB1
+	}
+	assertUntouched := func(t *testing.T) {
+		t.Helper()
+		seriesA, seriesB, episodeA1, episodeA2, episodeB1 := state()
+		if seriesA.MonitorMode != "all" || !seriesA.Monitored || seriesB.MonitorMode != "none" || seriesB.Monitored {
+			t.Fatalf("series state changed: %+v %+v", seriesA, seriesB)
+		}
+		if !episodeA1.Monitored || episodeA2.Monitored || !episodeB1.Monitored {
+			t.Fatalf("monitor flags changed: %+v %+v %+v", episodeA1, episodeA2, episodeB1)
+		}
+		if len(episodeA1.Files) != 1 || episodeA1.Files[0].Path != file.Path || episodeA1.Title != "One" {
+			t.Fatalf("episode files or metadata changed: %+v", episodeA1)
+		}
+	}
+	if _, err := store.Edit(ctx, map[string]map[string]any{
+		"series-a": {"monitorMode": "missing"},
+		"series-b": {"profileId": "profile-missing"},
+	}, map[string]bool{"ep-a1": false}); !errors.Is(err, tv.ErrInvalid) {
+		t.Fatalf("Edit invalid profile error = %v, want ErrInvalid", err)
+	}
+	assertUntouched(t)
+	if _, err := store.Edit(ctx, map[string]map[string]any{
+		"series-a":       {"monitorMode": "latest"},
+		"series-missing": {},
+	}, nil); !errors.Is(err, tv.ErrNotFound) {
+		t.Fatalf("Edit missing series error = %v, want ErrNotFound", err)
+	}
+	assertUntouched(t)
+	if _, err := store.Edit(ctx, map[string]map[string]any{"series-a": {}}, map[string]bool{"ep-b1": false}); !errors.Is(err, tv.ErrInvalid) {
+		t.Fatalf("Edit foreign episode error = %v, want ErrInvalid", err)
+	}
+	assertUntouched(t)
+	if _, err := store.Edit(ctx, map[string]map[string]any{"series-a": {"status": "wanted"}}, nil); !errors.Is(err, tv.ErrInvalid) {
+		t.Fatalf("Edit derived field error = %v, want ErrInvalid", err)
+	}
+	if _, err := store.Edit(ctx, map[string]map[string]any{"series-a": {}}, map[string]bool{"ep-missing": true}); !errors.Is(err, tv.ErrNotFound) {
+		t.Fatalf("Edit missing episode error = %v, want ErrNotFound", err)
+	}
+	assertUntouched(t)
+	manySeries := make(map[string]map[string]any, 501)
+	for i := range 501 {
+		manySeries[fmt.Sprintf("series-%d", i)] = nil
+	}
+	if _, err := store.Edit(ctx, manySeries, nil); !errors.Is(err, tv.ErrInvalid) {
+		t.Fatalf("Edit too many series error = %v, want ErrInvalid", err)
+	}
+	manyEpisodes := make(map[string]bool, 50001)
+	for i := range 50001 {
+		manyEpisodes[fmt.Sprintf("ep-%d", i)] = true
+	}
+	if _, err := store.Edit(ctx, nil, manyEpisodes); !errors.Is(err, tv.ErrInvalid) {
+		t.Fatalf("Edit too many episodes error = %v, want ErrInvalid", err)
+	}
+	edited, err := store.Edit(ctx, map[string]map[string]any{
+		"series-a": {"monitorMode": "future", "monitored": false},
+		"series-b": {"monitorMode": "all", "monitored": true},
+	}, map[string]bool{"ep-a1": false, "ep-a2": true, "ep-b1": false})
+	if err != nil {
+		t.Fatalf("Edit: %v", err)
+	}
+	if len(edited) != 2 || edited[0].ID != "series-a" || edited[1].ID != "series-b" {
+		t.Fatalf("Edit returned %+v; want persisted series-a and series-b", edited)
+	}
+	if edited[0].MonitorMode != "future" || edited[0].Monitored || edited[1].MonitorMode != "all" || !edited[1].Monitored {
+		t.Fatalf("Edit returned modes %+v / %+v; want persisted modes", edited[0], edited[1])
+	}
+	if len(edited[0].Episodes) != 0 || edited[0].Status != "" || edited[0].Total != 0 {
+		t.Fatalf("Edit returned derived fields: %+v", edited[0])
+	}
+	seriesA, seriesB, episodeA1, episodeA2, episodeB1 := state()
+	if seriesA.MonitorMode != "future" || seriesA.Monitored || seriesB.MonitorMode != "all" || !seriesB.Monitored {
+		t.Fatalf("persisted series modes = %+v / %+v", seriesA, seriesB)
+	}
+	if episodeA1.Monitored || !episodeA2.Monitored || episodeB1.Monitored {
+		t.Fatalf("persisted monitor flags = %+v %+v %+v", episodeA1, episodeA2, episodeB1)
+	}
+	if len(episodeA1.Files) != 1 || episodeA1.Files[0].Path != file.Path || episodeA1.Files[0].Size != file.Size ||
+		episodeA1.Title != "One" || episodeA1.IMDbID != "tt7654321" || episodeA1.AirDate != "2020-03-01" ||
+		episodeA1.Rating == nil || *episodeA1.Rating != 8 {
+		t.Fatalf("successful edit lost episode state: %+v", episodeA1)
+	}
+	refresh := episodeA1
+	refresh.Title = "One (Revised)"
+	refresh.Monitored = true
+	refreshed, err := store.UpsertEpisode(ctx, refresh)
+	if err != nil {
+		t.Fatalf("UpsertEpisode after Edit: %v", err)
+	}
+	if refreshed.Monitored || refreshed.Title != "One (Revised)" || len(refreshed.Files) != 1 || refreshed.Files[0].Path != file.Path {
+		t.Fatalf("metadata refresh after Edit = %+v; want new metadata, preserved monitor and files", refreshed)
+	}
+	if _, err := store.Edit(ctx, map[string]map[string]any{"series-b": nil}, map[string]bool{"ep-b1": true}); err != nil {
+		t.Fatalf("Edit monitors-only: %v", err)
+	}
+	_, seriesB, _, _, episodeB1 = state()
+	if seriesB.MonitorMode != "all" || !episodeB1.Monitored {
+		t.Fatalf("monitors-only edit = mode %q, monitored %v; want all/true", seriesB.MonitorMode, episodeB1.Monitored)
+	}
+	if empty, err := store.Edit(ctx, nil, nil); err != nil || len(empty) != 0 {
+		t.Fatalf("Edit no-op = %d, %v; want empty", len(empty), err)
+	}
+}
