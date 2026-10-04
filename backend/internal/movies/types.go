@@ -44,6 +44,7 @@ type File struct {
 	Quality    string    `json:"quality"`
 	Score      int       `json:"score"`
 	ImportedAt time.Time `json:"importedAt"`
+	Missing    bool      `json:"missing,omitempty"`
 }
 
 type Movie struct {
@@ -91,4 +92,52 @@ type Watchlist struct {
 	IntervalHours int        `json:"intervalHours"`
 	LastSyncAt    *time.Time `json:"lastSyncAt"`
 	Error         string     `json:"error"`
+}
+
+type AddInput struct {
+	IMDbID     string         `json:"imdbId"`
+	Metadata   metadata.Title `json:"metadata"`
+	Monitored  bool           `json:"monitored"`
+	ProfileID  string         `json:"profileId"`
+	RootID     string         `json:"rootId"`
+	Tags       []string       `json:"tags"`
+	Collection string         `json:"collection"`
+}
+
+type BulkInput struct {
+	IDs        []string  `json:"ids"`
+	Monitored  *bool     `json:"monitored"`
+	ProfileID  *string   `json:"profileId"`
+	RootID     *string   `json:"rootId"`
+	Tags       *[]string `json:"tags"`
+	Collection *string   `json:"collection"`
+}
+
+type ImportInput struct {
+	RootID  string `json:"rootId"`
+	Path    string `json:"path"`
+	MovieID string `json:"movieId"`
+	IMDbID  string `json:"imdbId"`
+}
+
+type RenameFile struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+type RenameResult struct {
+	Files   []RenameFile `json:"files"`
+	Applied bool         `json:"applied"`
+}
+type SyncResult struct {
+	Searched int `json:"searched"`
+	Queued   int `json:"queued"`
+	Imported int `json:"imported"`
+}
+type TestResult struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+type ConnectionTests struct {
+	Metadata TestResult `json:"metadata"`
+	Jellyfin TestResult `json:"jellyfin"`
 }

@@ -10,11 +10,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/IvanPopov200/Constellarr/backend/internal/downloads"
+	"github.com/IvanPopov200/Constellarr/backend/internal/movies"
 	"github.com/IvanPopov200/Constellarr/backend/internal/web"
 )
 
 type Services struct {
 	Downloads *downloads.Manager
+	Movies    *movies.Service
 }
 
 func New(pool *pgxpool.Pool, services ...Services) http.Handler {
@@ -22,13 +24,17 @@ func New(pool *pgxpool.Pool, services ...Services) http.Handler {
 	if len(services) != 0 && services[0].Downloads != nil {
 		registerDownloads(mux, services[0].Downloads)
 	}
+	if len(services) != 0 && services[0].Movies != nil {
+		registerMovies(mux, services[0].Movies)
+		registerMoviePosters(mux, services[0].Movies)
+	}
 	mux.HandleFunc("/api/v1/health", healthHandler(pool))
 	mux.HandleFunc("/api/", notFound)
 	mux.HandleFunc("/api", notFound)
 	mux.HandleFunc("/healthz", liveness)
 	mux.Handle("/", newSPA(web.Dist()))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost || r.Method == http.MethodPut {
+		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete {
 			if origin := r.Header.Get("Origin"); origin != "" {
 				parsed, err := url.Parse(origin)
 				if err != nil || !allowedOrigin(parsed, r.Host) {
@@ -37,7 +43,7 @@ func New(pool *pgxpool.Pool, services ...Services) http.Handler {
 				}
 			}
 			contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-			if err != nil || contentType != "application/json" {
+			if r.Method != http.MethodDelete && (err != nil || contentType != "application/json") {
 				writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "use application/json"})
 				return
 			}
@@ -63,5 +69,5 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+	_ = json.NewEncoder(w).Encode(posterURLs(body))
 }
