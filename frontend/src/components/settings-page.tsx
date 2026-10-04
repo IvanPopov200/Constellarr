@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Check, Database, Eye, EyeOff, Folder, HardDrive, KeyRound, LoaderCircle, Radio, RefreshCw, Save, Search, ShieldCheck } from 'lucide-react'
 import { BackendStatus } from '@/components/backend-status'
+import { MovieConfiguration } from '@/components/movie-configuration'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -163,6 +164,9 @@ export function SettingsPage({ section }: { section: 'connections' | 'storage' |
           <div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={!dirty || Boolean(busy)} onClick={() => { setDraft(toDraft(saved)); setError(''); setNotice(''); setTests(null) }}>Discard changes</Button><Button type="submit" size="sm" disabled={!dirty || Boolean(busy)}>{busy === 'save' ? <LoaderCircle className="animate-spin" /> : <Save />}Save changes</Button></div>
         </footer>}
       </form>}
+      <div hidden={section === 'system'} inert={section === 'system'}>
+        <MovieConfiguration section={section === 'storage' ? 'storage' : 'connections'} />
+      </div>
     </div>
   )
 }

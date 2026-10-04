@@ -73,13 +73,13 @@ export function isActiveJob(job: Job) {
   return job.status !== 'completed' && job.status !== 'failed'
 }
 
-type RequestOptions = {
-  method?: 'GET' | 'POST' | 'PUT'
+export type RequestOptions = {
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   body?: unknown
   signal?: AbortSignal
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, signal } = options
   let response: Response
 
