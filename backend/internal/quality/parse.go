@@ -10,7 +10,7 @@ var (
 	resolutionPattern = regexp.MustCompile(`(?i)\b(2160p|1080[pi]|720[pi]|576[pi]|480[pi]|uhdremux|4k|uhd)\b`)
 	remuxPattern      = regexp.MustCompile(`(?i)\b(remux|bdremux|uhdremux)\b`)
 	blurayPattern     = regexp.MustCompile(`(?i)\b(blu-?ray|bdrip|brrip|bdremux)\b`)
-	webPattern        = regexp.MustCompile(`(?i)\b(web[ ._-]?dl|web[ ._-]?rip|webdl|webrip)\b`)
+	webPattern        = regexp.MustCompile(`(?i)\bweb(?:[ ._-]?(?:dl|rip))?\b`)
 	hdtvPattern       = regexp.MustCompile(`(?i)\b(hdtv|hdtvrip)\b`)
 	dvdPattern        = regexp.MustCompile(`(?i)\b(dvdrip|dvd-r|dvd5|dvd9|dvd)\b`)
 	sdPattern         = regexp.MustCompile(`(?i)\b(sdtv|sd)\b`)

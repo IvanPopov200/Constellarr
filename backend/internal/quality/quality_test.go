@@ -25,6 +25,10 @@ func TestParseReleaseTitles(t *testing.T) {
 			quality.Details{Quality: "WEB-1080p", Resolution: 1080, Source: "WEB", Codec: "x264", Audio: "EAC3", Group: "NTb"},
 		},
 		{
+			"Movie.2019.1080p.WEB.H264-GROUP",
+			quality.Details{Quality: "WEB-1080p", Resolution: 1080, Source: "WEB", Codec: "x264", Group: "GROUP"},
+		},
+		{
 			"Movie.2019.720p.HDTV.x265.AAC",
 			quality.Details{Quality: "HDTV-720p", Resolution: 720, Source: "HDTV", Codec: "x265", Audio: "AAC"},
 		},
