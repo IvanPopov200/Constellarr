@@ -19,7 +19,10 @@ const (
 	maxComponentBytes     = 200
 )
 
-var templateTokens = []string{"title", "year", "imdbId", "quality", "original", "part"}
+var templateTokens = []string{"title", "year", "imdbId", "quality", "original", "part", "season", "episode", "episodeCode", "episodeTitle"}
+
+// episodeTemplateTokens require Options.Episode so a movie template cannot render empty episode names.
+var episodeTemplateTokens = map[string]bool{"season": true, "episode": true, "episodeCode": true, "episodeTitle": true}
 
 type target struct {
 	srcRel   string
@@ -42,6 +45,7 @@ type plan struct {
 	mode       string
 	folderRel  string
 	targets    []*target
+	sidecars   []nfoSidecar
 	existing   map[string]bool
 }
 
@@ -74,6 +78,9 @@ func buildPlan(opts Options, sources []Source) (*plan, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := validateEpisode(opts.Episode); err != nil {
+		return nil, err
+	}
 	folderTemplate := opts.FolderTemplate
 	if folderTemplate == "" {
 		folderTemplate = defaultFolderTemplate
@@ -82,10 +89,11 @@ func buildPlan(opts Options, sources []Source) (*plan, error) {
 	if fileTemplate == "" {
 		fileTemplate = defaultFileTemplate
 	}
-	if err := validateTemplate(folderTemplate); err != nil {
+	hasEpisode := opts.Episode != nil
+	if err := validateTemplate(folderTemplate, hasEpisode); err != nil {
 		return nil, err
 	}
-	if err := validateTemplate(fileTemplate); err != nil {
+	if err := validateTemplate(fileTemplate, hasEpisode); err != nil {
 		return nil, err
 	}
 	existing, err := existingPaths(root, opts.Existing)
@@ -111,6 +119,11 @@ func buildPlan(opts Options, sources []Source) (*plan, error) {
 	if err := nameTargets(p, targets, folderTemplate, fileTemplate, opts); err != nil {
 		return nil, err
 	}
+	sidecars, err := buildSidecars(opts, folderTemplate, p.folderRel, targets)
+	if err != nil {
+		return nil, err
+	}
+	p.sidecars = sidecars
 	for _, t := range targets {
 		if sourceRoot == root && t.srcRel == t.destRel {
 			t.inPlace = true
@@ -279,7 +292,7 @@ func tokenValues(opts Options, srcRel, part string) map[string]string {
 	if opts.Metadata.Year > 0 {
 		year = strconv.Itoa(opts.Metadata.Year)
 	}
-	return map[string]string{
+	values := map[string]string{
 		"title":    title,
 		"year":     year,
 		"imdbId":   sanitizeValue(opts.Metadata.IMDbID),
@@ -287,6 +300,13 @@ func tokenValues(opts Options, srcRel, part string) map[string]string {
 		"original": original,
 		"part":     part,
 	}
+	if episode := opts.Episode; episode != nil {
+		values["season"] = fmt.Sprintf("%02d", episode.Season)
+		values["episode"] = renderEpisodeToken(episode.Numbers)
+		values["episodeCode"] = renderEpisodeCode(episode.Season, episode.Numbers)
+		values["episodeTitle"] = sanitizeValue(episode.Title)
+	}
+	return values
 }
 
 func renderTokens(tmpl string, values map[string]string) string {
@@ -297,7 +317,7 @@ func renderTokens(tmpl string, values map[string]string) string {
 	return strings.NewReplacer(pairs...).Replace(tmpl)
 }
 
-func validateTemplate(tmpl string) error {
+func validateTemplate(tmpl string, hasEpisode bool) error {
 	for i := 0; i < len(tmpl); {
 		open := strings.IndexByte(tmpl[i:], '{')
 		if open < 0 {
@@ -317,6 +337,9 @@ func validateTemplate(tmpl string) error {
 		}
 		if !known {
 			return fmt.Errorf("%w: unsupported token {%s}", ErrTemplate, name)
+		}
+		if !hasEpisode && episodeTemplateTokens[name] {
+			return fmt.Errorf("%w: template token {%s} requires episode data", ErrEpisode, name)
 		}
 		i += open + close + 1
 	}
@@ -422,7 +445,7 @@ func checkDir(root *os.Root, dir string) error {
 }
 
 // staleExisting lists owned files the import replaces.
-func (p *plan) staleExisting(writeNFO bool) []string {
+func (p *plan) staleExisting() []string {
 	var stale []string
 	for rel := range p.existing {
 		if rel == recycleDir || strings.HasPrefix(rel, recycleDir+"/") {
@@ -431,7 +454,7 @@ func (p *plan) staleExisting(writeNFO bool) []string {
 		if rel == p.folderRel || strings.HasPrefix(p.folderRel, rel+"/") {
 			continue
 		}
-		if writeNFO && rel == path.Join(p.folderRel, nfoName) {
+		if p.hasSidecar(rel) {
 			continue
 		}
 		coveredByDest := false
@@ -448,4 +471,14 @@ func (p *plan) staleExisting(writeNFO bool) []string {
 	}
 	sort.Strings(stale)
 	return stale
+}
+
+// hasSidecar keeps plan-written sidecars out of stale-owned archiving.
+func (p *plan) hasSidecar(rel string) bool {
+	for _, sidecar := range p.sidecars {
+		if sidecar.rel == rel {
+			return true
+		}
+	}
+	return false
 }

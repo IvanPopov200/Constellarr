@@ -19,6 +19,7 @@ const (
 	ModeLink = "hardlink"
 
 	nfoName    = "movie.nfo"
+	tvShowNFO  = "tvshow.nfo"
 	recycleDir = ".recycle"
 )
 
@@ -29,6 +30,7 @@ var (
 	ErrSource   = errors.New("library: unusable source file")
 	ErrNoMedia  = errors.New("library: no video files to import")
 	ErrMode     = errors.New("library: unsupported import mode")
+	ErrEpisode  = errors.New("library: invalid episode data")
 )
 
 type Source struct {
@@ -46,6 +48,8 @@ type Options struct {
 	Metadata metadata.Title
 	Quality  string
 	WriteNFO bool
+	// Episode carries TV numbering and sidecars; nil imports a movie.
+	Episode *Episode
 	// Existing lists movie-owned file paths below Root, relative or absolute.
 	Existing []string
 }
@@ -182,13 +186,16 @@ func Import(ctx context.Context, opts Options, sources []Source) ([]File, error)
 		rec.published = append(rec.published, publishedFile{t.destRel, info})
 	}
 
-	if opts.WriteNFO {
-		if err := writeNFO(root, p.folderRel, opts.Metadata, rec); err != nil {
+	for _, sidecar := range p.sidecars {
+		if err := ctx.Err(); err != nil {
+			return fail(err)
+		}
+		if err := publishNFO(root, sidecar.rel, sidecar.data, rec); err != nil {
 			return fail(err)
 		}
 	}
 
-	for _, rel := range p.staleExisting(opts.WriteNFO) {
+	for _, rel := range p.staleExisting() {
 		if err := ctx.Err(); err != nil {
 			return fail(err)
 		}
@@ -317,8 +324,8 @@ func recycleName(rel string, isDir bool, attempt int) string {
 }
 
 func rollbackRun(root *os.Root, p *plan, rec *rollback, created []string) {
-	if rec.nfoWritten != nil {
-		removeIfSame(root, *rec.nfoWritten)
+	for i := len(rec.nfoWritten) - 1; i >= 0; i-- {
+		removeIfSame(root, rec.nfoWritten[i])
 	}
 	for i := len(rec.published) - 1; i >= 0; i-- {
 		removeIfSame(root, rec.published[i])
