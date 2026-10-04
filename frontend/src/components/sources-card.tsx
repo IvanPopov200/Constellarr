@@ -21,7 +21,7 @@ import { api, errorMessage, type Sources, type SourceTestResult } from '@/lib/ap
 
 function ConfiguredBadge({ configured }: { configured: boolean }) {
   return (
-    <Badge variant={configured ? 'default' : 'secondary'}>
+    <Badge variant="outline">
       {configured ? 'Configured' : 'Not configured'}
     </Badge>
   )
@@ -46,7 +46,7 @@ function SourceRow({
         </span>
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{name}</p>
-          <p className="truncate text-xs text-muted-foreground">{detail}</p>
+          <p className="break-words text-xs text-muted-foreground">{detail}</p>
         </div>
       </div>
       <ConfiguredBadge configured={configured} />
@@ -167,8 +167,7 @@ export function SourcesCard() {
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-background/50 px-3 py-2.5">
           <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-            Sources are configured in Settings. Credentials stay on the server and are never
-            entered in the browser.
+            Manage your source connections.
           </p>
           <Button asChild size="sm" variant="outline">
             <a href="#settings">

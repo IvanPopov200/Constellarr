@@ -200,13 +200,8 @@ export function DownloadQueue({
                     <p className="text-xs text-muted-foreground">{jobMeta(job)}</p>
                   </div>
                   <Badge
-                    variant={
-                      job.status === 'failed'
-                        ? 'destructive'
-                        : job.status === 'completed'
-                          ? 'default'
-                          : 'secondary'
-                    }
+                    variant={job.status === 'failed' ? 'destructive' : 'outline'}
+                    className={job.status === 'completed' ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400' : undefined}
                   >
                     {statusLabels[job.status]}
                   </Badge>
