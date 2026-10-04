@@ -20,9 +20,12 @@ const (
 	maxSearchBytes = 16 << 20
 	maxNZBBytes    = 32 << 20
 	movieCategory  = 2000
+	tvCategory     = 5000
 	searchPageSize = 50
 	maxQueryRunes  = 256
 	maxIDBytes     = 128
+	maxTVSeason    = 100
+	maxTVEpisode   = 1000
 )
 
 type Release struct {
@@ -31,10 +34,13 @@ type Release struct {
 	Size      int64     `json:"size"`
 	Published time.Time `json:"published"`
 	IMDbID    string    `json:"imdbId,omitempty"`
+	Season    int       `json:"season,omitempty"`
+	Episode   int       `json:"episode,omitempty"`
+	TVDBID    string    `json:"tvdbId,omitempty"`
 }
 
 type Error struct {
-	Op     string // call that failed: "test", "search", "movie", "rss", or "nzb"
+	Op     string // call that failed: "test", "search", "movie", "tv", "rss", "tv rss", or "nzb"
 	Kind   string // stable category, for example "cross-origin redirect" or "invalid response"
 	Status int    // HTTP status code when the server answered
 	Code   int    // Newznab error code when the API returned an error envelope
@@ -139,6 +145,44 @@ func (c *Client) SearchMovie(ctx context.Context, imdbID, title string, year int
 	return parseSearch(body, "movie")
 }
 
+// SearchTV searches TV releases by title; the optional IMDb ID is validated but not sent because the provider's TV search does not accept it.
+func (c *Client) SearchTV(ctx context.Context, imdbID, title string, season, episode int) ([]Release, error) {
+	query := strings.TrimSpace(title)
+	if query == "" {
+		return nil, errors.New("TV search needs a title")
+	}
+	if utf8.RuneCountInString(query) > maxQueryRunes {
+		return nil, errors.New("search query is too long")
+	}
+	if _, ok := normalizeIMDbID(imdbID); !ok && strings.TrimSpace(imdbID) != "" {
+		return nil, errors.New("IMDb ID is invalid")
+	}
+	if season < -1 || season > maxTVSeason {
+		return nil, errors.New("TV season must be between 0 and 100, or -1 for all seasons")
+	}
+	if episode < 0 || episode > maxTVEpisode || (episode > 0 && season < 0) {
+		return nil, errors.New("TV episode must be between 0 and 1000 and needs a season")
+	}
+	params := url.Values{
+		"t":        {"tvsearch"},
+		"q":        {query},
+		"cat":      {strconv.Itoa(tvCategory)},
+		"limit":    {strconv.Itoa(searchPageSize)},
+		"extended": {"1"},
+	}
+	if season >= 0 {
+		params.Set("season", strconv.Itoa(season))
+		if episode > 0 {
+			params.Set("ep", strconv.Itoa(episode))
+		}
+	}
+	body, err := c.get(ctx, "tv", params, maxSearchBytes)
+	if err != nil {
+		return nil, err
+	}
+	return parseSearch(body, "tv")
+}
+
 // RSS retrieves the recent movie feed without a query.
 func (c *Client) RSS(ctx context.Context) ([]Release, error) {
 	params := url.Values{
@@ -151,6 +195,20 @@ func (c *Client) RSS(ctx context.Context) ([]Release, error) {
 		return nil, err
 	}
 	return parseSearch(body, "rss")
+}
+
+// RSSTV retrieves the recent TV feed without a query.
+func (c *Client) RSSTV(ctx context.Context) ([]Release, error) {
+	params := url.Values{
+		"t":        {"search"},
+		"cat":      {strconv.Itoa(tvCategory)},
+		"extended": {"1"},
+	}
+	body, err := c.get(ctx, "tv rss", params, maxSearchBytes)
+	if err != nil {
+		return nil, err
+	}
+	return parseSearch(body, "tv rss")
 }
 
 func (c *Client) NZB(ctx context.Context, id string) ([]byte, error) {
@@ -313,7 +371,10 @@ func (item rssItem) release() (Release, bool) {
 	if size < 0 {
 		size = 0
 	}
-	return Release{ID: id, Title: title, Size: size, Published: parseDate(item.PubDate), IMDbID: item.imdbID()}, true
+	return Release{
+		ID: id, Title: title, Size: size, Published: parseDate(item.PubDate), IMDbID: item.imdbID(),
+		Season: item.positiveValue("season"), Episode: item.positiveValue("episode"), TVDBID: item.tvdbID(),
+	}, true
 }
 
 func (item rssItem) attribute(name string) string {
@@ -323,6 +384,40 @@ func (item rssItem) attribute(name string) string {
 		}
 	}
 	return ""
+}
+
+func (item rssItem) attributeFold(name string) string {
+	for _, attr := range item.Attributes {
+		if strings.EqualFold(strings.TrimSpace(attr.Name), name) {
+			return attr.Value
+		}
+	}
+	return ""
+}
+
+// positiveValue parses a numeric attribute strictly, treating missing or invalid values as unknown.
+func (item rssItem) positiveValue(name string) int {
+	value, err := strconv.Atoi(strings.TrimSpace(item.attributeFold(name)))
+	if err != nil || value <= 0 {
+		return 0
+	}
+	return value
+}
+
+func (item rssItem) tvdbID() string {
+	value := strings.TrimSpace(item.attributeFold("tvdbid"))
+	if value == "" {
+		value = strings.TrimSpace(item.attributeFold("tvdb"))
+	}
+	if value == "" {
+		return ""
+	}
+	for i := 0; i < len(value); i++ {
+		if value[i] < '0' || value[i] > '9' {
+			return ""
+		}
+	}
+	return value
 }
 
 func (item rssItem) imdbID() string {

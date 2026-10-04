@@ -35,27 +35,29 @@ type searchItem struct {
 }
 
 type titleResponse struct {
-	Title      string `json:"Title"`
-	Year       string `json:"Year"`
-	Released   string `json:"Released"`
-	Runtime    string `json:"Runtime"`
-	Genre      string `json:"Genre"`
-	Director   string `json:"Director"`
-	Actors     string `json:"Actors"`
-	Language   string `json:"Language"`
-	Country    string `json:"Country"`
-	Rated      string `json:"Rated"`
-	Poster     string `json:"Poster"`
-	Plot       string `json:"Plot"`
-	IMDbRating string `json:"imdbRating"`
-	IMDbVotes  string `json:"imdbVotes"`
-	IMDbID     string `json:"imdbID"`
-	Type       string `json:"Type"`
-	Response   string `json:"Response"`
-	Error      string `json:"Error"`
+	Title        string `json:"Title"`
+	Year         string `json:"Year"`
+	Released     string `json:"Released"`
+	Runtime      string `json:"Runtime"`
+	Genre        string `json:"Genre"`
+	Director     string `json:"Director"`
+	Actors       string `json:"Actors"`
+	Language     string `json:"Language"`
+	Country      string `json:"Country"`
+	Rated        string `json:"Rated"`
+	Poster       string `json:"Poster"`
+	Plot         string `json:"Plot"`
+	IMDbRating   string `json:"imdbRating"`
+	IMDbVotes    string `json:"imdbVotes"`
+	IMDbID       string `json:"imdbID"`
+	Type         string `json:"Type"`
+	TotalSeasons string `json:"totalSeasons"`
+	Response     string `json:"Response"`
+	Error        string `json:"Error"`
 }
 
-func decodeSearch(op string, body []byte) ([]Title, error) {
+// decodeSearch maps search results, keeping only entries of the wanted type.
+func decodeSearch(op string, body []byte, wantType string) ([]Title, error) {
 	var payload searchResponse
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, &Error{Op: op, Kind: "invalid response"}
@@ -72,7 +74,7 @@ func decodeSearch(op string, body []byte) ([]Title, error) {
 	titles := make([]Title, 0, len(payload.Search))
 	for _, item := range payload.Search {
 		id := strings.TrimSpace(item.IMDbID)
-		if !ValidIMDbID(id) || (item.Type != "" && item.Type != "movie") {
+		if !ValidIMDbID(id) || (item.Type != "" && item.Type != wantType) {
 			continue
 		}
 		titles = append(titles, Title{
@@ -86,7 +88,8 @@ func decodeSearch(op string, body []byte) ([]Title, error) {
 	return titles, nil
 }
 
-func decodeTitle(op, imdbID string, body []byte) (Title, error) {
+// decodeTitle maps a title lookup, rejecting a mismatched type or identity.
+func decodeTitle(op, imdbID string, body []byte, wantType string) (Title, error) {
 	var payload titleResponse
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return Title{}, &Error{Op: op, Kind: "invalid response"}
@@ -97,8 +100,8 @@ func decodeTitle(op, imdbID string, body []byte) (Title, error) {
 	if payload.Response == "" && payload.Title == "" && payload.IMDbID == "" {
 		return Title{}, &Error{Op: op, Kind: "invalid response"}
 	}
-	if payload.Type != "" && payload.Type != "movie" {
-		return Title{}, &Error{Op: op, Kind: "not a movie"}
+	if payload.Type != "" && payload.Type != wantType {
+		return Title{}, &Error{Op: op, Kind: "not a " + wantType}
 	}
 	title := mapTitle(payload)
 	if ValidIMDbID(title.IMDbID) && title.IMDbID != imdbID {
@@ -157,6 +160,7 @@ func mapTitle(payload titleResponse) Title {
 		Title:         strings.TrimSpace(payload.Title),
 		Year:          parseYear(payload.Year),
 		Type:          payload.Type,
+		TotalSeasons:  parseTotalSeasons(payload.TotalSeasons),
 		Released:      parseDate(payload.Released),
 		Rating:        parseRating(payload.IMDbRating),
 		Votes:         parseVotes(payload.IMDbVotes),

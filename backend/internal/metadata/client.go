@@ -39,6 +39,8 @@ func (e *Error) Error() string {
 		return detail + "title was not found"
 	case "not a movie":
 		return detail + "title is not a movie"
+	case "not a series":
+		return detail + "title is not a series"
 	case "unavailable":
 		return detail + "OMDb is unavailable; retry later"
 	case "timed out":
@@ -101,12 +103,12 @@ func (c *Client) Search(ctx context.Context, query string, page int) ([]Title, e
 	if page < 1 || page > maxSearchPage {
 		return nil, errors.New("metadata: the search page must be between 1 and 100")
 	}
-	params := url.Values{"s": {query}, "type": {"movie"}, "page": {strconv.Itoa(page)}}
+	params := url.Values{"s": {query}, "type": {movieType}, "page": {strconv.Itoa(page)}}
 	body, err := c.get(ctx, "search", params, maxResponseBytes)
 	if err != nil {
 		return nil, err
 	}
-	return decodeSearch("search", body)
+	return decodeSearch("search", body, movieType)
 }
 
 func (c *Client) Lookup(ctx context.Context, imdbID string) (Title, error) {
@@ -118,7 +120,7 @@ func (c *Client) Lookup(ctx context.Context, imdbID string) (Title, error) {
 	if err != nil {
 		return Title{}, err
 	}
-	return decodeTitle("lookup", id, body)
+	return decodeTitle("lookup", id, body, movieType)
 }
 
 func (c *Client) Test(ctx context.Context) error {
@@ -127,7 +129,7 @@ func (c *Client) Test(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_, err = decodeSearch("test", body)
+	_, err = decodeSearch("test", body, movieType)
 	return err
 }
 
