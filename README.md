@@ -50,7 +50,7 @@ Adjust `FRONTEND_PORT` or `APP_PORT` in `.env` if a port is occupied.
 `node scripts/dev.mjs --no-db` to leave it under your own management.
 Keep `.env` and `data/` private. Provider credentials stay on the server.
 
-## Settings
+## Server settings
 
 Save the NZBGeek API URL/key and Usenet host, TLS port, account, connection limit,
 and fallback servers in System → Connections. Leave credential fields blank to
@@ -60,8 +60,8 @@ started with.
 
 Saved connection settings live in PostgreSQL and take precedence over environment
 defaults on restart. Keys and passwords are never returned by the API.
-System → Storage & Paths shows the data directory; change its server mount or
-`DOWNLOAD_DIR` through deployment configuration. System → System shows backend
+Storage & Paths shows the data directory; change its server mount or
+`DOWNLOAD_DIR` through deployment configuration. System shows backend
 and database health.
 
 ## Downloads and storage

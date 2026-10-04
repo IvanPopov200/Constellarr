@@ -161,7 +161,7 @@ export function BackendStatus() {
           <p className="text-sm text-muted-foreground">{status.detail}</p>
         </div>
         <div>
-          <Button variant="outline" size="sm" onClick={retry}>
+          <Button type="button" variant="outline" size="sm" onClick={retry}>
             <RefreshCwIcon data-icon="inline-start" />
             Retry
           </Button>

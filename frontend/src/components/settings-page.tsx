@@ -104,7 +104,7 @@ export function SettingsPage({ section }: { section: 'connections' | 'storage' |
       {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
         <span>{error}</span>{!saved && <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Retry</Button>}
       </div>}
-      {notice && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-500"><Check className="mr-2 inline size-4" />{notice}</p>}
+      {notice && section === 'connections' && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-500"><Check className="mr-2 inline size-4" />{notice}</p>}
       {loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading settings…</p>}
       {saved && draft && <form onSubmit={save} className="space-y-6">
           {section === 'connections' && <div className="space-y-5">
