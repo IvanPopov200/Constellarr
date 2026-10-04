@@ -61,7 +61,7 @@ func run() error {
 	defer manager.Close()
 
 	server := &http.Server{
-		Handler:           api.New(pool, api.Services{Downloads: manager, Config: settings}),
+		Handler:           api.New(pool, api.Services{Downloads: manager}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

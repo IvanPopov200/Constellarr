@@ -78,7 +78,7 @@ func TestManagerMigrationsAndDuplicateRelease(t *testing.T) {
 	ctx := context.Background()
 	directory := t.TempDir()
 
-	// Concurrent startup on a fresh schema must apply migration 001 exactly once.
+	// Concurrent startup on a fresh schema must apply migrations 001-002 exactly once.
 	var starts sync.WaitGroup
 	errs := make(chan error, 2)
 	for i := 0; i < 2; i++ {
@@ -103,11 +103,14 @@ func TestManagerMigrationsAndDuplicateRelease(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*), coalesce(max(version), 0) FROM schema_migrations`).Scan(&migrations, &version); err != nil {
 		t.Fatalf("read schema_migrations: %v", err)
 	}
-	if migrations != 1 || version != 1 {
-		t.Fatalf("schema_migrations has %d rows and version %d, want migration 1 applied once", migrations, version)
+	if migrations != 2 || version != 2 {
+		t.Fatalf("schema_migrations has %d rows and version %d, want migrations 1-2 applied once", migrations, version)
 	}
 	if _, err := pool.Exec(ctx, `SELECT 1 FROM downloads LIMIT 1`); err != nil {
 		t.Fatalf("downloads table is missing: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `SELECT 1 FROM settings LIMIT 1`); err != nil {
+		t.Fatalf("settings table is missing: %v", err)
 	}
 
 	// An unconfigured source still starts, lists, and reports ErrNotConfigured.

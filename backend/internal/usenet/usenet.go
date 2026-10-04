@@ -21,7 +21,7 @@ const (
 	providerAttemptTimeout = 25 * time.Second
 	providerStallTimeout   = 25 * time.Second
 	testTimeout            = 30 * time.Second
-	maxFallbackHosts       = 8
+	MaxFallbackHosts       = 8
 )
 
 type Config struct {
@@ -280,12 +280,9 @@ func connectionCount(cfg Config) int {
 }
 
 func (c Config) hosts() ([]string, error) {
-	host := cleanHost(c.Host)
-	if host == "" {
-		if strings.TrimSpace(c.Host) == "" {
-			return nil, errors.New("usenet: host is required")
-		}
-		return nil, errors.New("usenet: invalid host; enter a bare hostname")
+	host, err := ValidateHost(c.Host)
+	if err != nil {
+		return nil, err
 	}
 	if c.Port < 1 || c.Port > 65535 {
 		return nil, fmt.Errorf("usenet: port %d is out of range", c.Port)
@@ -296,17 +293,28 @@ func (c Config) hosts() ([]string, error) {
 	hosts := []string{host}
 	seen := map[string]bool{strings.ToLower(host): true}
 	for _, raw := range c.FallbackHosts {
-		h := cleanHost(raw)
-		if h == "" || seen[strings.ToLower(h)] {
+		fallback, err := ValidateHost(raw)
+		if err != nil || seen[strings.ToLower(fallback)] {
 			continue
 		}
-		if len(hosts) > maxFallbackHosts {
-			return nil, fmt.Errorf("usenet: at most %d fallback hosts are supported", maxFallbackHosts)
+		if len(hosts) > MaxFallbackHosts {
+			return nil, fmt.Errorf("usenet: at most %d fallback hosts are supported", MaxFallbackHosts)
 		}
-		seen[strings.ToLower(h)] = true
-		hosts = append(hosts, h)
+		seen[strings.ToLower(fallback)] = true
+		hosts = append(hosts, fallback)
 	}
 	return hosts, nil
+}
+
+func ValidateHost(host string) (string, error) {
+	if strings.TrimSpace(host) == "" {
+		return "", errors.New("usenet: host is required")
+	}
+	clean := cleanHost(host)
+	if clean == "" {
+		return "", errors.New("usenet: invalid host; enter a bare hostname")
+	}
+	return clean, nil
 }
 
 func cleanHost(host string) string {

@@ -24,10 +24,10 @@ type source struct {
 	Connections int    `json:"connections,omitempty"`
 }
 
-func registerDownloads(mux *http.ServeMux, services Services) {
-	m := services.Downloads
-	cfg := services.Config
+func registerDownloads(mux *http.ServeMux, m *downloads.Manager) {
+	registerSettings(mux, m)
 	mux.HandleFunc("GET /api/v1/sources", func(w http.ResponseWriter, r *http.Request) {
+		cfg := m.Config()
 		writeJSON(w, http.StatusOK, struct {
 			Indexer source `json:"indexer"`
 			Usenet  source `json:"usenet"`

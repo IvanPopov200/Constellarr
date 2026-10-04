@@ -14,13 +14,12 @@ import (
 
 type Services struct {
 	Downloads *downloads.Manager
-	Config    downloads.Config
 }
 
 func New(pool *pgxpool.Pool, services ...Services) http.Handler {
 	mux := http.NewServeMux()
-	if len(services) != 0 {
-		registerDownloads(mux, services[0])
+	if len(services) != 0 && services[0].Downloads != nil {
+		registerDownloads(mux, services[0].Downloads)
 	}
 	mux.HandleFunc("/api/v1/health", healthHandler(pool))
 	mux.HandleFunc("/api/", notFound)
@@ -28,7 +27,7 @@ func New(pool *pgxpool.Pool, services ...Services) http.Handler {
 	mux.HandleFunc("/healthz", liveness)
 	mux.Handle("/", newSPA(web.Dist()))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
+		if r.Method == http.MethodPost || r.Method == http.MethodPut {
 			if origin := r.Header.Get("Origin"); origin != "" {
 				parsed, err := url.Parse(origin)
 				if err != nil || parsed.Host != r.Host {

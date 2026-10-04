@@ -75,10 +75,13 @@ type Job struct {
 }
 
 type Manager struct {
-	pool    *pgxpool.Pool
-	cfg     Config
-	indexer *indexer.Client
-	root    string
+	pool *pgxpool.Pool
+	root string
+
+	configMu sync.RWMutex
+	cfg      Config
+	indexer  *indexer.Client
+	updateMu sync.Mutex
 
 	started  atomic.Bool
 	cancelMu sync.Mutex
@@ -105,14 +108,15 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg Config) (*Manager, error) 
 	if err := migrate(ctx, pool); err != nil {
 		return nil, err
 	}
-	manager := &Manager{pool: pool, cfg: cfg, root: root}
-	if cfg.IndexerURL != "" && cfg.APIKey != "" {
-		manager.indexer, err = indexer.New(cfg.IndexerURL, cfg.APIKey)
-		if err != nil {
-			return nil, fmt.Errorf("downloads: %w", err)
-		}
+	cfg.Directory = directory
+	if err := loadSettings(ctx, pool, &cfg); err != nil {
+		return nil, err
 	}
-	return manager, nil
+	client, err := indexerClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &Manager{pool: pool, root: root, cfg: cfg, indexer: client}, nil
 }
 
 func (m *Manager) Start(ctx context.Context) {
@@ -144,10 +148,11 @@ func (m *Manager) Close() {
 }
 
 func (m *Manager) Search(ctx context.Context, query string) ([]indexer.Release, error) {
-	if m.indexer == nil {
+	client := m.indexerClient()
+	if client == nil {
 		return nil, ErrNotConfigured
 	}
-	releases, err := m.indexer.Search(ctx, query)
+	releases, err := client.Search(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("downloads: search releases: %w", err)
 	}
@@ -158,27 +163,29 @@ func (m *Manager) Search(ctx context.Context, query string) ([]indexer.Release, 
 }
 
 func (m *Manager) TestIndexer(ctx context.Context) error {
-	if m.indexer == nil {
+	client := m.indexerClient()
+	if client == nil {
 		return ErrNotConfigured
 	}
-	if err := m.indexer.Test(ctx); err != nil {
+	if err := client.Test(ctx); err != nil {
 		return fmt.Errorf("downloads: test indexer: %w", err)
 	}
 	return nil
 }
 
 func (m *Manager) TestUsenet(ctx context.Context) error {
-	if !m.usenetConfigured() {
+	cfg := m.Config()
+	if !usenetConfigured(cfg) {
 		return ErrNotConfigured
 	}
-	if err := usenet.Test(ctx, m.cfg.Usenet); err != nil {
+	if err := usenet.Test(ctx, cfg.Usenet); err != nil {
 		return fmt.Errorf("downloads: test usenet: %w", err)
 	}
 	return nil
 }
 
-func (m *Manager) usenetConfigured() bool {
-	return m.cfg.Usenet.Host != "" && m.cfg.Usenet.Username != "" && m.cfg.Usenet.Password != ""
+func usenetConfigured(cfg Config) bool {
+	return cfg.Usenet.Host != "" && cfg.Usenet.Username != "" && cfg.Usenet.Password != ""
 }
 
 func (m *Manager) Add(ctx context.Context, releaseID, title string) (Job, error) {
@@ -194,10 +201,11 @@ func (m *Manager) Add(ctx context.Context, releaseID, title string) (Job, error)
 	if !errors.Is(err, ErrNotFound) {
 		return Job{}, err
 	}
-	if m.indexer == nil {
+	client := m.indexerClient()
+	if client == nil {
 		return Job{}, ErrNotConfigured
 	}
-	nzb, err := m.indexer.NZB(ctx, releaseID)
+	nzb, err := client.NZB(ctx, releaseID)
 	if err != nil {
 		return Job{}, fmt.Errorf("downloads: fetch NZB: %w", err)
 	}
@@ -410,7 +418,8 @@ func (m *Manager) runQueue(session *lockSession) {
 }
 
 func (m *Manager) process(session *lockSession, job Job, nzb []byte) {
-	if !m.usenetConfigured() {
+	cfg := m.Config()
+	if !usenetConfigured(cfg) {
 		m.recordFailure(session, job.ID, "Usenet source is not configured")
 		return
 	}
@@ -424,13 +433,13 @@ func (m *Manager) process(session *lockSession, job Job, nzb []byte) {
 		return
 	}
 	progress := &progressWriter{manager: m, session: session, id: job.ID}
-	result, err := usenet.Download(session.ctx, nzb, inputDir, m.cfg.Usenet, progress.report)
+	result, err := usenet.Download(session.ctx, nzb, inputDir, cfg.Usenet, progress.report)
 	progress.finish(result.MissingSegments)
 	if err != nil {
 		if session.ctx.Err() != nil {
 			return
 		}
-		m.recordFailure(session, job.ID, m.safeError(err))
+		m.recordFailure(session, job.ID, safeError(err, cfg))
 		return
 	}
 	outputDir, ok := m.jobDir(job.ID, "output")
@@ -449,7 +458,7 @@ func (m *Manager) process(session *lockSession, job Job, nzb []byte) {
 		if session.ctx.Err() != nil {
 			return
 		}
-		m.recordFailure(session, job.ID, m.safeError(err))
+		m.recordFailure(session, job.ID, safeError(err, cfg))
 		return
 	}
 	outputs, err := outputFiles(job.ID, outputDir, files)
@@ -468,9 +477,10 @@ func (m *Manager) recordFailure(session *lockSession, id, message string) {
 	}
 }
 
-func (m *Manager) safeError(err error) string {
+// safeError redacts the credentials an operation started with, even if settings changed since.
+func safeError(err error, cfg Config) string {
 	message := strings.TrimSpace(err.Error())
-	for _, secret := range []string{m.cfg.APIKey, m.cfg.Usenet.Username, m.cfg.Usenet.Password} {
+	for _, secret := range []string{cfg.APIKey, cfg.Usenet.Username, cfg.Usenet.Password} {
 		if secret != "" {
 			message = strings.ReplaceAll(message, secret, "[redacted]")
 		}
