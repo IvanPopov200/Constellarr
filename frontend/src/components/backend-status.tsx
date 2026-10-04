@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { RefreshCwIcon } from 'lucide-react'
+import { ActivityIcon, RefreshCwIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { cn } from 'cn'
 
 type Health =
   | { state: 'checking' }
@@ -36,7 +37,20 @@ function statusOf(health: Health) {
   }
 }
 
-export function BackendStatus() {
+function variantOf(state: Health['state']) {
+  if (state === 'connected') return 'default' as const
+  if (state === 'checking') return 'secondary' as const
+  return 'destructive' as const
+}
+
+const chipTones: Record<Health['state'], string> = {
+  checking: 'border-border bg-muted/60 text-muted-foreground',
+  connected: 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300',
+  degraded: 'border-amber-400/25 bg-amber-400/10 text-amber-300',
+  error: 'border-destructive/30 bg-destructive/10 text-destructive',
+}
+
+function useBackendHealth() {
   const [health, setHealth] = useState<Health>({ state: 'checking' })
   const activeRequest = useRef<AbortController>(null)
 
@@ -93,25 +107,57 @@ export function BackendStatus() {
     void check()
   }
 
-  const status = statusOf(health)
-  const variant =
-    health.state === 'connected'
-      ? 'default'
-      : health.state === 'checking'
-        ? 'secondary'
-        : 'destructive'
+  return { health, status: statusOf(health), retry }
+}
+
+export function BackendStatusChip() {
+  const { health, status, retry } = useBackendHealth()
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle role="heading" aria-level={2}>
+    <div role="status" aria-live="polite">
+      <button
+        type="button"
+        onClick={retry}
+        title={`${status.label}: ${status.detail}`}
+        aria-label={`Backend ${status.label.toLowerCase()}. ${status.detail} Activate to re-check.`}
+        className={cn(
+          'group inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          chipTones[health.state],
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            'size-1.5 rounded-full bg-current',
+            health.state === 'checking' && 'animate-pulse motion-reduce:animate-none',
+          )}
+        />
+        <span className="hidden sm:inline">{status.label}</span>
+        <RefreshCwIcon
+          aria-hidden="true"
+          className="size-3 opacity-0 transition-opacity group-hover:opacity-70 motion-reduce:transition-none"
+        />
+      </button>
+    </div>
+  )
+}
+
+export function BackendStatus() {
+  const { health, status, retry } = useBackendHealth()
+
+  return (
+    <Card className="shadow-none">
+      <CardHeader className="border-b border-border">
+        <CardTitle className="flex items-center gap-2">
+          <ActivityIcon className="size-4 text-muted-foreground" aria-hidden="true" />
           Backend connection
         </CardTitle>
         <CardDescription>Live status from {healthEndpoint}.</CardDescription>
       </CardHeader>
       <CardContent className="gap-4">
         <div className="flex flex-wrap items-center gap-3" role="status">
-          <Badge variant={variant}>{status.label}</Badge>
+          <Badge variant={variantOf(health.state)}>{status.label}</Badge>
           <p className="text-sm text-muted-foreground">{status.detail}</p>
         </div>
         <div>

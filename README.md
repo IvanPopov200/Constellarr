@@ -9,6 +9,10 @@ and repair, and RAR/ZIP extraction. The interface shows real source health,
 transfer stages, and links to completed files. Torrent handling, library imports,
 Jellyfin integration, monitoring, TV, music, and subtitles are future work.
 
+The web workspace separates Overview, Search, Downloads, and Settings. Overview
+shows recent queue activity and source status; Settings manages connections,
+storage information, and server health.
+
 ## Local development
 
 Install Node.js 22.23.1, Go 1.27+, a C compiler, Make, `par2`, and Docker with Compose.
@@ -22,9 +26,10 @@ make setup
 ```
 
 This installs dependencies and creates an ignored `.env` with a generated
-database password. Set `NZBGEEK_API_KEY`, `USENET_USERNAME`, and `USENET_PASSWORD`
-in that local file. Configure `USENET_HOST`, TLS `USENET_PORT`,
-`USENET_CONNECTIONS`, and comma-separated `USENET_FALLBACK_HOSTS` for your provider.
+database password. Configure providers in Settings → Connections, or supply initial
+`NZBGEEK_API_KEY`, `USENET_USERNAME`, and `USENET_PASSWORD` values in that local file.
+Environment defaults include `USENET_HOST`, TLS `USENET_PORT`,
+`USENET_CONNECTIONS`, and comma-separated `USENET_FALLBACK_HOSTS`.
 Connections use verified TLS certificates. Add Frugal's bonus host as a fallback
 only if your account includes access to it.
 
@@ -42,6 +47,20 @@ Adjust `FRONTEND_PORT` or `APP_PORT` in `.env` if a port is occupied.
 `DATABASE_URL` can point to an existing PostgreSQL instance; use
 `node scripts/dev.mjs --no-db` to leave it under your own management.
 Keep `.env` and `data/` private. Provider credentials stay on the server.
+
+## Settings
+
+Save the NZBGeek API URL/key and Usenet host, TLS port, account, connection limit,
+and fallback servers in Settings → Connections. Leave credential fields blank to
+keep their saved values, then use Test connections to check both services.
+Changes apply to new operations; active downloads keep the configuration they
+started with.
+
+Saved connection settings live in PostgreSQL and take precedence over environment
+defaults on restart. Keys and passwords are never returned by the API.
+Settings → Storage shows the data directory; change its server mount or
+`DOWNLOAD_DIR` through deployment configuration. Settings → System shows backend
+and database health.
 
 ## Downloads and storage
 
@@ -109,6 +128,7 @@ compose.dev.yaml  Local database port override
 ```
 
 `GET /api/v1/health` reports PostgreSQL readiness; `GET /healthz` reports process
-liveness. `/api/v1/sources`, `/releases`, and `/downloads` expose the first
+liveness. `GET` and `PUT /api/v1/settings` read and save connection configuration.
+`/api/v1/sources`, `/releases`, and `/downloads` expose the first
 workflow. Completed file endpoints support HTTP range requests. Unknown API
 routes return JSON errors; production browser routes use the embedded frontend.

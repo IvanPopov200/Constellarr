@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { DownloadIcon, LoaderCircleIcon, SearchIcon } from 'lucide-react'
+import { DownloadIcon, LoaderCircleIcon, RefreshCwIcon, SearchIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -10,7 +10,7 @@ import { formatAge, formatBytes } from '@/lib/format'
 type SearchState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'error'; message: string }
+  | { status: 'error'; message: string; query: string }
   | { status: 'ready'; query: string; releases: Release[] }
 
 function jobActionLabel(status: Job['status'] | undefined) {
@@ -37,11 +37,7 @@ export function ReleaseSearch({
 
   useEffect(() => () => controller.current?.abort(), [])
 
-  const search = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const term = query.trim()
-    if (!term) return
-
+  const runSearch = async (term: string) => {
     controller.current?.abort()
     const request = new AbortController()
     controller.current = request
@@ -56,8 +52,14 @@ export function ReleaseSearch({
       setState({ status: 'ready', query: term, releases })
     } catch (cause) {
       if (requestId.current !== id || request.signal.aborted) return
-      setState({ status: 'error', message: errorMessage(cause) })
+      setState({ status: 'error', message: errorMessage(cause), query: term })
     }
+  }
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const term = query.trim()
+    if (term) void runSearch(term)
   }
 
   const download = async (release: Release) => {
@@ -73,7 +75,7 @@ export function ReleaseSearch({
   }
 
   return (
-    <Card>
+    <Card size="sm">
       <CardHeader>
         <CardTitle role="heading" aria-level={2}>
           Search releases
@@ -81,7 +83,7 @@ export function ReleaseSearch({
         <CardDescription>Search the configured indexer for movie releases.</CardDescription>
       </CardHeader>
       <CardContent aria-busy={state.status === 'loading'}>
-        <form className="flex flex-col gap-2 sm:flex-row" onSubmit={search}>
+        <form className="flex w-full max-w-2xl flex-col gap-2 sm:flex-row" onSubmit={submit}>
           <label className="sr-only" htmlFor="release-search">
             Search releases
           </label>
@@ -96,7 +98,10 @@ export function ReleaseSearch({
           />
           <Button type="submit" disabled={!query.trim()}>
             {state.status === 'loading' ? (
-              <LoaderCircleIcon data-icon="inline-start" className="animate-spin" />
+              <LoaderCircleIcon
+                data-icon="inline-start"
+                className="animate-spin motion-reduce:animate-none"
+              />
             ) : (
               <SearchIcon data-icon="inline-start" />
             )}
@@ -113,9 +118,21 @@ export function ReleaseSearch({
           </p>
         )}
         {state.status === 'error' && (
-          <p role="alert" className="text-sm text-destructive">
-            {state.message}
-          </p>
+          <div
+            role="alert"
+            className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
+            <span className="min-w-0">{state.message}</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-auto"
+              onClick={() => void runSearch(state.query)}
+            >
+              <RefreshCwIcon data-icon="inline-start" />
+              Try again
+            </Button>
+          </div>
         )}
         {state.status === 'ready' && (
           <p role="status" className="text-sm text-muted-foreground">
@@ -132,18 +149,19 @@ export function ReleaseSearch({
         )}
 
         {state.status === 'ready' && state.releases.length > 0 && (
-          <ul className="flex flex-col divide-y">
+          <ul className="flex flex-col divide-y divide-border">
             {state.releases.map((release) => {
               const status = jobStatus.get(release.id)
-              const label = pendingId === release.id ? 'Adding…' : (jobActionLabel(status) ?? 'Download')
+              const label =
+                pendingId === release.id ? 'Adding…' : (jobActionLabel(status) ?? 'Download')
               return (
                 <li
                   key={release.id}
                   className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                 >
                   <div className="min-w-0">
-                    <p className="font-medium break-words">{release.title}</p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm font-medium break-words">{release.title}</p>
+                    <p className="text-xs text-muted-foreground">
                       {formatBytes(release.size)} ·{' '}
                       <time
                         dateTime={release.published}

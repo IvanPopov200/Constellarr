@@ -1,48 +1,101 @@
-import { BackendStatus } from '@/components/backend-status'
+import { useEffect, useSyncExternalStore } from 'react'
+import type { MouseEvent } from 'react'
+import { AppShell, PageHeading, type Route } from '@/components/app-shell'
 import { DownloadQueue } from '@/components/download-queue'
+import { Overview } from '@/components/overview'
 import { ReleaseSearch } from '@/components/release-search'
-import { SourcesCard } from '@/components/sources-card'
+import { SettingsPage } from '@/components/settings-page'
+import { Button } from '@/components/ui/button'
+import { isActiveJob } from '@/lib/api'
 import { useDownloads } from '@/lib/use-downloads'
 
-function ConstellationMark() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-9 shrink-0 text-primary">
-      <path
-        d="M5 18 9 9l7 3 3-7"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.5"
-      />
-      <circle cx="5" cy="18" r="1.7" fill="currentColor" />
-      <circle cx="9" cy="9" r="1.7" fill="currentColor" />
-      <circle cx="16" cy="12" r="1.7" fill="currentColor" />
-      <circle cx="19" cy="5" r="1.7" fill="currentColor" />
-    </svg>
-  )
+// Dark is the only theme; mark the document so dark: utilities apply before first paint.
+document.documentElement.classList.add('dark')
+
+const routeIds: readonly Route[] = ['overview', 'search', 'downloads', 'settings']
+
+function readRoute(): Route {
+  const value = window.location.hash.replace(/^#\/?/, '')
+  return routeIds.includes(value as Route) ? (value as Route) : 'overview'
+}
+
+function subscribeToHash(onStoreChange: () => void) {
+  window.addEventListener('hashchange', onStoreChange)
+  return () => window.removeEventListener('hashchange', onStoreChange)
+}
+
+function skipToContent(event: MouseEvent<HTMLAnchorElement>) {
+  event.preventDefault()
+  document.getElementById('main-content')?.focus()
 }
 
 function App() {
   const { jobs, error, refresh, download, retry } = useDownloads()
+  const route = useSyncExternalStore(subscribeToHash, readRoute, () => 'overview' as Route)
+
+  useEffect(() => {
+    if (window.location.hash !== `#${route}`) {
+      window.history.replaceState(null, '', `#${route}`)
+    }
+  }, [route])
+
+  const activeDownloads = jobs?.filter(isActiveJob).length ?? 0
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-4xl flex-col gap-6 px-4 py-8 sm:py-12">
-      <header className="flex items-center gap-3">
-        <ConstellationMark />
-        <div>
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">Constellarr</h1>
-          <p className="text-sm text-muted-foreground">Self-hosted Usenet search and downloads</p>
+    <>
+      <a
+        href="#main-content"
+        onClick={skipToContent}
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[60] focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+      >
+        Skip to content
+      </a>
+      <AppShell route={route} activeDownloads={activeDownloads}>
+        {route === 'overview' && (
+          <Overview jobs={jobs} error={error} onRetry={retry} onRefresh={refresh} />
+        )}
+
+        <div hidden={route !== 'search'} inert={route !== 'search'}>
+          <div className="flex flex-col gap-6">
+            <PageHeading
+              title="Search"
+              description="Search the configured indexer and add releases to the download queue."
+              action={
+                <Button asChild size="sm" variant="outline">
+                  <a href="#downloads">View queue</a>
+                </Button>
+              }
+            />
+            <ReleaseSearch jobs={jobs ?? []} onDownload={download} />
+          </div>
         </div>
-      </header>
 
-      <ReleaseSearch jobs={jobs ?? []} onDownload={download} />
-      <DownloadQueue jobs={jobs} error={error} onRetry={retry} onRefresh={refresh} />
+        {route === 'downloads' && (
+          <div className="flex flex-col gap-6">
+            <PageHeading
+              title="Downloads"
+              description="Transfer and processing stages for queued releases."
+              action={
+                <Button asChild size="sm">
+                  <a href="#search">Search releases</a>
+                </Button>
+              }
+            />
+            <DownloadQueue
+              jobs={jobs}
+              error={error}
+              onRetry={retry}
+              onRefresh={refresh}
+              emptyAction={{ label: 'Search releases', href: '#search' }}
+            />
+          </div>
+        )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <SourcesCard />
-        <BackendStatus />
-      </div>
-    </main>
+        <div hidden={route !== 'settings'} inert={route !== 'settings'}>
+          <SettingsPage />
+        </div>
+      </AppShell>
+    </>
   )
 }
 
