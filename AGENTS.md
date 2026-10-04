@@ -40,6 +40,15 @@ restarts, and explain failures clearly. Preserve existing media during migration
 
 ## Repository workflow
 
+- Start each feature or fix on a plain, descriptive branch from the latest `main`.
+- Make focused, meaningful commits as work progresses, with clear commit messages.
+- Push the branch after each meaningful commit and before handing off work so all
+  durable progress is available on the remote.
+- When the work is complete and relevant checks pass, merge the branch into the
+  latest `main` and push `main` to the remote.
+- Keep temporary plans, checklists, scratch notes, and status logs untracked. Never
+  merge `PLAN.md`, `CHECKLIST.md`, or similar throwaway files into `main`; keep only
+  lasting project documentation in the repository.
 - `frontend/` owns the web interface; `backend/` owns the API and embedded assets.
 - Run `make setup`, then `make dev` for local development. Native builds require
   a C compiler for the yEnc decoder and `par2` on PATH for verification/repair.

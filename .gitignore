@@ -11,3 +11,6 @@ bin/
 data/
 coverage/
 *.log
+PLAN.md
+CHECKLIST.md
+*.scratch.md
