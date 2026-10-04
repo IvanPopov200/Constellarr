@@ -498,11 +498,11 @@ func (s *Store) Save(ctx context.Context, movie Movie) (Movie, error) {
 	if err != nil {
 		return Movie{}, err
 	}
-	_, err = tx.Exec(ctx,
+	stored, err := scanMovie(tx.QueryRow(ctx,
 		`INSERT INTO movies (id, imdb_id, data, added_at, updated_at)
 		 VALUES ($1, nullif($2, ''), $3::jsonb, $4, $5)
-		 ON CONFLICT (id) DO UPDATE SET imdb_id = EXCLUDED.imdb_id, data = EXCLUDED.data, updated_at = EXCLUDED.updated_at`,
-		movie.ID, imdbID, string(encoded), movie.AddedAt, movie.UpdatedAt)
+		 ON CONFLICT (id) DO UPDATE SET imdb_id = EXCLUDED.imdb_id, data = EXCLUDED.data, updated_at = EXCLUDED.updated_at RETURNING `+movieColumns,
+		movie.ID, imdbID, string(encoded), movie.AddedAt, movie.UpdatedAt))
 	if err != nil {
 		if imdbID != "" && uniqueViolation(err) {
 			_ = tx.Rollback(ctx)
@@ -515,7 +515,7 @@ func (s *Store) Save(ctx context.Context, movie Movie) (Movie, error) {
 	if err := tx.Commit(ctx); err != nil {
 		return Movie{}, dbError("save movie", err)
 	}
-	return movie, nil
+	return stored, nil
 }
 
 func (s *Store) Delete(ctx context.Context, id string) error {

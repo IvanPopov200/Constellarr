@@ -310,6 +310,7 @@ func TestStoreMovieLifecycle(t *testing.T) {
 			Certification: "R", Poster: "https://poster.example/matrix.jpg", Plot: "A hacker learns the truth.",
 		},
 		Monitored: true, ProfileID: profile.ID, RootID: rootID, Collection: "The Matrix", Status: "wanted",
+		AddedAt: time.Date(2020, 1, 1, 0, 0, 0, 123456789, time.UTC),
 	}
 	saved, err := store.Save(ctx, movie)
 	if err != nil {
