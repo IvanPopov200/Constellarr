@@ -2,35 +2,43 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Dialog } from 'radix-ui'
 import {
+  CableIcon,
+  CaptionsIcon,
   ChevronRightIcon,
   DownloadIcon,
+  FilmIcon,
+  HardDriveIcon,
+  InboxIcon,
   LayoutDashboardIcon,
+  MagnetIcon,
   MenuIcon,
+  MusicIcon,
   PanelLeftCloseIcon,
   PanelLeftIcon,
-  SearchIcon,
   SettingsIcon,
+  TvIcon,
+  UsersIcon,
   XIcon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { BackendStatusChip } from '@/components/backend-status'
 import { Button } from '@/components/ui/button'
 import { cn } from 'cn'
-
-export type Route = 'overview' | 'search' | 'downloads' | 'settings'
-
-const routeLabels: Record<Route, string> = {
-  overview: 'Overview',
-  search: 'Search',
-  downloads: 'Downloads',
-  settings: 'Settings',
-}
+import { routeLabels, type Route } from '@/lib/navigation'
 
 const routeSections: Record<Route, string> = {
   overview: 'Workspace',
-  search: 'Workspace',
-  downloads: 'Workspace',
-  settings: 'System',
+  requests: 'Workspace',
+  movies: 'Workspace',
+  'tv-shows': 'Workspace',
+  music: 'Workspace',
+  subtitles: 'Workspace',
+  usenet: 'Downloads',
+  torrents: 'Downloads',
+  connections: 'System',
+  storage: 'System',
+  users: 'System',
+  system: 'System',
 }
 
 const navSections: { label: string; items: { route: Route; icon: LucideIcon }[] }[] = [
@@ -38,13 +46,28 @@ const navSections: { label: string; items: { route: Route; icon: LucideIcon }[] 
     label: 'Workspace',
     items: [
       { route: 'overview', icon: LayoutDashboardIcon },
-      { route: 'search', icon: SearchIcon },
-      { route: 'downloads', icon: DownloadIcon },
+      { route: 'requests', icon: InboxIcon },
+      { route: 'movies', icon: FilmIcon },
+      { route: 'tv-shows', icon: TvIcon },
+      { route: 'music', icon: MusicIcon },
+      { route: 'subtitles', icon: CaptionsIcon },
+    ],
+  },
+  {
+    label: 'Downloads',
+    items: [
+      { route: 'usenet', icon: DownloadIcon },
+      { route: 'torrents', icon: MagnetIcon },
     ],
   },
   {
     label: 'System',
-    items: [{ route: 'settings', icon: SettingsIcon }],
+    items: [
+      { route: 'connections', icon: CableIcon },
+      { route: 'storage', icon: HardDriveIcon },
+      { route: 'users', icon: UsersIcon },
+      { route: 'system', icon: SettingsIcon },
+    ],
   },
 ]
 
@@ -176,7 +199,7 @@ function NavList({
                     icon={item.icon}
                     active={route === item.route}
                     collapsed={collapsed}
-                    badge={item.route === 'downloads' ? activeDownloads : 0}
+                    badge={item.route === 'usenet' ? activeDownloads : 0}
                     onNavigate={onNavigate}
                   />
                 </li>
@@ -289,7 +312,7 @@ export function AppShell({
               >
                 <Dialog.Title className="sr-only">Navigation</Dialog.Title>
                 <Dialog.Description className="sr-only">
-                  Constellarr sections: overview, search, downloads, and settings.
+                  Constellarr sections: media and requests, downloads, and system settings.
                 </Dialog.Description>
                 <div className="flex h-14 shrink-0 items-center justify-between border-b border-sidebar-border pr-2">
                   <Brand />

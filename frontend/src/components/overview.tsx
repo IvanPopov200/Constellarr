@@ -84,7 +84,7 @@ export function Overview({
         description="Recent download activity and source connectivity for this server."
         action={
           <Button asChild size="sm">
-            <a href="#search">
+            <a href="#movies">
               <SearchIcon data-icon="inline-start" />
               Search releases
             </a>
@@ -140,7 +140,7 @@ export function Overview({
           title="Recent downloads"
           description="Latest queue activity, with retry and completed file links."
           limit={5}
-          emptyAction={{ label: 'Search releases', href: '#search' }}
+          emptyAction={{ label: 'Search releases', href: '#movies' }}
         />
         <SourcesCard />
       </div>

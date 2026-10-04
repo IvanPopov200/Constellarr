@@ -170,9 +170,9 @@ export function SourcesCard() {
             Manage your source connections.
           </p>
           <Button asChild size="sm" variant="outline">
-            <a href="#settings">
+            <a href="#connections">
               <SettingsIcon data-icon="inline-start" />
-              Open settings
+              Open connections
             </a>
           </Button>
         </div>

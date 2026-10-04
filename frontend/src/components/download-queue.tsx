@@ -136,7 +136,7 @@ export function DownloadQueue({
         {showViewAll && (
           <CardAction>
             <Button asChild variant="ghost" size="sm">
-              <a href="#downloads" aria-label="View all downloads">
+              <a href="#usenet" aria-label="View all Usenet downloads">
                 View all
                 <ArrowRightIcon data-icon="inline-end" />
               </a>

@@ -9,9 +9,11 @@ and repair, and RAR/ZIP extraction. The interface shows real source health,
 transfer stages, and links to completed files. Torrent handling, library imports,
 Jellyfin integration, monitoring, TV, music, and subtitles are future work.
 
-The web workspace separates Overview, Search, Downloads, and Settings. Overview
-shows recent queue activity and source status; Settings manages connections,
-storage information, and server health.
+The web workspace groups Overview, Requests, Movies, TV Shows, Music, and Subtitles;
+Downloads contains Usenet and Torrents; System contains Connections, Storage & Paths,
+Users & Access, and System. Movies provides release search, Usenet shows the queue,
+and Overview shows recent activity and source status. Future sections are marked
+as planned until their workflows are implemented.
 
 ## Local development
 
@@ -26,7 +28,7 @@ make setup
 ```
 
 This installs dependencies and creates an ignored `.env` with a generated
-database password. Configure providers in Settings → Connections, or supply initial
+database password. Configure providers in System → Connections, or supply initial
 `NZBGEEK_API_KEY`, `USENET_USERNAME`, and `USENET_PASSWORD` values in that local file.
 Environment defaults include `USENET_HOST`, TLS `USENET_PORT`,
 `USENET_CONNECTIONS`, and comma-separated `USENET_FALLBACK_HOSTS`.
@@ -51,15 +53,15 @@ Keep `.env` and `data/` private. Provider credentials stay on the server.
 ## Settings
 
 Save the NZBGeek API URL/key and Usenet host, TLS port, account, connection limit,
-and fallback servers in Settings → Connections. Leave credential fields blank to
+and fallback servers in System → Connections. Leave credential fields blank to
 keep their saved values, then use Test connections to check both services.
 Changes apply to new operations; active downloads keep the configuration they
 started with.
 
 Saved connection settings live in PostgreSQL and take precedence over environment
 defaults on restart. Keys and passwords are never returned by the API.
-Settings → Storage shows the data directory; change its server mount or
-`DOWNLOAD_DIR` through deployment configuration. Settings → System shows backend
+System → Storage & Paths shows the data directory; change its server mount or
+`DOWNLOAD_DIR` through deployment configuration. System → System shows backend
 and database health.
 
 ## Downloads and storage

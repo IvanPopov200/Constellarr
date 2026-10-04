@@ -1,21 +1,33 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import type { MouseEvent } from 'react'
-import { AppShell, PageHeading, type Route } from '@/components/app-shell'
+import { AppShell, PageHeading } from '@/components/app-shell'
+import { routeLabels, type Route } from '@/lib/navigation'
 import { DownloadQueue } from '@/components/download-queue'
 import { Overview } from '@/components/overview'
 import { ReleaseSearch } from '@/components/release-search'
 import { SettingsPage } from '@/components/settings-page'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { isActiveJob } from '@/lib/api'
 import { useDownloads } from '@/lib/use-downloads'
 
 // Dark is the only theme; mark the document so dark: utilities apply before first paint.
 document.documentElement.classList.add('dark')
 
-const routeIds: readonly Route[] = ['overview', 'search', 'downloads', 'settings']
+const routeIds = Object.keys(routeLabels) as Route[]
+const routeAliases: Record<string, Route> = { search: 'movies', downloads: 'usenet', settings: 'connections' }
+const plannedSections: Partial<Record<Route, string>> = {
+  requests: 'Track requests for movies, shows, and music.',
+  'tv-shows': 'Manage series, episodes, and upcoming releases.',
+  music: 'Manage artists, albums, and your music library.',
+  subtitles: 'Find and manage subtitles for your movies and shows.',
+  torrents: 'Manage torrent downloads and seeding.',
+  users: 'Manage accounts and access to your server.',
+}
 
 function readRoute(): Route {
-  const value = window.location.hash.replace(/^#\/?/, '')
+  const hash = window.location.hash.replace(/^#\/?/, '')
+  const value = routeAliases[hash] ?? hash
   return routeIds.includes(value as Route) ? (value as Route) : 'overview'
 }
 
@@ -39,7 +51,9 @@ function App() {
     }
   }, [route])
 
+  const plannedDescription = plannedSections[route]
   const activeDownloads = jobs?.filter(isActiveJob).length ?? 0
+  const settingsSection = route === 'connections' || route === 'storage' || route === 'system' ? route : null
 
   return (
     <>
@@ -55,14 +69,14 @@ function App() {
           <Overview jobs={jobs} error={error} onRetry={retry} onRefresh={refresh} />
         )}
 
-        <div hidden={route !== 'search'} inert={route !== 'search'}>
+        <div hidden={route !== 'movies'} inert={route !== 'movies'}>
           <div className="flex flex-col gap-6">
             <PageHeading
-              title="Search"
-              description="Search the configured indexer and add releases to the download queue."
+              title="Movies"
+              description="Find movie releases and add them to your Usenet queue."
               action={
                 <Button asChild size="sm" variant="outline">
-                  <a href="#downloads">View queue</a>
+                  <a href="#usenet">View queue</a>
                 </Button>
               }
             />
@@ -70,14 +84,14 @@ function App() {
           </div>
         </div>
 
-        {route === 'downloads' && (
+        {route === 'usenet' && (
           <div className="flex flex-col gap-6">
             <PageHeading
-              title="Downloads"
-              description="Transfer and processing stages for queued releases."
+              title="Usenet"
+              description="Transfer and processing stages for queued NZB releases."
               action={
                 <Button asChild size="sm">
-                  <a href="#search">Search releases</a>
+                  <a href="#movies">Search releases</a>
                 </Button>
               }
             />
@@ -86,13 +100,25 @@ function App() {
               error={error}
               onRetry={retry}
               onRefresh={refresh}
-              emptyAction={{ label: 'Search releases', href: '#search' }}
+              emptyAction={{ label: 'Search releases', href: '#movies' }}
             />
           </div>
         )}
 
-        <div hidden={route !== 'settings'} inert={route !== 'settings'}>
-          <SettingsPage />
+        {plannedDescription && (
+          <div className="flex flex-col gap-6">
+            <PageHeading title={routeLabels[route]} description={plannedDescription} />
+            <Card className="max-w-3xl">
+              <CardContent className="items-start gap-4">
+                <p className="text-sm text-muted-foreground">This section is planned and isn’t available yet.</p>
+                {route === 'requests' && <Button asChild size="sm"><a href="#movies">Find a movie</a></Button>}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <div hidden={!settingsSection} inert={!settingsSection}>
+          <SettingsPage section={settingsSection ?? 'connections'} />
         </div>
       </AppShell>
     </>
