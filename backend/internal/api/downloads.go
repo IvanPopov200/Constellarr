@@ -15,6 +15,7 @@ import (
 
 	"github.com/IvanPopov200/Constellarr/backend/internal/downloads"
 	"github.com/IvanPopov200/Constellarr/backend/internal/movies"
+	"github.com/IvanPopov200/Constellarr/backend/internal/tv"
 )
 
 type source struct {
@@ -126,13 +127,13 @@ func respond(w http.ResponseWriter, status int, body any, err error) {
 	}
 	status = http.StatusBadGateway
 	switch {
-	case errors.Is(err, downloads.ErrNotFound), errors.Is(err, movies.ErrNotFound):
+	case errors.Is(err, downloads.ErrNotFound), errors.Is(err, movies.ErrNotFound), errors.Is(err, tv.ErrNotFound):
 		status = http.StatusNotFound
-	case errors.Is(err, downloads.ErrConflict), errors.Is(err, movies.ErrConflict):
+	case errors.Is(err, downloads.ErrConflict), errors.Is(err, movies.ErrConflict), errors.Is(err, tv.ErrConflict):
 		status = http.StatusConflict
 	case errors.Is(err, downloads.ErrNotConfigured):
 		status = http.StatusServiceUnavailable
-	case errors.Is(err, downloads.ErrInvalid), errors.Is(err, movies.ErrInvalid):
+	case errors.Is(err, downloads.ErrInvalid), errors.Is(err, movies.ErrInvalid), errors.Is(err, tv.ErrInvalid):
 		status = http.StatusBadRequest
 	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})

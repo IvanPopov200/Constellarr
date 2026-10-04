@@ -14,12 +14,14 @@ import (
 
 	"github.com/IvanPopov200/Constellarr/backend/internal/downloads"
 	"github.com/IvanPopov200/Constellarr/backend/internal/movies"
+	"github.com/IvanPopov200/Constellarr/backend/internal/tv"
 	"github.com/IvanPopov200/Constellarr/backend/internal/web"
 )
 
 type Services struct {
 	Downloads *downloads.Manager
 	Movies    *movies.Service
+	TV        *tv.Service
 }
 
 func New(pool *pgxpool.Pool, services ...Services) http.Handler {
@@ -30,6 +32,9 @@ func New(pool *pgxpool.Pool, services ...Services) http.Handler {
 	if len(services) != 0 && services[0].Movies != nil {
 		registerMovies(mux, services[0].Movies)
 		registerMoviePosters(mux, services[0].Movies)
+	}
+	if len(services) != 0 && services[0].TV != nil {
+		registerTV(mux, services[0].TV)
 	}
 	mux.HandleFunc("/api/v1/health", healthHandler(pool))
 	mux.HandleFunc("/api/", notFound)

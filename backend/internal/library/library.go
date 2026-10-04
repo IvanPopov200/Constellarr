@@ -50,7 +50,7 @@ type Options struct {
 	WriteNFO bool
 	// Episode carries TV numbering and sidecars; nil imports a movie.
 	Episode *Episode
-	// Existing lists movie-owned file paths below Root, relative or absolute.
+	// Existing lists owned file paths below Root, relative or absolute.
 	Existing []string
 }
 
@@ -253,7 +253,7 @@ func Open(rootPath, name string) (*os.File, error) {
 	return f, nil
 }
 
-// Archive moves a movie-owned path below root/.recycle without following symbolic links.
+// Archive moves an owned path below root/.recycle without following symbolic links.
 func Archive(rootPath, name string) error {
 	if rootPath == "" {
 		return fmt.Errorf("%w: root must be configured", ErrUnsafe)

@@ -3,15 +3,15 @@
 A self-hosted media discovery, acquisition, and management platform for home
 servers. Constellarr manages the media workflow; Jellyfin handles playback.
 
-Movies combines a metadata catalog, monitoring, quality profiles, release selection,
-and an organized library. Built-in Usenet downloads include durable progress, retry,
-PAR2 verification and repair, and RAR/ZIP extraction. Completed movies import into
-configured root folders and can refresh Jellyfin. Torrent handling, TV, music,
+Movies and TV Shows combine metadata catalogs, monitoring, quality profiles, release
+selection, and organized libraries. Built-in Usenet downloads include durable progress, retry,
+PAR2 verification and repair, and RAR/ZIP extraction. Completed movies and episodes import into
+configured root folders and can refresh Jellyfin. Torrent handling, music,
 and subtitles remain future work.
 
 The web workspace groups Overview, Requests, Movies, TV Shows, Music, and Subtitles;
 Downloads contains Usenet and Torrents; System contains Connections, Storage & Paths,
-Users & Access, and System. Movies provides library management, Usenet shows the queue,
+Users & Access, and System. Movies and TV Shows provide library management, Usenet shows the queue,
 and Overview shows downloaded movies, recent activity, and source status. Future sections are marked
 as planned until their workflows are implemented.
 
@@ -62,7 +62,7 @@ Saved connection settings live in PostgreSQL and take precedence over environmen
 defaults on restart. Keys and passwords are never returned by the API.
 Changing a metadata or Jellyfin server requires supplying its key again.
 Connections also configures OMDb metadata and poster access, optional Jellyfin
-refresh, and an import webhook. Storage & Paths manages movie root folders,
+refresh, and an import webhook. Storage & Paths manages movie and TV root folders,
 naming templates, and copy, move, or hardlink imports. Root paths refer to the
 server filesystem; mount NAS media folders into the app container before adding
 their paths. `DOWNLOAD_DIR` remains deployment configuration. System shows backend
@@ -97,6 +97,28 @@ failed-release blocking, and watchlist imports with scheduled synchronization.
 Optional NFO sidecars, Jellyfin refresh, and webhook notifications run after imports.
 See [the movie-management scope](docs/MOVIES.md) for the shared package boundaries.
 
+## TV library
+
+Add series through metadata search or manual entry. Series, seasons, and individual
+episodes can be monitored independently. Choose all, future, missing, existing,
+first-season, latest-season, or no episodes when adding or editing a series.
+Episode catalogs load in bounded batches and resume after restarts.
+
+TV shares the metadata and Jellyfin connections with Movies. Both workspaces
+can edit the same quality profiles. TV storage and naming are separate; the default root is
+`<DOWNLOAD_DIR>/library/tv`, with a folder per series and season.
+Interactive searches support episodes and season packs, show rejection reasons,
+and queue built-in Usenet downloads. Server-side RSS and scheduled searches acquire
+aired, monitored episodes and apply the selected upgrade cutoff.
+
+Imports match episode numbers or a unique air date, preserve unrelated episodes,
+and retain replacement files under `.recycle`. Scans and manual matching handle
+existing libraries and ambiguous files. Specials can be added manually when the
+metadata provider lacks them; absolute episode numbering requires manual matching.
+TV includes wanted episodes, an air-date calendar with iCalendar export, history,
+rename previews, and Jellyfin-compatible series and episode NFO files.
+See [the TV-management scope](docs/TV.md).
+
 ## Downloads and storage
 
 `DOWNLOAD_DIR` defaults to `./data`. Jobs use
@@ -121,7 +143,7 @@ make test-integration
 ```
 
 Checks cover frontend lint/build, Go vet/tests, synthetic indexer and TLS NNTP
-contracts, metadata and posters, movie imports and automation, Jellyfin/webhooks,
+contracts, metadata and posters, movie and TV imports and automation, Jellyfin/webhooks,
 damaged archive/PAR2 recovery, and isolated PostgreSQL schemas.
 PostgreSQL tests run when `TEST_DATABASE_URL` is supplied; `make test-integration`
 creates and removes a temporary database on the development PostgreSQL service.
@@ -168,5 +190,7 @@ compose.dev.yaml  Local database port override
 liveness. `GET` and `PUT /api/v1/settings` read and save connection configuration.
 `/api/v1/sources`, `/releases`, and `/downloads` expose the first
 workflow. `/api/v1/movies`, `/movie-profiles`, `/movie-config`, and `/movie-watchlists`
-expose catalog, profiles, import settings, and watchlists. Completed file endpoints support HTTP range requests. Unknown API
+expose catalog, profiles, import settings, and watchlists. `/api/v1/tv` and `/tv-config`
+expose series, episode monitoring, searches, imports, and TV settings.
+Completed file endpoints support HTTP range requests. Unknown API
 routes return JSON errors; production browser routes use the embedded frontend.
