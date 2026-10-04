@@ -140,6 +140,84 @@ func TestSettingsRoundtripAndSecretRetention(t *testing.T) {
 	}
 }
 
+func TestSettingsUpdateKeepsCrossInstanceRotation(t *testing.T) {
+	pool := testSchema(t)
+	ctx := context.Background()
+	indexer := newIndexerServer(t, "release-a")
+	rotating := settingsManager(t, pool, downloads.Config{
+		IndexerURL: indexer.URL + "/api", APIKey: "bootstrap-key-a", Directory: t.TempDir(),
+		Usenet: usenet.Config{Host: "a.example", Port: 563, Username: "user-a", Password: "password-a", Connections: 4},
+	})
+	directory := t.TempDir()
+	stale := settingsManager(t, pool, downloads.Config{
+		IndexerURL: indexer.URL + "/api", APIKey: "bootstrap-key-b", Directory: directory,
+		Usenet: usenet.Config{Host: "b.example", Port: 563, Username: "user-b", Password: "password-b", Connections: 4},
+	})
+
+	if err := rotating.UpdateSettings(ctx, downloads.SettingsUpdate{
+		IndexerURL: indexer.URL + "/api", APIKey: "rotated-key",
+		UsenetHost: "news.example", UsenetPort: 563, UsenetUsername: "rotated-user", UsenetPassword: "rotated-password",
+		Connections: 8,
+	}); err != nil {
+		t.Fatalf("rotate settings: %v", err)
+	}
+
+	// The stale instance still holds bootstrap values and saves without secrets.
+	if err := stale.UpdateSettings(ctx, downloads.SettingsUpdate{
+		IndexerURL: indexer.URL + "/api2", UsenetHost: "news2.example", UsenetPort: 8119, Connections: 12,
+	}); err != nil {
+		t.Fatalf("blank update: %v", err)
+	}
+
+	var storedKey, storedPassword string
+	if err := pool.QueryRow(ctx, `SELECT indexer_api_key, usenet_password FROM settings`).Scan(&storedKey, &storedPassword); err != nil {
+		t.Fatalf("read settings row: %v", err)
+	}
+	if storedKey != "rotated-key" || storedPassword != "rotated-password" {
+		t.Fatalf("blank update rolled back rotated credentials: key %q, password %q", storedKey, storedPassword)
+	}
+	cfg := stale.Config()
+	if cfg.APIKey != "rotated-key" || cfg.Usenet.Password != "rotated-password" {
+		t.Fatalf("stale instance activated stale credentials: key %q, password %q", cfg.APIKey, cfg.Usenet.Password)
+	}
+	if cfg.IndexerURL != indexer.URL+"/api2" || cfg.Usenet.Host != "news2.example" || cfg.Usenet.Port != 8119 || cfg.Usenet.Connections != 12 {
+		t.Fatalf("stale instance did not apply the update: %+v", cfg)
+	}
+	if cfg.Directory != directory {
+		t.Fatalf("storage directory = %q, want the local runtime value %q", cfg.Directory, directory)
+	}
+}
+
+func TestSettingsUpdateKeepsOversizedBootstrapSecrets(t *testing.T) {
+	pool := testSchema(t)
+	ctx := context.Background()
+	indexer := newIndexerServer(t, "release-a")
+	long := strings.Repeat("k", 600)
+	manager := settingsManager(t, pool, downloads.Config{
+		IndexerURL: indexer.URL + "/api", APIKey: long, Directory: t.TempDir(),
+		Usenet: usenet.Config{Host: "long.example", Port: 563, Username: "long-user", Password: long, Connections: 2},
+	})
+	handler := api.New(pool, api.Services{Downloads: manager})
+
+	// Blank secrets retain trusted bootstrap values even when they exceed the request limit.
+	status, raw := request(t, handler, http.MethodPut, "/api/v1/settings",
+		encodeSettings(t, indexer.URL+"/api", "", "long2.example", 563, "long-user", "", 4, nil), nil)
+	if status != http.StatusOK {
+		t.Fatalf("PUT with retained oversized secrets: status %d, body %s", status, raw)
+	}
+	if view := decodeSettingsView(t, raw); !view.Indexer.APIKeyConfigured || !view.Usenet.PasswordConfigured {
+		t.Fatalf("retained secrets reported missing: %+v", view)
+	}
+	assertHidden(t, raw, long)
+	var storedKey, storedPassword string
+	if err := pool.QueryRow(ctx, `SELECT indexer_api_key, usenet_password FROM settings`).Scan(&storedKey, &storedPassword); err != nil {
+		t.Fatalf("read settings row: %v", err)
+	}
+	if storedKey != long || storedPassword != long {
+		t.Fatal("saved secrets changed after a blank update")
+	}
+}
+
 func TestSettingsValidationAndRequestEnforcement(t *testing.T) {
 	pool := testSchema(t)
 	indexer := newIndexerServer(t, "release-a")
@@ -203,6 +281,8 @@ func TestSettingsValidationAndRequestEnforcement(t *testing.T) {
 		})},
 		{"invalid fallback host", encode(func(b map[string]any) { usenetField(b)["fallbackHosts"] = []string{"bad/host"} })},
 		{"username without password", encode(func(b map[string]any) { usenetField(b)["password"] = "" })},
+		{"oversized supplied API key", encode(func(b map[string]any) { indexerField(b)["apiKey"] = strings.Repeat("k", 600) })},
+		{"oversized supplied password", encode(func(b map[string]any) { usenetField(b)["password"] = strings.Repeat("p", 600) })},
 	}
 	for _, tc := range cases {
 		status, raw := request(t, handler, http.MethodPut, "/api/v1/settings", tc.body, nil)
@@ -230,6 +310,39 @@ func TestSettingsValidationAndRequestEnforcement(t *testing.T) {
 		t.Fatalf("PUT from the request origin: status %d, body %s", status, raw)
 	}
 	assertHidden(t, raw, "put-key", "put-password")
+
+	for name, origin := range map[string]string{
+		"foreign host":   "http://other.example",
+		"invalid scheme": "ftp://example.com",
+		"opaque origin":  "null",
+	} {
+		if status, raw := request(t, handler, http.MethodPut, "/api/v1/settings", validBody, map[string]string{"Origin": origin}); status != http.StatusForbidden {
+			t.Errorf("%s: status %d, body %s; want 403", name, status, raw)
+		}
+	}
+	// Scheme is not compared with the request so TLS-terminating proxies keep working.
+	for name, origin := range map[string]string{
+		"case-insensitive host": "HTTP://EXAMPLE.COM",
+		"proxy-terminated TLS":  "https://example.com",
+	} {
+		if status, raw := request(t, handler, http.MethodPut, "/api/v1/settings", validBody, map[string]string{"Origin": origin}); status != http.StatusOK {
+			t.Errorf("%s: status %d, body %s; want 200", name, status, raw)
+		}
+	}
+
+	// Duplicates are removed before the unique fallback cap is enforced.
+	status, raw = request(t, handler, http.MethodPut, "/api/v1/settings", encode(func(b map[string]any) {
+		usenetField(b)["fallbackHosts"] = []string{
+			"a1.example", "a1.example", "a2.example", "a3.example", "a4.example",
+			"a5.example", "a6.example", "a7.example", "a8.example",
+		}
+	}), nil)
+	if status != http.StatusOK {
+		t.Fatalf("PUT with duplicate fallbacks: status %d, body %s", status, raw)
+	}
+	if view := decodeSettingsView(t, raw); strings.Join(view.Usenet.FallbackHosts, ",") != "a1.example,a2.example,a3.example,a4.example,a5.example,a6.example,a7.example,a8.example" {
+		t.Fatalf("deduplicated fallbacks = %v", view.Usenet.FallbackHosts)
+	}
 }
 
 func TestSettingsAffectServicesWithoutRestart(t *testing.T) {

@@ -16,6 +16,7 @@ const (
 	// Distinct advisory lock keys; the migration lock is transaction-scoped.
 	migrationLock   int64 = 0x436F6E7374656C6C
 	coordinatorLock int64 = migrationLock + 1
+	settingsLock    int64 = migrationLock + 2
 )
 
 //go:embed migrations/*.sql

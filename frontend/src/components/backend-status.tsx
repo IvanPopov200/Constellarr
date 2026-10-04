@@ -153,7 +153,7 @@ export function BackendStatus() {
           <ActivityIcon className="size-4 text-muted-foreground" aria-hidden="true" />
           Backend connection
         </CardTitle>
-        <CardDescription>Live status from {healthEndpoint}.</CardDescription>
+        <CardDescription>Server and database availability.</CardDescription>
       </CardHeader>
       <CardContent className="gap-4">
         <div className="flex flex-wrap items-center gap-3" role="status">

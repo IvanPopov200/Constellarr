@@ -5,6 +5,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -30,7 +31,7 @@ func New(pool *pgxpool.Pool, services ...Services) http.Handler {
 		if r.Method == http.MethodPost || r.Method == http.MethodPut {
 			if origin := r.Header.Get("Origin"); origin != "" {
 				parsed, err := url.Parse(origin)
-				if err != nil || parsed.Host != r.Host {
+				if err != nil || !allowedOrigin(parsed, r.Host) {
 					writeJSON(w, http.StatusForbidden, map[string]string{"error": "request origin is not allowed"})
 					return
 				}
@@ -47,6 +48,12 @@ func New(pool *pgxpool.Pool, services ...Services) http.Handler {
 
 func liveness(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// TLS may terminate at a reverse proxy, so origin checks do not depend on the request scheme.
+func allowedOrigin(origin *url.URL, host string) bool {
+	scheme := strings.ToLower(origin.Scheme)
+	return (scheme == "http" || scheme == "https") && strings.EqualFold(origin.Host, host)
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {

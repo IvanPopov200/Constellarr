@@ -33,7 +33,7 @@ func registerDownloads(mux *http.ServeMux, m *downloads.Manager) {
 			Usenet  source `json:"usenet"`
 		}{
 			Indexer: source{Name: "NZBGeek", Configured: cfg.APIKey != ""},
-			Usenet:  source{Name: "Frugal Usenet", Configured: cfg.Usenet.Username != "" && cfg.Usenet.Password != "", Host: cfg.Usenet.Host, Port: cfg.Usenet.Port, Connections: cfg.Usenet.Connections},
+			Usenet:  source{Name: "Usenet", Configured: cfg.Usenet.Username != "" && cfg.Usenet.Password != "", Host: cfg.Usenet.Host, Port: cfg.Usenet.Port, Connections: cfg.Usenet.Connections},
 		})
 	})
 	mux.HandleFunc("POST /api/v1/sources/test", func(w http.ResponseWriter, r *http.Request) {

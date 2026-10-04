@@ -47,17 +47,41 @@ func (m *Manager) Config() Config {
 func (m *Manager) UpdateSettings(ctx context.Context, update SettingsUpdate) error {
 	m.updateMu.Lock()
 	defer m.updateMu.Unlock()
-	merged, client, err := mergeSettings(m.Config(), update)
+	merged, client, err := m.saveMerged(ctx, update)
 	if err != nil {
-		return err
-	}
-	if err := saveSettings(ctx, m.pool, merged); err != nil {
 		return err
 	}
 	m.configMu.Lock()
 	m.cfg, m.indexer = merged, client
 	m.configMu.Unlock()
 	return nil
+}
+
+// saveMerged serializes load-merge-save across instances so blank secrets cannot roll back rotations.
+func (m *Manager) saveMerged(ctx context.Context, update SettingsUpdate) (Config, *indexer.Client, error) {
+	tx, err := m.pool.Begin(ctx)
+	if err != nil {
+		return Config{}, nil, dbError("save settings", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, settingsLock); err != nil {
+		return Config{}, nil, dbError("save settings", err)
+	}
+	current := m.Config()
+	if err := loadSettings(ctx, tx, &current); err != nil {
+		return Config{}, nil, err
+	}
+	merged, client, err := mergeSettings(current, update)
+	if err != nil {
+		return Config{}, nil, err
+	}
+	if err := saveSettings(ctx, tx, merged); err != nil {
+		return Config{}, nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Config{}, nil, dbError("save settings", err)
+	}
+	return merged, client, nil
 }
 
 func (m *Manager) indexerClient() *indexer.Client {
@@ -84,11 +108,11 @@ func mergeSettings(current Config, update SettingsUpdate) (Config, *indexer.Clie
 		return Config{}, nil, InvalidSettingError("indexer URL is not a valid absolute HTTP(S) URL")
 	}
 	apiKey := strings.TrimSpace(update.APIKey)
+	if apiKey != "" && len(apiKey) > maxCredentialBytes {
+		return Config{}, nil, InvalidSettingError("indexer API key is too long")
+	}
 	if apiKey == "" {
 		apiKey = current.APIKey
-	}
-	if len(apiKey) > maxCredentialBytes {
-		return Config{}, nil, InvalidSettingError("indexer API key is too long")
 	}
 	client, err := indexer.New(url, apiKey)
 	if err != nil {
@@ -114,17 +138,13 @@ func mergeSettings(current Config, update SettingsUpdate) (Config, *indexer.Clie
 	password := update.UsenetPassword
 	if strings.TrimSpace(password) == "" {
 		password = current.Usenet.Password
-	}
-	if len(password) > maxCredentialBytes {
+	} else if len(password) > maxCredentialBytes {
 		return Config{}, nil, InvalidSettingError("usenet password is too long")
 	}
 	if username != "" && password == "" {
 		return Config{}, nil, InvalidSettingError("usenet password is required when a username is set")
 	}
 	fallbacks := make([]string, 0, len(update.FallbackHosts))
-	if len(update.FallbackHosts) > usenet.MaxFallbackHosts {
-		return Config{}, nil, InvalidSettingError(fmt.Sprintf("usenet supports at most %d fallback hosts", usenet.MaxFallbackHosts))
-	}
 	seen := map[string]bool{strings.ToLower(host): true}
 	for i, raw := range update.FallbackHosts {
 		fallback, err := usenet.ValidateHost(raw)
@@ -134,6 +154,9 @@ func mergeSettings(current Config, update SettingsUpdate) (Config, *indexer.Clie
 		key := strings.ToLower(fallback)
 		if seen[key] {
 			continue
+		}
+		if len(fallbacks) >= usenet.MaxFallbackHosts {
+			return Config{}, nil, InvalidSettingError(fmt.Sprintf("usenet supports at most %d unique fallback hosts", usenet.MaxFallbackHosts))
 		}
 		seen[key] = true
 		fallbacks = append(fallbacks, fallback)
