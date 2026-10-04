@@ -28,8 +28,8 @@ export function MovieOverview() {
     return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener('movies-changed', refresh) }
   }, [])
 
-  const downloaded = movies?.filter(movie => (movie.files?.length ?? 0) > 0 && movie.status !== 'missing') ?? []
-  const wanted = movies?.filter(movie => movie.monitored && (movie.files?.length ?? 0) === 0).length ?? 0
+  const downloaded = movies?.filter(movie => movie.files?.some(file => !file.missing)) ?? []
+  const wanted = movies?.filter(movie => movie.monitored && !movie.files?.some(file => !file.missing)).length ?? 0
 
   return (
     <Card size="sm">
@@ -50,7 +50,7 @@ export function MovieOverview() {
             </div>
             <div className="min-w-0 space-y-1">
               <p className="truncate text-sm font-medium">{movie.metadata.title}</p>
-              <p className="text-xs text-muted-foreground">{movie.metadata.year || 'Year unknown'} · {movie.files?.[0]?.quality || 'Quality unknown'}</p>
+              <p className="text-xs text-muted-foreground">{movie.metadata.year || 'Year unknown'} · {movie.files?.find(file => !file.missing)?.quality || 'Quality unknown'}</p>
               {movie.metadata.rating !== null && <p className="flex items-center gap-1 text-xs text-muted-foreground"><Star className="size-3" />{movie.metadata.rating.toFixed(1)} IMDb</p>}
             </div>
           </a>)}

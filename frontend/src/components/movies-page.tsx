@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ComponentProps, KeyboardEvent, ReactNode } from 'react'
 import { Dialog } from 'radix-ui'
 import {
@@ -14,6 +14,7 @@ import {
   FilmIcon,
   FolderSearchIcon,
   LayoutGridIcon,
+  ListFilterIcon,
   ListIcon,
   LoaderCircleIcon,
   PencilIcon,
@@ -87,6 +88,26 @@ function notifyMoviesChanged() {
   window.dispatchEvent(new Event('movies-changed'))
 }
 
+function moviesRouteActive() {
+  const hash = window.location.hash.replace(/^#\/?/, '')
+  if (!hash) return true
+  return hash === 'movies' || hash === 'search'
+}
+
+function subscribeToRoute(onChange: () => void) {
+  window.addEventListener('hashchange', onChange)
+  window.addEventListener('popstate', onChange)
+  return () => {
+    window.removeEventListener('hashchange', onChange)
+    window.removeEventListener('popstate', onChange)
+  }
+}
+
+// Radix portals escape the hidden route wrapper, so dialogs open only on the movies route.
+function useMoviesRoute() {
+  return useSyncExternalStore(subscribeToRoute, moviesRouteActive, () => true)
+}
+
 function strings(value: string[] | null | undefined) {
   return (value ?? []).filter((item) => item.trim().length > 0)
 }
@@ -108,7 +129,7 @@ function stateKey(movie: Movie) {
 
 function movieState(movie: Movie) {
   if (movie.status) return movie.status
-  if (movieFiles(movie).length > 0) return 'available'
+  if (availableFiles(movie).length > 0) return 'available'
   return movie.monitored ? 'missing' : 'unmonitored'
 }
 
@@ -116,8 +137,12 @@ function movieFiles(movie: Movie): MovieFile[] {
   return movie.files ?? []
 }
 
+function availableFiles(movie: Movie): MovieFile[] {
+  return movieFiles(movie).filter((file) => !file.missing)
+}
+
 function bestFile(movie: Movie): MovieFile | null {
-  const files = movieFiles(movie)
+  const files = availableFiles(movie)
   if (files.length === 0) return null
   return files.reduce((best, file) => (file.score >= best.score ? file : best))
 }
@@ -126,9 +151,29 @@ function tagsOf(movie: Movie) {
   return strings(movie.tags)
 }
 
+// Local midnight of the release date; date-only values are read as written, not as UTC.
 function releasedTimestamp(movie: Movie) {
-  const value = Date.parse(movie.metadata.released ?? '')
-  return Number.isFinite(value) ? value : null
+  const value = (movie.metadata.released ?? '').trim()
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  const date = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+}
+
+function parseDateBound(value: string) {
+  if (!value) return null
+  const parts = value.split('-').map(Number)
+  if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) return null
+  const date = new Date(parts[0], parts[1] - 1, parts[2])
+  return Number.isNaN(date.getTime()) ? null : date.getTime()
+}
+
+function parseRatingBound(value: string) {
+  if (value.trim() === '') return null
+  const rating = Number(value)
+  return Number.isFinite(rating) ? rating : null
 }
 
 function formatDate(value: string | number | null) {
@@ -143,9 +188,15 @@ function formatDateTime(value: string) {
   return Number.isNaN(date.getTime()) ? 'Unknown time' : date.toLocaleString()
 }
 
-function ratingText(movie: Movie) {
+// Unknown stays unknown: only a real positive rating counts.
+function ratingValue(movie: Movie) {
   const rating = movie.metadata.rating
-  return typeof rating === 'number' && rating > 0 ? rating.toFixed(1) : null
+  return typeof rating === 'number' && rating > 0 ? rating : null
+}
+
+function ratingText(movie: Movie) {
+  const rating = ratingValue(movie)
+  return rating === null ? null : rating.toFixed(1)
 }
 
 function runtimeText(movie: Movie) {
@@ -159,6 +210,7 @@ function runtimeText(movie: Movie) {
 type SortField =
   | 'title'
   | 'date'
+  | 'released'
   | 'rating'
   | 'votes'
   | 'year'
@@ -178,6 +230,7 @@ type SortField =
 const sortFields: { value: SortField; label: string }[] = [
   { value: 'title', label: 'Title' },
   { value: 'date', label: 'Date added' },
+  { value: 'released', label: 'Release date' },
   { value: 'rating', label: 'IMDb rating' },
   { value: 'votes', label: 'IMDb votes' },
   { value: 'year', label: 'Year' },
@@ -204,8 +257,10 @@ function sortValue(movie: Movie, field: SortField): string | number | null {
       const value = Date.parse(movie.addedAt)
       return Number.isFinite(value) ? value : null
     }
+    case 'released':
+      return releasedTimestamp(movie)
     case 'rating':
-      return typeof metadata.rating === 'number' && metadata.rating > 0 ? metadata.rating : null
+      return ratingValue(movie)
     case 'votes':
       return metadata.votes > 0 ? metadata.votes : null
     case 'year':
@@ -270,6 +325,50 @@ function matchesSearch(movie: Movie, term: string) {
     .join(' ')
     .toLowerCase()
     .includes(term)
+}
+
+type MetadataFilterKey =
+  | 'genre'
+  | 'director'
+  | 'cast'
+  | 'language'
+  | 'country'
+  | 'certification'
+  | 'tag'
+  | 'collection'
+
+type MetadataFilter = {
+  key: MetadataFilterKey
+  label: string
+  values: (movie: Movie) => string[]
+}
+
+const metadataFilters: MetadataFilter[] = [
+  { key: 'genre', label: 'Genre', values: (movie) => strings(movie.metadata.genres) },
+  { key: 'director', label: 'Director', values: (movie) => strings(movie.metadata.directors) },
+  { key: 'cast', label: 'Cast', values: (movie) => strings(movie.metadata.cast) },
+  { key: 'language', label: 'Language', values: (movie) => strings(movie.metadata.languages) },
+  { key: 'country', label: 'Country', values: (movie) => strings(movie.metadata.countries) },
+  {
+    key: 'certification',
+    label: 'Certification',
+    values: (movie) => (movie.metadata.certification ? [movie.metadata.certification] : []),
+  },
+  { key: 'tag', label: 'Tag', values: tagsOf },
+  { key: 'collection', label: 'Collection', values: (movie) => (movie.collection ? [movie.collection] : []) },
+]
+
+function emptyMetadataFilters(): Record<MetadataFilterKey, string> {
+  return {
+    genre: 'all',
+    director: 'all',
+    cast: 'all',
+    language: 'all',
+    country: 'all',
+    certification: 'all',
+    tag: 'all',
+    collection: 'all',
+  }
 }
 
 function Select({ className, children, ...props }: ComponentProps<'select'>) {
@@ -365,8 +464,9 @@ function DialogShell({
   onClose: () => void
   size?: 'lg' | 'xl'
 }) {
+  const routeActive = useMoviesRoute()
   return (
-    <Dialog.Root open onOpenChange={(next) => !next && onClose()}>
+    <Dialog.Root open={routeActive} onOpenChange={(next) => !next && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none" />
         <Dialog.Content
@@ -470,6 +570,12 @@ function LibraryView({
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkError, setBulkError] = useState('')
   const [bulkNotice, setBulkNotice] = useState('')
+  const [metaOpen, setMetaOpen] = useState(false)
+  const [metaFilters, setMetaFilters] = useState<Record<MetadataFilterKey, string>>(emptyMetadataFilters)
+  const [releasedFrom, setReleasedFrom] = useState('')
+  const [releasedTo, setReleasedTo] = useState('')
+  const [ratingMin, setRatingMin] = useState('')
+  const [ratingMax, setRatingMax] = useState('')
 
   const qualityOptions = useMemo(() => {
     const values = new Set<string>()
@@ -486,19 +592,73 @@ function LibraryView({
     return [...values].sort()
   }, [movies])
 
+  const metadataOptions = useMemo(() => {
+    const options = new Map<MetadataFilterKey, string[]>()
+    for (const filter of metadataFilters) {
+      const values = new Set<string>()
+      for (const movie of movies) for (const value of filter.values(movie)) values.add(value)
+      options.set(filter.key, [...values].sort((a, b) => a.localeCompare(b)))
+    }
+    return options
+  }, [movies])
+
+  const activeMetadataCount =
+    metadataFilters.filter((filter) => metaFilters[filter.key] !== 'all').length +
+    (releasedFrom ? 1 : 0) +
+    (releasedTo ? 1 : 0) +
+    (ratingMin.trim() ? 1 : 0) +
+    (ratingMax.trim() ? 1 : 0)
+
+  const clearMetadataFilters = () => {
+    setMetaFilters(emptyMetadataFilters())
+    setReleasedFrom('')
+    setReleasedTo('')
+    setRatingMin('')
+    setRatingMax('')
+  }
+
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase()
+    const from = parseDateBound(releasedFrom)
+    const to = parseDateBound(releasedTo)
+    const minRating = parseRatingBound(ratingMin)
+    const maxRating = parseRatingBound(ratingMax)
     return movies
-      .filter(
-        (movie) =>
+      .filter((movie) => {
+        const released = releasedTimestamp(movie)
+        const rating = ratingValue(movie)
+        return (
           (status === 'all' || stateKey(movie) === status) &&
           (monitor === 'all' || (monitor === 'monitored') === movie.monitored) &&
           (quality === 'all' || bestFile(movie)?.quality === quality) &&
           (profile === 'all' || movie.profileId === profile) &&
-          (!term || matchesSearch(movie, term)),
-      )
+          (from === null || (released !== null && released >= from)) &&
+          (to === null || (released !== null && released <= to)) &&
+          (minRating === null || (rating !== null && rating >= minRating)) &&
+          (maxRating === null || (rating !== null && rating <= maxRating)) &&
+          metadataFilters.every((filter) => {
+            const selected = metaFilters[filter.key]
+            return selected === 'all' || filter.values(movie).includes(selected)
+          }) &&
+          (!term || matchesSearch(movie, term))
+        )
+      })
       .sort((a, b) => compareMovies(a, b, sort, ascending))
-  }, [movies, query, status, monitor, quality, profile, sort, ascending])
+  }, [
+    movies,
+    query,
+    status,
+    monitor,
+    quality,
+    profile,
+    metaFilters,
+    releasedFrom,
+    releasedTo,
+    ratingMin,
+    ratingMax,
+    sort,
+    ascending,
+  ])
 
   const selected = useMemo(() => {
     const ids = new Set(movies.map((movie) => movie.id))
@@ -642,6 +802,21 @@ function LibraryView({
             ? `${movies.length} ${movies.length === 1 ? 'movie' : 'movies'}`
             : `${visible.length} of ${movies.length} movies`}
         </span>
+        <Button
+          variant={metaOpen ? 'secondary' : 'outline'}
+          size="sm"
+          aria-expanded={metaOpen}
+          aria-controls="metadata-filters"
+          onClick={() => setMetaOpen((current) => !current)}
+        >
+          <ListFilterIcon data-icon="inline-start" />
+          Metadata filters
+          {activeMetadataCount > 0 && (
+            <span className="rounded-full bg-muted px-1.5 text-[11px] font-semibold tabular-nums">
+              {activeMetadataCount}
+            </span>
+          )}
+        </Button>
         <div className="ml-auto flex items-center gap-2">
           <label htmlFor="movie-sort" className="text-muted-foreground">
             Sort
@@ -661,6 +836,96 @@ function LibraryView({
             onClick={() => setAscending((current) => !current)}
           >
             {ascending ? <ArrowUpIcon /> : <ArrowDownIcon />}
+          </Button>
+        </div>
+      </div>
+
+      <div
+        id="metadata-filters"
+        hidden={!metaOpen}
+        className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        {metadataFilters.map((filter) => (
+          <div key={filter.key} className="space-y-1.5">
+            <label htmlFor={`filter-${filter.key}`} className="text-xs font-medium text-muted-foreground">
+              {filter.label}
+            </label>
+            <Select
+              id={`filter-${filter.key}`}
+              className="w-full"
+              value={metaFilters[filter.key]}
+              onChange={(event) => setMetaFilters({ ...metaFilters, [filter.key]: event.target.value })}
+            >
+              <option value="all">Any</option>
+              {(metadataOptions.get(filter.key) ?? []).map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ))}
+        <div className="space-y-1.5">
+          <label htmlFor="filter-released-from" className="text-xs font-medium text-muted-foreground">
+            Released from
+          </label>
+          <Input
+            id="filter-released-from"
+            type="date"
+            value={releasedFrom}
+            onChange={(event) => setReleasedFrom(event.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="filter-released-to" className="text-xs font-medium text-muted-foreground">
+            Released to
+          </label>
+          <Input
+            id="filter-released-to"
+            type="date"
+            value={releasedTo}
+            onChange={(event) => setReleasedTo(event.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="filter-rating-min" className="text-xs font-medium text-muted-foreground">
+            IMDb rating min
+          </label>
+          <Input
+            id="filter-rating-min"
+            type="number"
+            min="0"
+            max="10"
+            step="0.1"
+            inputMode="decimal"
+            placeholder="Any"
+            value={ratingMin}
+            onChange={(event) => setRatingMin(event.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="filter-rating-max" className="text-xs font-medium text-muted-foreground">
+            IMDb rating max
+          </label>
+          <Input
+            id="filter-rating-max"
+            type="number"
+            min="0"
+            max="10"
+            step="0.1"
+            inputMode="decimal"
+            placeholder="Any"
+            value={ratingMax}
+            onChange={(event) => setRatingMax(event.target.value)}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-3">
+          Unknown release dates and ratings stay visible unless a range is set.
+        </p>
+        <div className="flex items-end justify-end">
+          <Button variant="outline" size="sm" disabled={activeMetadataCount === 0} onClick={clearMetadataFilters}>
+            <XIcon data-icon="inline-start" />
+            Clear filters
           </Button>
         </div>
       </div>
@@ -696,7 +961,11 @@ function LibraryView({
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
                         {movie.metadata.year > 0 ? movie.metadata.year : 'Year unknown'}
-                        {file ? ` · ${formatBytes(file.size)}` : ' · No file'}
+                        {file
+                          ? ` · ${formatBytes(file.size)}`
+                          : movieFiles(movie).length > 0
+                            ? ' · File missing'
+                            : ' · No file'}
                       </p>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <StatusBadge movie={movie} />
@@ -791,7 +1060,11 @@ function LibraryView({
                       <StatusBadge movie={movie} />
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground">
-                      {file ? `${file.quality || 'Unknown'} · ${formatBytes(file.size)}` : 'No file'}
+                      {file
+                        ? `${file.quality || 'Unknown'} · ${formatBytes(file.size)}`
+                        : movieFiles(movie).length > 0
+                          ? 'File missing'
+                          : 'No file'}
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground">
                       {rating ? (
@@ -946,7 +1219,9 @@ function WantedList({ movies, onOpenMovie }: { movies: Movie[]; onOpenMovie: (id
       movies
         .filter(
           (movie) =>
-            movie.monitored && movieFiles(movie).length === 0 && !activeStatuses.has(stateKey(movie)),
+            movie.monitored &&
+            availableFiles(movie).length === 0 &&
+            !activeStatuses.has(stateKey(movie)),
         )
         .sort((a, b) => (releasedTimestamp(b) ?? 0) - (releasedTimestamp(a) ?? 0)),
     [movies],
@@ -1487,7 +1762,7 @@ function ProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChan
             <Input
               id="profile-qualities"
               value={draft.qualities}
-              placeholder="WEBDL-2160p, Bluray-1080p, WEBDL-1080p"
+              placeholder="WEB-2160p, Bluray-1080p, WEB-1080p"
               onChange={(event) => setDraft({ ...draft, qualities: event.target.value })}
             />
             <p className="text-xs text-muted-foreground">Comma separated. Use the arrows to reorder.</p>
@@ -2424,30 +2699,45 @@ function MovieDetailDialog({
               {files.map((file) => (
                 <li key={`${file.rootId}-${file.path}`} className="flex flex-wrap items-center gap-2 p-2.5">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs break-all">{file.path}</p>
+                    <p className="flex flex-wrap items-center gap-2 text-xs break-all">
+                      {file.path}
+                      {file.missing && <Badge variant="destructive">Missing</Badge>}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {formatBytes(file.size)}
                       {file.quality ? ` · ${file.quality}` : ''}
                       {file.importedAt ? ` · imported ${formatAge(file.importedAt)}` : ''}
                     </p>
                   </div>
-                  <Button asChild size="sm" variant="outline">
-                    <a
-                      href={moviesApi.fileUrl(movie.id, file.path)}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={`Play ${file.path}`}
-                    >
-                      <PlayIcon data-icon="inline-start" />
-                      Play
-                    </a>
-                  </Button>
-                  <Button asChild size="sm" variant="ghost">
-                    <a href={moviesApi.fileUrl(movie.id, file.path)} download aria-label={`Download ${file.path}`}>
-                      <FileDownIcon data-icon="inline-start" />
-                      Download
-                    </a>
-                  </Button>
+                  {file.missing ? (
+                    <span className="text-xs text-muted-foreground">
+                      File not found on disk. Import a replacement to restore playback.
+                    </span>
+                  ) : (
+                    <>
+                      <Button asChild size="sm" variant="outline">
+                        <a
+                          href={moviesApi.fileUrl(movie.id, file.path)}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`Play ${file.path}`}
+                        >
+                          <PlayIcon data-icon="inline-start" />
+                          Play
+                        </a>
+                      </Button>
+                      <Button asChild size="sm" variant="ghost">
+                        <a
+                          href={moviesApi.fileUrl(movie.id, file.path)}
+                          download
+                          aria-label={`Download ${file.path}`}
+                        >
+                          <FileDownIcon data-icon="inline-start" />
+                          Download
+                        </a>
+                      </Button>
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
@@ -2535,7 +2825,7 @@ function MovieDetailDialog({
               {roots.length === 0 ? (
                 <>
                   Add a root folder in{' '}
-                  <a href="#storage" onClick={onClose} className="underline underline-offset-4">
+                  <a href="#storage" className="underline underline-offset-4">
                     Storage & Paths
                   </a>
                   .
@@ -3041,7 +3331,7 @@ function AddMovieDialog({
             <p className="flex items-center gap-2 text-xs text-amber-300 sm:col-span-2">
               <CircleAlertIcon className="size-4 shrink-0" />
               No root folder configured. Add one in{' '}
-              <a href="#storage" onClick={onClose} className="underline underline-offset-4">
+              <a href="#storage" className="underline underline-offset-4">
                 Storage & Paths
               </a>{' '}
               so imports have a destination.
@@ -3240,11 +3530,19 @@ function ScanDialog({
   const [importing, setImporting] = useState('')
   const [matches, setMatches] = useState<Record<string, string>>({})
   const [imdbIds, setImdbIds] = useState<Record<string, string>>({})
+  const [importedPaths, setImportedPaths] = useState<Record<string, boolean>>({})
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const controller = useRef<AbortController | null>(null)
 
   useEffect(() => () => controller.current?.abort(), [])
+
+  // A matched id means identity only; imported means a catalog file really sits at this path and root.
+  const isImported = (candidate: ScanCandidate) =>
+    Boolean(importedPaths[candidate.path]) ||
+    movies.some((movie) =>
+      availableFiles(movie).some((file) => file.rootId === rootId && file.path === candidate.path),
+    )
 
   const scan = async () => {
     if (!rootId) {
@@ -3258,6 +3556,7 @@ function ScanDialog({
     setCandidates(null)
     setMatches({})
     setImdbIds({})
+    setImportedPaths({})
     setError('')
     setNotice('')
     try {
@@ -3271,7 +3570,7 @@ function ScanDialog({
   }
 
   const importCandidate = async (candidate: ScanCandidate) => {
-    const movieId = matches[candidate.path] || candidate.matchedMovieId || ''
+    const movieId = matches[candidate.path] ?? candidate.matchedMovieId ?? ''
     const imdbId = (imdbIds[candidate.path] ?? candidate.imdbId ?? '').trim()
     if (!movieId && !imdbId) {
       setError('Match this file to a catalog movie or enter an IMDb ID before importing.')
@@ -3288,12 +3587,8 @@ function ScanDialog({
         imdbId: movieId ? undefined : imdbId || undefined,
       })
       onImported(movie)
+      setImportedPaths((previous) => ({ ...previous, [candidate.path]: true }))
       setNotice(`Imported ${candidate.path} into ${movie.metadata.title || 'the catalog'}.`)
-      setCandidates((list) =>
-        (list ?? []).map((item) =>
-          item.path === candidate.path ? { ...item, matchedMovieId: movie.id } : item,
-        ),
-      )
     } catch (cause) {
       setError(errorMessage(cause))
     } finally {
@@ -3304,7 +3599,7 @@ function ScanDialog({
   return (
     <DialogShell
       title="Scan library"
-      description="Scanning is read-only. Nothing is imported or changed until you choose Import for a file."
+      description="Scanning is read-only. Matching only preselects a catalog movie; choose Import to link the file."
       onClose={onClose}
       size="xl"
     >
@@ -3357,12 +3652,13 @@ function ScanDialog({
         {candidates === null ? (
           <EmptyState>Choose a root folder and scan to list movie files that are not in the catalog.</EmptyState>
         ) : candidates.length === 0 ? (
-          <EmptyState>Every movie file in this folder is already matched or no files were found.</EmptyState>
+          <EmptyState>No movie files found in this folder.</EmptyState>
         ) : (
           <ul className="space-y-2">
             {candidates.map((candidate) => {
-              const matchedMovieId = matches[candidate.path] || candidate.matchedMovieId || ''
-              const matched = movies.find((movie) => movie.id === matchedMovieId)
+              const targetId = matches[candidate.path] ?? candidate.matchedMovieId ?? ''
+              const target = movies.find((movie) => movie.id === targetId)
+              const imported = isImported(candidate)
               return (
                 <li key={candidate.path} className="space-y-2 rounded-lg border border-border p-3">
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -3378,15 +3674,22 @@ function ScanDialog({
                         {candidate.imdbId ? ` · ${candidate.imdbId}` : ''}
                       </p>
                     </div>
-                    {matched ? (
+                    {imported ? (
                       <Badge variant="outline" className="border-emerald-400/25 bg-emerald-400/10 text-emerald-300">
-                        Matches {matched.metadata.title}
+                        Imported
                       </Badge>
+                    ) : target ? (
+                      <Badge variant="outline">Matches {target.metadata.title}</Badge>
                     ) : (
                       <Badge variant="outline">Unmatched</Badge>
                     )}
                   </div>
                   {candidate.error && <p className="text-xs text-destructive">{candidate.error}</p>}
+                  {imported && (
+                    <p className="text-xs text-muted-foreground">
+                      This file is already in the catalog under this root. Scan again to refresh the list.
+                    </p>
+                  )}
                   <div className="flex flex-wrap items-end gap-2">
                     <div className="min-w-48 flex-1 space-y-1">
                       <label
@@ -3398,7 +3701,7 @@ function ScanDialog({
                       <Select
                         id={`scan-movie-${candidate.path}`}
                         className="h-8 w-full"
-                        value={matches[candidate.path] ?? ''}
+                        value={targetId}
                         onChange={(event) =>
                           setMatches({ ...matches, [candidate.path]: event.target.value })
                         }
@@ -3427,7 +3730,7 @@ function ScanDialog({
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={importing !== '' || Boolean(matchedMovieId)}
+                      disabled={importing !== '' || imported}
                       onClick={() => void importCandidate(candidate)}
                     >
                       {importing === candidate.path ? (
@@ -3604,7 +3907,7 @@ export function MoviesPage() {
   const roots = config?.rootFolders ?? []
   const detailMovie = detailId ? ((movies ?? []).find((movie) => movie.id === detailId) ?? null) : null
   const wantedCount = (movies ?? []).filter(
-    (movie) => movie.monitored && movieFiles(movie).length === 0,
+    (movie) => movie.monitored && availableFiles(movie).length === 0,
   ).length
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [

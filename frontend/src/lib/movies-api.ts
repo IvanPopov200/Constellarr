@@ -43,6 +43,7 @@ export type Title = {
 }
 
 export type MovieFile = {
+  missing?: boolean
   rootId: string
   path: string
   size: number
