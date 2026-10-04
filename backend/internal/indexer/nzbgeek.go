@@ -30,10 +30,11 @@ type Release struct {
 	Title     string    `json:"title"`
 	Size      int64     `json:"size"`
 	Published time.Time `json:"published"`
+	IMDbID    string    `json:"imdbId,omitempty"`
 }
 
 type Error struct {
-	Op     string // call that failed: "test", "search", or "nzb"
+	Op     string // call that failed: "test", "search", "movie", "rss", or "nzb"
 	Kind   string // stable category, for example "cross-origin redirect" or "invalid response"
 	Status int    // HTTP status code when the server answered
 	Code   int    // Newznab error code when the API returned an error envelope
@@ -108,6 +109,48 @@ func (c *Client) Search(ctx context.Context, query string) ([]Release, error) {
 		return nil, err
 	}
 	return parseSearch(body, "search")
+}
+
+// SearchMovie searches by IMDb ID, falling back to a title and year search without one.
+func (c *Client) SearchMovie(ctx context.Context, imdbID, title string, year int) ([]Release, error) {
+	id, ok := normalizeIMDbID(imdbID)
+	if !ok {
+		if strings.TrimSpace(imdbID) != "" {
+			return nil, errors.New("IMDb ID is invalid")
+		}
+		query := strings.TrimSpace(title)
+		if query == "" {
+			return nil, errors.New("movie search needs an IMDb ID or a title")
+		}
+		if year > 0 {
+			query += " " + strconv.Itoa(year)
+		}
+		return c.Search(ctx, query)
+	}
+	params := url.Values{
+		"t":      {"movie"},
+		"imdbid": {id},
+		"cat":    {strconv.Itoa(movieCategory)},
+	}
+	body, err := c.get(ctx, "movie", params, maxSearchBytes)
+	if err != nil {
+		return nil, err
+	}
+	return parseSearch(body, "movie")
+}
+
+// RSS retrieves the recent movie feed without a query.
+func (c *Client) RSS(ctx context.Context) ([]Release, error) {
+	params := url.Values{
+		"t":        {"search"},
+		"cat":      {strconv.Itoa(movieCategory)},
+		"extended": {"1"},
+	}
+	body, err := c.get(ctx, "rss", params, maxSearchBytes)
+	if err != nil {
+		return nil, err
+	}
+	return parseSearch(body, "rss")
 }
 
 func (c *Client) NZB(ctx context.Context, id string) ([]byte, error) {
@@ -270,13 +313,25 @@ func (item rssItem) release() (Release, bool) {
 	if size < 0 {
 		size = 0
 	}
-	return Release{ID: id, Title: title, Size: size, Published: parseDate(item.PubDate)}, true
+	return Release{ID: id, Title: title, Size: size, Published: parseDate(item.PubDate), IMDbID: item.imdbID()}, true
 }
 
 func (item rssItem) attribute(name string) string {
 	for _, attr := range item.Attributes {
 		if attr.Name == name {
 			return attr.Value
+		}
+	}
+	return ""
+}
+
+func (item rssItem) imdbID() string {
+	for _, attr := range item.Attributes {
+		switch strings.ToLower(strings.TrimSpace(attr.Name)) {
+		case "imdb", "imdbid":
+			if digits, ok := normalizeIMDbID(attr.Value); ok {
+				return "tt" + digits
+			}
 		}
 	}
 	return ""
@@ -298,6 +353,23 @@ func normalizeID(raw string) string {
 		raw = raw[:len(raw)-4]
 	}
 	return raw
+}
+
+// normalizeIMDbID returns the digit part of an IMDb ID, accepting an optional tt prefix.
+func normalizeIMDbID(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if len(raw) > 2 && (raw[0] == 't' || raw[0] == 'T') && (raw[1] == 't' || raw[1] == 'T') {
+		raw = raw[2:]
+	}
+	if len(raw) < 7 || len(raw) > 12 {
+		return "", false
+	}
+	for i := 0; i < len(raw); i++ {
+		if raw[i] < '0' || raw[i] > '9' {
+			return "", false
+		}
+	}
+	return raw, true
 }
 
 func validID(id string) bool {
