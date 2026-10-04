@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Check, Database, Eye, EyeOff, Folder, HardDrive, KeyRound, LoaderCircle, Radio, RefreshCw, Save, Search, ShieldCheck } from 'lucide-react'
 import { BackendStatus } from '@/components/backend-status'
 import { MovieConfiguration } from '@/components/movie-configuration'
+import { TVConfiguration } from '@/components/tv-configuration'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -166,6 +167,9 @@ export function SettingsPage({ section }: { section: 'connections' | 'storage' |
       </form>}
       <div hidden={section === 'system'} inert={section === 'system'}>
         <MovieConfiguration section={section === 'storage' ? 'storage' : 'connections'} />
+      </div>
+      <div hidden={section !== 'storage'} inert={section !== 'storage'}>
+        <TVConfiguration />
       </div>
     </div>
   )

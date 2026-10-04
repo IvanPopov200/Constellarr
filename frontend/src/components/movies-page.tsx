@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ComponentProps, KeyboardEvent, ReactNode } from 'react'
 import { Dialog } from 'radix-ui'
 import {
@@ -1585,7 +1585,8 @@ function draftToProfile(draft: ProfileDraft): MovieProfile {
   }
 }
 
-function ProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChanged: () => void }) {
+export function QualityProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChanged: () => void }) {
+  const fieldId = useId()
   const [selectedId, setSelectedId] = useState<string | null>(profiles[0]?.id ?? null)
   const [draft, setDraft] = useState<ProfileDraft>(() =>
     profiles[0] ? profileDraft(profiles[0]) : emptyProfileDraft(),
@@ -1653,7 +1654,7 @@ function ProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChan
       setSelectedId(null)
       setDraft(emptyProfileDraft())
       setConfirmDelete(false)
-      setNotice('Profile deleted. Movies keep their assigned quality until edited.')
+      setNotice('Profile deleted.')
       onChanged()
     } catch (cause) {
       setError(errorMessage(cause))
@@ -1722,22 +1723,22 @@ function ProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChan
         <CardContent className="gap-5">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <label htmlFor="profile-name" className="text-sm font-medium">
+              <label htmlFor={`${fieldId}-profile-name`} className="text-sm font-medium">
                 Name
               </label>
               <Input
-                id="profile-name"
+                id={`${fieldId}-profile-name`}
                 value={draft.name}
                 placeholder="HD Bluray"
                 onChange={(event) => setDraft({ ...draft, name: event.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="profile-cutoff" className="text-sm font-medium">
+              <label htmlFor={`${fieldId}-profile-cutoff`} className="text-sm font-medium">
                 Upgrade cutoff
               </label>
               <Select
-                id="profile-cutoff"
+                id={`${fieldId}-profile-cutoff`}
                 className="h-9 w-full"
                 value={draft.cutoff}
                 onChange={(event) => setDraft({ ...draft, cutoff: event.target.value })}
@@ -1756,11 +1757,11 @@ function ProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChan
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="profile-qualities" className="text-sm font-medium">
+            <label htmlFor={`${fieldId}-profile-qualities`} className="text-sm font-medium">
               Allowed qualities, best first
             </label>
             <Input
-              id="profile-qualities"
+              id={`${fieldId}-profile-qualities`}
               value={draft.qualities}
               placeholder="WEB-2160p, Bluray-1080p, WEB-1080p"
               onChange={(event) => setDraft({ ...draft, qualities: event.target.value })}
@@ -1813,11 +1814,11 @@ function ProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChan
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-2">
-              <label htmlFor="profile-min" className="text-sm font-medium">
+              <label htmlFor={`${fieldId}-profile-min`} className="text-sm font-medium">
                 Minimum size (MB)
               </label>
               <Input
-                id="profile-min"
+                id={`${fieldId}-profile-min`}
                 type="number"
                 min="0"
                 value={draft.minMB}
@@ -1825,11 +1826,11 @@ function ProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChan
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="profile-max" className="text-sm font-medium">
+              <label htmlFor={`${fieldId}-profile-max`} className="text-sm font-medium">
                 Maximum size (MB)
               </label>
               <Input
-                id="profile-max"
+                id={`${fieldId}-profile-max`}
                 type="number"
                 min="0"
                 value={draft.maxMB}
@@ -1837,18 +1838,18 @@ function ProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChan
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="profile-language" className="text-sm font-medium">
+              <label htmlFor={`${fieldId}-profile-language`} className="text-sm font-medium">
                 Language
               </label>
               <Input
-                id="profile-language"
+                id={`${fieldId}-profile-language`}
                 value={draft.language}
                 placeholder="English"
                 onChange={(event) => setDraft({ ...draft, language: event.target.value })}
               />
             </div>
             <Checkbox
-              id="profile-upgrade"
+              id={`${fieldId}-profile-upgrade`}
               label="Allow upgrades"
               description="Replace a file when a better release passes the cutoff."
               checked={draft.upgrade}
@@ -1858,22 +1859,22 @@ function ProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChan
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-2">
-              <label htmlFor="profile-min-score" className="text-sm font-medium">
+              <label htmlFor={`${fieldId}-profile-min-score`} className="text-sm font-medium">
                 Minimum score
               </label>
               <Input
-                id="profile-min-score"
+                id={`${fieldId}-profile-min-score`}
                 type="number"
                 value={draft.minScore}
                 onChange={(event) => setDraft({ ...draft, minScore: event.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="profile-cutoff-score" className="text-sm font-medium">
+              <label htmlFor={`${fieldId}-profile-cutoff-score`} className="text-sm font-medium">
                 Cutoff score
               </label>
               <Input
-                id="profile-cutoff-score"
+                id={`${fieldId}-profile-cutoff-score`}
                 type="number"
                 value={draft.cutoffScore}
                 onChange={(event) => setDraft({ ...draft, cutoffScore: event.target.value })}
@@ -4015,7 +4016,7 @@ export function MoviesPage() {
             </div>
             {tab === 'wanted' && <WantedList movies={movies} onOpenMovie={searchMovie} />}
             {tab === 'calendar' && <CalendarTab onOpenMovie={openMovie} />}
-            {tab === 'profiles' && <ProfilesTab profiles={profiles} onChanged={() => void reload()} />}
+            {tab === 'profiles' && <QualityProfilesTab profiles={profiles} onChanged={() => void reload()} />}
             {tab === 'watchlists' && <WatchlistsTab profiles={profiles} roots={roots} />}
             {tab === 'activity' && <ActivityTab movies={movies} onOpenMovie={openMovie} />}
           </div>
