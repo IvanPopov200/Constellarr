@@ -25,7 +25,7 @@ func TestProcessRepairsAndExtractsCompositeJob(t *testing.T) {
 	writeZIP(t, filepath.Join(in, "Extras.zip"), zipEntry{name: "Extras/clip.mp4", data: zipPayload})
 	mustWrite(t, filepath.Join(in, "Bonus.webm"), bytes.Repeat([]byte("bonus"), 1000))
 	mustWrite(t, filepath.Join(in, "release.nfo"), []byte("notes"))
-	runPAR2Test(t, in, "create", "-q", "-b128", "-r200", "--", "release.par2", "Release.part01.rar", "Release.part02.rar", "Extras.zip", "Bonus.webm")
+	runPAR2Test(t, in, "create", "-q", "-b128", "-r100", "--", "release.par2", "Release.part01.rar", "Release.part02.rar", "Extras.zip", "Bonus.webm")
 	f, err := os.OpenFile(filepath.Join(in, "Release.part02.rar"), os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
