@@ -18,6 +18,12 @@ services:
       USENET_PASSWORD: ${USENET_PASSWORD:-}
       USENET_CONNECTIONS: ${USENET_CONNECTIONS:-8}
       USENET_FALLBACK_HOSTS: ${USENET_FALLBACK_HOSTS:-news.frugalusenet.com}
+      OMDB_URL: ${OMDB_URL:-https://www.omdbapi.com/}
+      OMDB_API_KEY: ${OMDB_API_KEY:-}
+      JELLYFIN_URL: ${JELLYFIN_URL:-}
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:-}
+      IMPORT_WEBHOOK_URL: ${IMPORT_WEBHOOK_URL:-}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
       DOWNLOAD_DIR: /data
     volumes:
       - ${DOWNLOAD_DIR:-./data}:/data

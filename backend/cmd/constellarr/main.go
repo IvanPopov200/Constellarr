@@ -16,6 +16,7 @@ import (
 
 	"github.com/IvanPopov200/Constellarr/backend/internal/api"
 	"github.com/IvanPopov200/Constellarr/backend/internal/downloads"
+	"github.com/IvanPopov200/Constellarr/backend/internal/movies"
 )
 
 func main() {
@@ -59,9 +60,15 @@ func run() error {
 	}
 	manager.Start(shutdown)
 	defer manager.Close()
+	movieLibrary, err := movies.New(shutdown, pool, manager)
+	if err != nil {
+		return err
+	}
+	movieLibrary.Start(shutdown)
+	defer movieLibrary.Close()
 
 	server := &http.Server{
-		Handler:           api.New(pool, api.Services{Downloads: manager}),
+		Handler:           api.New(pool, api.Services{Downloads: manager, Movies: movieLibrary}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

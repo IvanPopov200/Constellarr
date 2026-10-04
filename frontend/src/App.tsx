@@ -5,6 +5,7 @@ import { routeLabels, type Route } from '@/lib/navigation'
 import { DownloadQueue } from '@/components/download-queue'
 import { Overview } from '@/components/overview'
 import { ReleaseSearch } from '@/components/release-search'
+import { MoviesPage } from '@/components/movies-page'
 import { SettingsPage } from '@/components/settings-page'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -71,16 +72,11 @@ function App() {
 
         <div hidden={route !== 'movies'} inert={route !== 'movies'}>
           <div className="flex flex-col gap-6">
-            <PageHeading
-              title="Movies"
-              description="Find movie releases and add them to your Usenet queue."
-              action={
-                <Button asChild size="sm" variant="outline">
-                  <a href="#usenet">View queue</a>
-                </Button>
-              }
-            />
-            <ReleaseSearch jobs={jobs ?? []} onDownload={download} />
+            <MoviesPage />
+            <details className="rounded-xl border border-border p-4">
+              <summary className="cursor-pointer text-sm font-medium">Search an NZB release directly</summary>
+              <div className="mt-4"><ReleaseSearch jobs={jobs ?? []} onDownload={download} /></div>
+            </details>
           </div>
         </div>
 

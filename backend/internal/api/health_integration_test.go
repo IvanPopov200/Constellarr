@@ -60,6 +60,8 @@ func health(t *testing.T, handler http.Handler) (int, healthBody) {
 func get(t *testing.T, handler http.Handler, target string) (int, []byte) {
 	t.Helper()
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
+	req := httptest.NewRequest(http.MethodGet, target, nil)
+	req.Host = "localhost"
+	handler.ServeHTTP(recorder, req)
 	return recorder.Code, recorder.Body.Bytes()
 }

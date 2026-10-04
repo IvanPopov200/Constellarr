@@ -10,6 +10,7 @@ import type { LucideIcon } from 'lucide-react'
 import { PageHeading } from '@/components/app-shell'
 import { DownloadQueue } from '@/components/download-queue'
 import { SourcesCard } from '@/components/sources-card'
+import { MovieOverview } from '@/components/movie-overview'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { isActiveJob, type Job } from '@/lib/api'
@@ -130,6 +131,8 @@ export function Overview({
           icon={ArrowDownToLineIcon}
         />
       </section>
+
+      <MovieOverview />
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <DownloadQueue
