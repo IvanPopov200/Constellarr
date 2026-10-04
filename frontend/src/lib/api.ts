@@ -16,6 +16,24 @@ export type SourceTestResult = { ok: boolean; error?: string }
 
 export type SourceTest = { indexer: SourceTestResult; usenet: SourceTestResult }
 
+export type Settings = {
+  indexer: { url: string; apiKeyConfigured: boolean }
+  usenet: {
+    host: string
+    port: number
+    username: string
+    passwordConfigured: boolean
+    connections: number
+    fallbackHosts: string[]
+  }
+  storage: { directory: string }
+}
+
+export type SettingsUpdate = {
+  indexer: { url: string; apiKey?: string }
+  usenet: Omit<Settings['usenet'], 'passwordConfigured'> & { password?: string }
+}
+
 export type Release = { id: string; title: string; size: number; published: string }
 
 export type JobStatus =
@@ -56,7 +74,7 @@ export function isActiveJob(job: Job) {
 }
 
 type RequestOptions = {
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PUT'
   body?: unknown
   signal?: AbortSignal
 }
@@ -72,7 +90,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       signal,
       headers: {
         Accept: 'application/json',
-        ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+        ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
@@ -96,6 +114,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export const api = {
+  getSettings: (signal?: AbortSignal) => request<Settings>('/settings', { signal }),
+  saveSettings: (body: SettingsUpdate) => request<Settings>('/settings', { method: 'PUT', body }),
   getSources: (signal?: AbortSignal) => request<Sources>('/sources', { signal }),
   testSources: () =>
     request<SourceTest>('/sources/test', {
