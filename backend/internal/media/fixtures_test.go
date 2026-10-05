@@ -3,6 +3,7 @@ package media
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/md5"
 	"encoding/binary"
 	"hash/crc32"
 	"os"
@@ -124,7 +125,10 @@ func par2Packet(typ string, body []byte) []byte {
 	}
 	binary.LittleEndian.PutUint64(packet[8:16], uint64(par2HeaderBytes+len(body)))
 	copy(packet[48:64], typ)
-	return append(packet, body...)
+	packet = append(packet, body...)
+	digest := md5.Sum(packet[32:])
+	copy(packet[16:32], digest[:])
+	return packet
 }
 
 func par2FileDescPacket(name string) []byte {

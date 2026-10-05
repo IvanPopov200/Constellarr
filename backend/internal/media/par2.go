@@ -1,7 +1,9 @@
 package media
 
 import (
+	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -71,6 +73,7 @@ func par2Set(dir string) (string, error) {
 		return "", errors.New("download input directory could not be read")
 	}
 	var mains, volumes []string
+	found := false
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".par2") {
 			continue
@@ -78,6 +81,7 @@ func par2Set(dir string) (string, error) {
 		if !entry.Type().IsRegular() {
 			return "", errPAR2Unreadable
 		}
+		found = true
 		names, err := par2Names(filepath.Join(dir, entry.Name()))
 		if err != nil {
 			return "", err
@@ -86,6 +90,9 @@ func par2Set(dir string) (string, error) {
 			if !safePAR2Name(name) {
 				return "", errPAR2Names
 			}
+		}
+		if len(names) == 0 {
+			continue
 		}
 		if par2VolumeName.MatchString(entry.Name()) {
 			volumes = append(volumes, entry.Name())
@@ -98,6 +105,9 @@ func par2Set(dir string) (string, error) {
 		candidates = volumes
 	}
 	if len(candidates) == 0 {
+		if found {
+			return "", errPAR2Unreadable
+		}
 		return "", nil
 	}
 	sort.Strings(candidates)
@@ -122,51 +132,78 @@ func par2Names(file string) ([]string, error) {
 		return nil, errPAR2Unreadable
 	}
 	defer f.Close()
-	header := make([]byte, par2HeaderBytes)
+	info, err := f.Stat()
+	if err != nil {
+		return nil, errPAR2Unreadable
+	}
+	buf, header := make([]byte, 64<<10), make([]byte, par2HeaderBytes)
 	var names []string
-	for i := 0; i < par2MaxPackets; i++ {
-		if _, err := io.ReadFull(f, header); err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+	seen := make(map[string]bool)
+	packets, nameBytes := 0, 0
+	budget := max(info.Size(), 1<<20)
+	// Scan through damage and packet bodies so corrupt lengths cannot hide later file names.
+	for offset := int64(0); offset < info.Size(); {
+		n, err := f.ReadAt(buf, offset)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, errPAR2Unreadable
+		}
+		if n < len(par2Magic) {
+			break
+		}
+		for start := 0; start <= n-len(par2Magic); {
+			index := bytes.Index(buf[start:n], []byte(par2Magic))
+			if index < 0 {
 				break
 			}
-			return nil, errPAR2Unreadable
-		}
-		if string(header[:8]) != par2Magic {
-			return nil, errPAR2Unreadable
-		}
-		size := int64(binary.LittleEndian.Uint64(header[8:16]))
-		if size < par2HeaderBytes || size%4 != 0 {
-			return nil, errPAR2Unreadable
-		}
-		body := size - par2HeaderBytes
-		switch packetType := string(header[48:64]); packetType {
-		case par2FileDescType, par2UniNameType:
-			if body > par2MaxBodyBytes {
+			position := offset + int64(start+index)
+			start += index + len(par2Magic)
+			packets++
+			if packets > par2MaxPackets {
 				return nil, errPAR2Unreadable
 			}
-			buf := make([]byte, body)
-			if _, err := io.ReadFull(f, buf); err != nil {
+			if _, err := f.ReadAt(header, position); err != nil {
+				continue
+			}
+			size := binary.LittleEndian.Uint64(header[8:16])
+			if size < par2HeaderBytes || size%4 != 0 || size > uint64(info.Size()-position) {
+				continue
+			}
+			packetType := string(header[48:64])
+			if packetType != par2FileDescType && packetType != par2UniNameType {
+				continue
+			}
+			body := int64(size) - par2HeaderBytes
+			budget -= body
+			if body > par2MaxBodyBytes || budget < 0 {
 				return nil, errPAR2Unreadable
 			}
-			if packetType == par2FileDescType {
-				if len(buf) < 56 {
-					return nil, errPAR2Unreadable
-				}
-				names = append(names, strings.TrimRight(string(buf[56:]), "\x00"))
+			packet := make([]byte, int(size)-32)
+			if _, err := f.ReadAt(packet, position+32); err != nil {
+				return nil, errPAR2Unreadable
+			}
+			digest := md5.Sum(packet)
+			if !bytes.Equal(digest[:], header[16:32]) {
+				continue
+			}
+			data := packet[32:]
+			var name string
+			if packetType == par2FileDescType && len(data) >= 56 {
+				name = strings.TrimRight(string(data[56:]), "\x00")
+			} else if packetType == par2UniNameType && len(data) >= 32 {
+				name = par2UTF16Name(data[32:])
 			} else {
-				if len(buf) < 32 {
-					return nil, errPAR2Unreadable
-				}
-				names = append(names, par2UTF16Name(buf[32:]))
-			}
-		default:
-			if _, err := f.Seek(body, io.SeekCurrent); err != nil {
 				return nil, errPAR2Unreadable
 			}
+			if !seen[name] {
+				nameBytes += len(name)
+				if nameBytes > 16<<20 {
+					return nil, errPAR2Unreadable
+				}
+				seen[name] = true
+				names = append(names, name)
+			}
 		}
-	}
-	if len(names) == 0 {
-		return nil, errPAR2Unreadable
+		offset += int64(n - len(par2Magic) + 1)
 	}
 	return names, nil
 }

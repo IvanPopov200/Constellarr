@@ -63,6 +63,25 @@ func TestPAR2SetFallsBackToVolume(t *testing.T) {
 	}
 }
 
+func TestPAR2NamesAfterDamage(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "release.par2")
+	corrupt := par2FileDescPacket("../damaged.mkv")
+	corrupt[16] ^= 1
+	content := append(corrupt, make([]byte, (64<<10)-len(corrupt)-3)...)
+	content = append(content, par2FileDescPacket("movie.mkv")...)
+	content = append(content, make([]byte, 4096)...)
+	content = append(content, par2FileDescPacket("../escape.mkv")...)
+	mustWrite(t, file, content)
+	names, err := par2Names(file)
+	if err != nil || strings.Join(names, ",") != "movie.mkv,../escape.mkv" {
+		t.Fatalf("names after damaged data = %q, %v", names, err)
+	}
+	if _, err := par2Set(dir); err != errPAR2Names {
+		t.Fatalf("unsafe name after damaged data was not rejected: %v", err)
+	}
+}
+
 func TestProcessRejectsUnsafeNameInRecoveryVolume(t *testing.T) {
 	base := t.TempDir()
 	in := filepath.Join(base, "in")
@@ -178,7 +197,7 @@ func TestProcessWithoutPAR2Tool(t *testing.T) {
 	}
 }
 
-func TestProcessPAR2Repair(t *testing.T) {
+func TestProcessPAR2RepairWithDamagedRecovery(t *testing.T) {
 	requirePAR2(t)
 	in := t.TempDir()
 	out := t.TempDir()
@@ -190,6 +209,12 @@ func TestProcessPAR2Repair(t *testing.T) {
 		t.Fatal(err)
 	}
 	runPAR2Test(t, in, "create", "-q", "-b64", "-r20", "--", "movie.par2", "movie.mkv")
+	index, err := os.ReadFile(filepath.Join(in, "movie.par2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(in, "movie.par2"), append(make([]byte, 4093), index...))
+	mustWrite(t, filepath.Join(in, "movie.vol999+1.par2"), make([]byte, 4096))
 	f, err := os.OpenFile(filepath.Join(in, "movie.mkv"), os.O_WRONLY, 0)
 	if err != nil {
 		t.Fatal(err)
