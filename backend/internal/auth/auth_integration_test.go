@@ -117,6 +117,8 @@ func newEnv(t *testing.T, options ...auth.Option) *env {
 		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
 	})
 	mux.HandleFunc("GET /metrics", ok)
+	mux.HandleFunc("GET /api/v1/operations/backups", ok)
+	mux.HandleFunc("POST /api/v1/operations/backups/{id}/restore", ok)
 	mux.HandleFunc("GET /healthz", ok)
 	mux.Handle("/", http.HandlerFunc(ok))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -913,6 +915,25 @@ func TestAPITokensCannotManageAccountCredentials(t *testing.T) {
 	// The session that created the tokens still manages them.
 	env.check(t, admin, http.MethodDelete, "/api/v1/auth/tokens/"+limited.ID, http.StatusNoContent)
 	env.check(t, limitedCreds, http.MethodGet, "/api/v1/movies", http.StatusUnauthorized)
+}
+
+func TestRestoreRequiresAccountAdministrationAndSession(t *testing.T) {
+	env := newEnv(t)
+	admin, _ := env.setupAdmin(t)
+	created := env.do(t, http.MethodPost, "/api/v1/roles", map[string]any{
+		"name": "backup-manager", "permissions": []string{auth.PermBackupsManage},
+	}, admin)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create backup role: %d", created.Code)
+	}
+	role := decode[auth.Role](t, created)
+	env.createUser(t, admin, "backup-user", viewerPassword, []string{role.ID})
+	manager := credentials{cookie: sessionCookie(t, env.login(t, "backup-user", viewerPassword))}
+	env.check(t, manager, http.MethodGet, "/api/v1/operations/backups", http.StatusOK)
+	env.check(t, manager, http.MethodPost, "/api/v1/operations/backups/example/restore", http.StatusForbidden)
+	full := env.createToken(t, admin, map[string]any{"name": "admin-token"})
+	env.check(t, credentials{bearer: full.Secret}, http.MethodPost, "/api/v1/operations/backups/example/restore", http.StatusForbidden)
+	env.check(t, admin, http.MethodPost, "/api/v1/operations/backups/example/restore", http.StatusOK)
 }
 
 // TestGenericMutationAudit covers the middleware fallback for authenticated mutations

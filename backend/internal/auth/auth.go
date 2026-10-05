@@ -158,10 +158,10 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 			return
 		}
 		if match.sessionOnly && !principal.sessionCredential() {
-			writeError(w, http.StatusForbidden, "sign in to use this endpoint; API tokens cannot manage account credentials")
+			writeError(w, http.StatusForbidden, "sign in to use this endpoint")
 			return
 		}
-		if match.permission != "" && !principal.Can(match.permission) {
+		if (match.permission != "" && !principal.Can(match.permission)) || (match.requires != "" && !principal.Can(match.requires)) {
 			writeError(w, http.StatusForbidden, "permission denied")
 			return
 		}

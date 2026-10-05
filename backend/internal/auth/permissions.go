@@ -137,10 +137,10 @@ func orderPermissions(values []string) []string {
 
 type routeRule struct {
 	permission string
+	requires   string
 	methods    []string
 	patterns   []string
-	// sessionOnly keeps account credentials (token administration, password change)
-	// on cookie sessions so a limited API token cannot widen itself.
+	// Cookie sessions prevent limited tokens from widening their own grants.
 	sessionOnly bool
 	// selfAudited marks handlers that already record a specific audit event.
 	selfAudited bool
@@ -152,8 +152,7 @@ var (
 	readWrite = []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
 )
 
-// routeRules mirrors the routes registered by internal/api and the service packages
-// under internal/*; anything absent is denied.
+// Unlisted routes are denied; literal paths take precedence over parameters.
 var routeRules = []routeRule{
 	{permission: PermLibraryRead, methods: getOnly, patterns: []string{
 		"/api/v1/movies",
@@ -189,6 +188,10 @@ var routeRules = []routeRule{
 		"/api/v1/calendar.ics",
 		"/api/v1/recommendations",
 		"/api/v1/recommendations/{id}",
+	}},
+	{permission: PermLibraryRead, methods: []string{http.MethodPost}, patterns: []string{
+		"/api/v1/recommendations",
+		"/api/v1/recommendations/{id}/accept",
 	}},
 	{permission: PermLibraryWrite, methods: writeOnly, patterns: []string{
 		"/api/v1/movies",
@@ -227,7 +230,6 @@ var routeRules = []routeRule{
 		"/api/v1/music/import",
 		"/api/v1/music/scan",
 		"/api/v1/music/sync",
-		"/api/v1/recommendations",
 	}},
 	{permission: PermDownloadsRead, methods: getOnly, patterns: []string{
 		"/api/v1/downloads",
@@ -289,7 +291,6 @@ var routeRules = []routeRule{
 		"/api/v1/requests",
 		"/api/v1/requests/{id}/cancel",
 		"/api/v1/requests/{id}/comments",
-		"/api/v1/recommendations/{id}/accept",
 	}},
 	{permission: PermRequestsApprove, methods: []string{http.MethodPost}, patterns: []string{
 		"/api/v1/requests/{id}/approve",
@@ -341,8 +342,10 @@ var routeRules = []routeRule{
 		"/api/v1/operations/backups/import",
 		"/api/v1/operations/backups/{id}",
 		"/api/v1/operations/backups/{id}/download",
-		"/api/v1/operations/backups/{id}/restore",
 	}},
+	{permission: PermBackupsManage, requires: PermUsersManage, methods: []string{http.MethodPost}, patterns: []string{
+		"/api/v1/operations/backups/{id}/restore",
+	}, sessionOnly: true},
 	{permission: PermMonitoringRead, methods: getOnly, patterns: []string{
 		"/api/v1/health",
 		"/metrics",
@@ -375,6 +378,7 @@ var routeRules = []routeRule{
 
 type routeMatch struct {
 	permission  string
+	requires    string
 	pattern     string
 	sessionOnly bool
 	selfAudited bool
@@ -397,6 +401,7 @@ func compileRoutes() []compiledRule {
 				rules = append(rules, compiledRule{
 					routeMatch: routeMatch{
 						permission:  rule.permission,
+						requires:    rule.requires,
 						pattern:     pattern,
 						sessionOnly: rule.sessionOnly,
 						selfAudited: rule.selfAudited,
@@ -419,8 +424,6 @@ func splitPath(path string) []string {
 	return strings.Split(trimmed, "/")
 }
 
-// routePermission resolves a method and path, preferring literal patterns so a
-// value like /api/v1/torrents/settings can never fall through to /torrents/{id}.
 func routePermission(method, path string) (match routeMatch, pathKnown, methodKnown bool) {
 	if method == http.MethodHead {
 		method = http.MethodGet
