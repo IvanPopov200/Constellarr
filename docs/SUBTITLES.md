@@ -11,7 +11,7 @@ Frontend: `frontend/src/lib/subtitles-api.ts`, `frontend/src/components/subtitle
 
 ## Integration
 
-The parent server owns lifecycle wiring and route registration. A typical setup:
+The server owns lifecycle wiring and route registration:
 
 ```go
 subtitlesService, err := subtitles.New(ctx, pool, subtitles.Options{
@@ -34,7 +34,7 @@ subtitlesService.Register(mux)   // routes below /api/v1
 - `Start` recovers jobs left `running` by a previous process, then runs one job at a time
   and checks the scan/search schedule every 30 seconds. `Close` cancels the worker and
   any running helper process group.
-- The parent `api.New` already enforces host, origin, and content-type checks before the
+- `api.New` enforces host, origin, and content-type checks before the
   handlers registered by `Register`.
 
 ## Sidecar rules
@@ -54,7 +54,7 @@ Sidecars sit next to the video and share its stem:
 - Paths are resolved through `os.Root` and pinned, so traversal, symlinks, absolute
   paths, and files that do not belong to the video are rejected
 
-Reusable helpers for parent move/rename integration (no library package changes):
+Helpers for moving and renaming sidecars:
 
 - `ParseSidecarName(videoRel, name)`, `SidecarFileName(videoRel, language, forced, hi, format)`
 - `MoveSidecars(rootPath, fromVideo, toVideo)` renames a video's sidecars after the video moved
@@ -116,7 +116,7 @@ ffsubsync <reference> -i <input> -o <output> --max-offset-seconds N --output-enc
 ## Translation
 
 Translation uses the shared OpenAI-compatible provider configured once under
-Connections → AI (`/api/v1/ai/config`). The parent injects it through
+Connections → AI (`/api/v1/ai/config`). The server injects it through
 `subtitles.Options{Translator: ...}` (see `cmd/constellarr/shared_translator.go`); an injected
 translator always wins, so translation works even when the legacy subtitle AI fields are
 disabled. The subtitle settings UI only reads the shared provider status and links to
@@ -203,11 +203,9 @@ The UI gates itself with the central permissions: inventory, detail, history, jo
 streams, and file reads need `subtitles.read`; search, download, sync, translate, extract,
 scan, job cancel, output apply/discard, and assignments need `subtitles.write`; subtitle
 configuration, language profiles, and provider settings need `settings.read` /
-`settings.write`. Read-only roles never request config, provider, or profile endpoints.
-Necessary parent update: `internal/auth/permissions.go` currently maps
-`/api/v1/subtitle-config`, `/api/v1/subtitle-profiles`, and `/api/v1/subtitles/providers` to
-`subtitles.read`/`subtitles.write`; those routes should move to `settings.read`/`settings.write`
-(`/subtitles/providers/test` to `settings.write`) so the UI and server agree.
+`settings.write`. Accounts without `settings.read` never request configuration,
+provider, or profile endpoints. These permissions are enforced by
+`internal/auth/permissions.go` before the subtitle handlers run.
 
 ## Verification
 

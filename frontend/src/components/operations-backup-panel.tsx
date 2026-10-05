@@ -286,7 +286,7 @@ export function BackupPanel() {
           </CardTitle>
           <CardDescription>
             Each backup stores a consistent PostgreSQL dump with a checksummed manifest. Restoring validates the archive,
-            keeps a rollback copy, and needs a server restart afterwards.
+            keeps a rollback copy, and recovers the database and saved application settings.
           </CardDescription>
         </CardHeader>
         <CardContent className="gap-4">
@@ -472,7 +472,7 @@ export function BackupPanel() {
                   </div>
                 )}
                 <div className="rounded-md border border-border p-3 text-xs text-muted-foreground">
-                  <p className="font-medium text-foreground">Restored from this backup</p>
+                  <p className="font-medium text-foreground">Included in this archive</p>
                   <ul className="mt-1 list-disc space-y-1 pl-4">
                     {plan.backup.included.map((entry) => (
                       <li key={entry}>{entry}</li>
@@ -520,10 +520,12 @@ export function BackupPanel() {
                         : 'This replaces the live database. Every service must be restarted afterwards.'}
                     </p>
                     <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-                      Restore only backups that were exported from an instance you trust. A backup contains SQL that runs
-                      during the restore, and the checksum and manifest checks are integrity checks, not a security
-                      boundary. Accounts, sessions, API tokens, and stored provider credentials are replaced by the
-                      backup contents.
+                      Restore only backups from a server you trust. This replaces accounts, sessions, API tokens,
+                      and provider credentials, and executes the database commands in the archive.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Application settings are restored from the database. Extra configuration files in the archive
+                      are available for manual recovery and are not written over files on this server.
                     </p>
                     <div className="space-y-2">
                       <label htmlFor="restore-confirm" className="text-sm font-medium">

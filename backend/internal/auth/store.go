@@ -245,6 +245,14 @@ func (s *Service) setup(ctx context.Context, name, password, clientIP, userAgent
 	return user, secret, expires, nil
 }
 
+func (s *Service) DisplayName(ctx context.Context, id string) string {
+	var name string
+	if err := s.pool.QueryRow(ctx, `SELECT name FROM auth_users WHERE id = $1`, id).Scan(&name); err != nil {
+		return ""
+	}
+	return name
+}
+
 func (s *Service) userByID(ctx context.Context, q querier, id string) (User, error) {
 	user, err := scanUser(q.QueryRow(ctx, `SELECT `+userColumns+` FROM auth_users u WHERE u.id = $1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {

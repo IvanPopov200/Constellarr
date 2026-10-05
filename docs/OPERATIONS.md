@@ -182,7 +182,7 @@ confirmation: a backup must come from an instance the operator trusts. The check
 manifest, archive, and `pg_restore --list` checks are integrity and sanity checks, not a
 security boundary against a crafted archive.
 
-A live restore refuses to run unless the parent wired both a `Quiesce` callback and
+A live restore refuses to run unless the server configured both a `Quiesce` callback and
 `AllowLiveRestore`. Admission happens before any blocking lock, so simultaneous restore
 requests are refused with `409` immediately instead of queueing a second restore. The
 sequence is:
@@ -202,7 +202,7 @@ sequence is:
    respond with `restartRequired: true`, `autoRestart`, the rollback backup identifier,
    and notes.
 
-`Resume` is the parent's hook: it must make services reconnect and reload caches, or
+`Resume` must make services reconnect and reload caches, or
 trigger a process restart. Set `Options.AutoRestart` when `Resume` restarts or
 reconnects services by itself; the restore preview and result then report
 `autoRestart: true` and the interface waits for the server to come back, refreshes the
@@ -218,13 +218,12 @@ deadlines through `http.ResponseController` for the duration of `BackupTimeout` 
 `RestoreTimeout`, and the interface uses matching request timeouts, so long dumps are
 not cut off by the default HTTP timeouts.
 
-Custom-format archives can still contain SQL objects (functions, views). Restores are
-gated as described above, run with `--no-owner` and `--no-privileges` as the configured
-database role (which should not be a superuser in production), and the role of the TOC
-checks is limited to refusing cluster-level or obviously foreign dumps. Hardening beyond
-that would need a different mechanism, for example manifests signed with a server-local
-key so only backups produced by this installation can be restored; that is an open
-decision for the parent.
+Custom-format archives can contain SQL objects such as functions and views. Restore
+accepts trusted exports, runs as the configured database role with `--no-owner` and
+`--no-privileges`, and uses TOC checks to refuse cluster-level or obviously foreign dumps.
+All application settings live in the restored database. Extra configuration files in
+`files.tar` remain available in the downloaded archive for manual recovery; live restore
+does not overwrite files in the data directory.
 
 ## Interface
 
