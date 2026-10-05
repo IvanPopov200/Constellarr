@@ -8,6 +8,7 @@ frontend/dist
 backend/internal/web/dist
 bin
 .venv
+**/__pycache__
 backend/constellarr
 data
 **/data

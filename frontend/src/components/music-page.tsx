@@ -328,7 +328,7 @@ function AlbumDialog({
                   <Button
                     size="xs"
                     variant={release.decision.allowed ? 'default' : 'outline'}
-                    disabled={busy !== '' || !canWrite}
+                    disabled={busy !== '' || !canWrite || album.status === 'downloading' || album.status === 'importing'}
                     title={canWrite ? undefined : 'Grabbing an album release requires the library.write permission'}
                     onClick={() => act('grab', () => musicApi.grab(album.id, release.id, !release.decision.allowed))}
                   >

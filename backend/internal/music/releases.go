@@ -2,6 +2,7 @@ package music
 
 import (
 	"math"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,6 +45,8 @@ func parseFormat(title string) formatInfo {
 		switch token {
 		case "flac":
 			info.Format = "flac"
+		case "webflac":
+			info.Format, info.Media = "flac", "web"
 		case "alac":
 			info.Format = "alac"
 		case "wav":
@@ -296,6 +299,13 @@ func releaseMatchesAlbum(album Album, release Release) bool {
 	}
 	if artist := normalizeText(album.ArtistName); artist != "" && !strings.Contains(haystack, artist) {
 		return false
+	}
+	// Alternate recordings are separate albums, even when their titles contain the original name.
+	wanted, found := formatTokens(album.ArtistName+" "+album.Title), formatTokens(release.Title)
+	for _, variant := range []string{"drumless", "instrumental", "karaoke"} {
+		if slices.Contains(wanted, variant) != slices.Contains(found, variant) {
+			return false
+		}
 	}
 	if album.Year > 0 && release.Year > 0 && abs(release.Year-album.Year) > 1 {
 		return false

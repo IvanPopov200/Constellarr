@@ -21,6 +21,7 @@ func TestParseFormat(t *testing.T) {
 		media    string
 	}{
 		{"Muse - Absolution (2003) [FLAC] [24bit]", "flac", 0, true, ""},
+		{"Artist.Album-[24BIT]-[WEBFLAC]-[2013]", "flac", 0, true, "web"},
 		{"Muse - Absolution (2003) [FLAC] [24-96]", "flac", 0, true, ""},
 		{"Muse - Absolution [MP3 320] [WEB]", "mp3", 320, false, "web"},
 		{"Muse - Absolution [AAC 256]", "aac", 256, false, ""},
@@ -106,6 +107,21 @@ func TestReleaseMatchesAlbum(t *testing.T) {
 	}
 	if releaseMatchesAlbum(album, Release{Title: "Muse - Hullabaloo (2003) [FLAC]"}) {
 		t.Fatal("release with another album title matched")
+	}
+}
+
+func TestReleaseMatchesAlbumKeepsAlternateRecordingsSeparate(t *testing.T) {
+	original := Album{Title: "Random Access Memories", ArtistName: "Daft Punk"}
+	for _, variant := range []string{"Drumless", "Instrumental", "Karaoke"} {
+		release := Release{Title: "Daft Punk-Random Access Memories-" + variant + " Edition-FLAC"}
+		if releaseMatchesAlbum(original, release) {
+			t.Fatalf("%s edition matched the original album", variant)
+		}
+		alternate := original
+		alternate.Title += " (" + variant + " Edition)"
+		if !releaseMatchesAlbum(alternate, release) {
+			t.Fatalf("%s edition did not match its own album", variant)
+		}
 	}
 }
 
