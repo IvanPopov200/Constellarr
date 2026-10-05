@@ -266,8 +266,8 @@ does not overwrite files in the data directory.
   creation/import/deletion, retention, scheduled backups, media import failure events,
   Usenet/torrent metric separation, concurrent restore admission, canceled restore
   requests, HTTP deadline extension, and a full PostgreSQL dump-and-restore round-trip
-  in an isolated database. Database tests need `TEST_DATABASE_URL` (see
-  `/tmp/constellarr-platform-test.json`), PostgreSQL client tools (18 or newer), and
+  in an isolated database. Database tests need `TEST_DATABASE_URL`, PostgreSQL
+  client tools (18 or newer), and
   permission to create databases for the restore tests; otherwise those tests skip.
 - `frontend`: `npm run lint` and `npm run build` cover `OperationsPage`, `AlertsPanel`,
   and `BackupPanel`; `node --test src/lib/operations-envelope.test.ts` runs the list
