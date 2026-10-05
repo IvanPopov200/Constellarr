@@ -46,6 +46,7 @@ func TestProcessRejectsUnsafeZIPEntries(t *testing.T) {
 		{name: "parent", entries: []zipEntry{{name: "../escape.mkv", data: []byte("x")}}},
 		{name: "absolute", entries: []zipEntry{{name: "/escape.mkv", data: []byte("x")}}},
 		{name: "backslash", entries: []zipEntry{{name: `..\escape.mkv`, data: []byte("x")}}},
+		{name: "subtitle", entries: []zipEntry{{name: "../escape.srt", data: []byte("subtitle")}}},
 		{name: "symlink", entries: []zipEntry{{name: "movie.mkv", data: []byte("target"), mode: os.ModeSymlink | 0o777}}},
 		{name: "afterMedia", entries: []zipEntry{
 			{name: "movie.mkv", data: []byte("partial")},
@@ -83,6 +84,7 @@ func TestProcessRequiresMedia(t *testing.T) {
 	writeZIP(t, filepath.Join(in, "release.zip"),
 		zipEntry{name: "movie.mkv", data: nil},
 		zipEntry{name: "release.nfo", data: []byte("notes")},
+		zipEntry{name: "movie.en.srt", data: []byte("1\n00:00:01,000 --> 00:00:02,000\nHello\n")},
 	)
 	_, err := Process(context.Background(), in, out, 0, nil)
 	if err == nil || !strings.Contains(err.Error(), "no playable media") {
@@ -142,5 +144,42 @@ func TestProcessRejectsCancelledContext(t *testing.T) {
 	in := t.TempDir()
 	if _, err := Process(ctx, in, t.TempDir(), 0, nil); err == nil {
 		t.Fatal("cancelled context was ignored")
+	}
+}
+
+func TestProcessPreservesMusicAndSubtitlePayloads(t *testing.T) {
+	for _, archive := range []bool{false, true} {
+		name := "loose"
+		if archive {
+			name = "zip"
+		}
+		t.Run(name, func(t *testing.T) {
+			in, out := t.TempDir(), t.TempDir()
+			entries := []zipEntry{
+				{name: "01 - Track.flac", data: []byte("audio")},
+				{name: "01 - Track.lrc", data: []byte("[00:01.00]Lyrics")},
+				{name: "Episode.mkv", data: []byte("video")},
+				{name: "Episode.bg.forced.srt", data: []byte("1\n00:00:01,000 --> 00:00:02,000\nHello\n")},
+			}
+			if archive {
+				writeZIP(t, filepath.Join(in, "release.zip"), entries...)
+			} else {
+				for _, entry := range entries {
+					if err := os.WriteFile(filepath.Join(in, entry.name), entry.data, 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			files, err := Process(context.Background(), in, out, 0, nil)
+			if err != nil || len(files) != len(entries) {
+				t.Fatalf("Process = %v, %v", files, err)
+			}
+			for _, entry := range entries {
+				got, err := os.ReadFile(filepath.Join(out, entry.name))
+				if err != nil || !bytes.Equal(got, entry.data) {
+					t.Fatalf("payload %s changed: %v", entry.name, err)
+				}
+			}
+		})
 	}
 }

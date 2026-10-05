@@ -143,7 +143,7 @@ func extractRAR(ctx context.Context, in *os.Root, name string, w *writer) error 
 		if header.Mode()&fs.ModeType != 0 || header.LinkType != rardecode.LinkTypeNone {
 			return errRedirectedEntry
 		}
-		if !isMedia(header.Name) {
+		if !isPayload(header.Name) {
 			continue
 		}
 		if err := w.copyFrom(ctx, header.Name, rc, header.UnPackedSize); err != nil {
@@ -182,7 +182,7 @@ func extractZIP(ctx context.Context, in *os.Root, name string, w *writer) error 
 		if entry.Mode()&fs.ModeType != 0 || entry.ExternalAttrs>>16&0x400 != 0 {
 			return errRedirectedEntry
 		}
-		if !isMedia(entry.Name) {
+		if !isPayload(entry.Name) {
 			continue
 		}
 		rc, err := entry.Open()
@@ -203,8 +203,11 @@ func extractZIP(ctx context.Context, in *os.Root, name string, w *writer) error 
 
 func copyLoose(ctx context.Context, in *os.Root, entries []fs.DirEntry, w *writer) error {
 	for _, entry := range entries {
-		if entry.IsDir() || !isMedia(entry.Name()) {
+		if entry.IsDir() || !isPayload(entry.Name()) {
 			continue
+		}
+		if entry.Type()&fs.ModeType != 0 {
+			return errRedirectedEntry
 		}
 		if err := ctx.Err(); err != nil {
 			return err
