@@ -1,9 +1,15 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { delimiter } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { ensureMediaFixture, findTool, subtitleBin } from "./native.mjs";
 import { environment } from "./env.mjs";
 
-if (!process.argv.includes("--no-db")) {
+if (existsSync(subtitleBin)) environment.PATH = `${subtitleBin}${delimiter}${environment.PATH ?? ""}`;
+
+const testing = process.argv.includes("--test");
+if ((!testing || !environment.TEST_DATABASE_URL) && !process.argv.includes("--no-db")) {
   const result = spawnSync("docker", ["compose", "-f", "compose.yaml", "-f", "compose.dev.yaml", "up", "-d", "--wait", "postgres"], { stdio: "inherit" });
   if (result.error || result.status !== 0) {
     console.error("PostgreSQL could not start. Check Docker and POSTGRES_PORT in .env.");
@@ -24,6 +30,14 @@ if (process.argv.includes("--test")) {
     const testEnvironment = { ...environment, TEST_DATABASE_URL: suppliedURL || url.href };
     for (const name of ['OMDB_URL', 'OMDB_API_KEY', 'OMDB_POSTER_URL', 'JELLYFIN_URL', 'JELLYFIN_API_KEY', 'IMPORT_WEBHOOK_URL']) {
       testEnvironment[name] = '';
+    }
+    const helper = testEnvironment.TEST_FFSUBSYNC_PATH || findTool("ffsubsync");
+    if (helper) testEnvironment.TEST_FFSUBSYNC_PATH = helper;
+    else console.error('ffsubsync is unavailable; real-helper subtitle tests will skip. Run "make setup".');
+    try {
+      if (!testEnvironment.TEST_MEDIA_VIDEO) testEnvironment.TEST_MEDIA_VIDEO = ensureMediaFixture();
+    } catch (error) {
+      console.error(`The real-helper media fixture is unavailable: ${error.message}`);
     }
     const result = spawnSync("go", ["-C", "backend", "test", "-count=1", "-v", "./..."], {
       stdio: "inherit", env: testEnvironment,
