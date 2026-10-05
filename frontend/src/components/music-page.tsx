@@ -87,6 +87,23 @@ function notice(cause: unknown) {
   return errorMessage(cause)
 }
 
+function useMusicPoll(load: (signal: AbortSignal) => Promise<unknown>, active = true) {
+  useEffect(() => {
+    if (!active) return
+    const controller = new AbortController()
+    let timer: number | undefined
+    const tick = async () => {
+      if (document.visibilityState === 'visible') await load(controller.signal)
+      if (!controller.signal.aborted) timer = window.setTimeout(tick, 5000)
+    }
+    void tick()
+    return () => {
+      controller.abort()
+      window.clearTimeout(timer)
+    }
+  }, [active, load])
+}
+
 function StatusBadge({ status }: { status: string }) {
   return (
     <Badge variant="outline" className={statusTones[status] ?? statusTones.unmonitored}>
@@ -201,12 +218,7 @@ function AlbumDialog({
     [albumId, canReadSettings],
   )
 
-  useEffect(() => {
-    const controller = new AbortController()
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- state is applied only after the requests settle
-    void load(controller.signal)
-    return () => controller.abort()
-  }, [load])
+  useMusicPoll(load)
 
   const act = async (name: string, action: () => Promise<unknown>) => {
     setBusy(name)
@@ -1016,21 +1028,8 @@ export function MusicPage({ active = true }: { active?: boolean }) {
     }
   }, [])
 
-  useEffect(() => {
-    if (!active || !routeActive) return
-    const controller = new AbortController()
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- state is applied only after the requests settle
-    void load(controller.signal)
-    return () => controller.abort()
-  }, [active, routeActive, load])
-
-  useEffect(() => {
-    if (!active || !routeActive) return
-    const controller = new AbortController()
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- state is applied only after the requests settle
-    void loadTab(tab, controller.signal)
-    return () => controller.abort()
-  }, [active, routeActive, tab, loadTab])
+  const poll = useCallback((signal: AbortSignal) => Promise.all([load(signal), loadTab(tab, signal)]), [load, loadTab, tab])
+  useMusicPoll(poll, active && routeActive && canRead)
 
   const refresh = useCallback(() => {
     void load()
