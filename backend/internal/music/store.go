@@ -131,15 +131,20 @@ const artistColumns = `id, coalesce(musicbrainz_id, ''), name, data, added_at, u
 
 func scanArtist(row rowScanner) (Artist, error) {
 	var (
-		artist Artist
-		raw    []byte
+		artist                  Artist
+		id, musicBrainzID, name string
+		raw                     []byte
+		addedAt, updatedAt      time.Time
 	)
-	if err := row.Scan(&artist.ID, &artist.MusicBrainzID, &artist.Name, &raw, &artist.AddedAt, &artist.UpdatedAt); err != nil {
+	if err := row.Scan(&id, &musicBrainzID, &name, &raw, &addedAt, &updatedAt); err != nil {
 		return Artist{}, err
 	}
 	if err := json.Unmarshal(raw, &artist); err != nil {
 		return Artist{}, err
 	}
+	// The canonical columns stay authoritative; the stored snapshot must not override them.
+	artist.ID, artist.MusicBrainzID, artist.Name = id, musicBrainzID, name
+	artist.AddedAt, artist.UpdatedAt = addedAt, updatedAt
 	artist.Albums = nil
 	return artist, nil
 }
@@ -257,16 +262,22 @@ const albumColumns = `id, artist_id, coalesce(musicbrainz_id, ''), title, releas
 
 func scanAlbum(row rowScanner) (Album, error) {
 	var (
-		album Album
-		raw   []byte
+		album                              Album
+		id, artistID, musicBrainzID, title string
+		releaseDate, albumType             string
+		raw                                []byte
+		addedAt, updatedAt                 time.Time
 	)
-	if err := row.Scan(&album.ID, &album.ArtistID, &album.MusicBrainzID, &album.Title, &album.ReleaseDate,
-		&album.Type, &raw, &album.AddedAt, &album.UpdatedAt); err != nil {
+	if err := row.Scan(&id, &artistID, &musicBrainzID, &title, &releaseDate, &albumType, &raw, &addedAt, &updatedAt); err != nil {
 		return Album{}, err
 	}
 	if err := json.Unmarshal(raw, &album); err != nil {
 		return Album{}, err
 	}
+	// The canonical columns stay authoritative; the stored snapshot must not override them.
+	album.ID, album.ArtistID, album.MusicBrainzID = id, artistID, musicBrainzID
+	album.Title, album.ReleaseDate, album.Type = title, releaseDate, albumType
+	album.AddedAt, album.UpdatedAt = addedAt, updatedAt
 	album.Tracks = nil
 	return album, nil
 }
@@ -488,23 +499,37 @@ func (s *Store) DeleteAlbum(ctx context.Context, id string) error {
 	return nil
 }
 
+const trackColumns = `id, disc, number, title, data`
+
+func scanTrack(row rowScanner) (Track, error) {
+	var (
+		track        Track
+		id, title    string
+		disc, number int
+		raw          []byte
+	)
+	if err := row.Scan(&id, &disc, &number, &title, &raw); err != nil {
+		return Track{}, err
+	}
+	if err := json.Unmarshal(raw, &track); err != nil {
+		return Track{}, err
+	}
+	// The canonical columns stay authoritative; the stored snapshot must not override them.
+	track.ID, track.Disc, track.Number, track.Title = id, disc, number, title
+	return track, nil
+}
+
 func (s *Store) Tracks(ctx context.Context, albumID string) ([]Track, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, disc, number, title, data FROM music_tracks WHERE album_id = $1 ORDER BY disc, number, id`, albumID)
+		`SELECT `+trackColumns+` FROM music_tracks WHERE album_id = $1 ORDER BY disc, number, id`, albumID)
 	if err != nil {
 		return nil, dbError("list tracks", err)
 	}
 	defer rows.Close()
 	tracks := make([]Track, 0, 16)
 	for rows.Next() {
-		var (
-			track Track
-			raw   []byte
-		)
-		if err := rows.Scan(&track.ID, &track.Disc, &track.Number, &track.Title, &raw); err != nil {
-			return nil, dbError("list tracks", err)
-		}
-		if err := json.Unmarshal(raw, &track); err != nil {
+		track, err := scanTrack(rows)
+		if err != nil {
 			return nil, dbError("list tracks", err)
 		}
 		tracks = append(tracks, track)
@@ -616,16 +641,20 @@ const acquisitionColumns = `job_id, album_id, release, status, error, updated_at
 
 func scanAcquisition(row rowScanner) (Acquisition, error) {
 	var (
-		acquisition Acquisition
-		raw         []byte
-		updated     time.Time
+		acquisition                   Acquisition
+		jobID, albumID, status, notes string
+		raw                           []byte
+		updated                       time.Time
 	)
-	if err := row.Scan(&acquisition.JobID, &acquisition.AlbumID, &raw, &acquisition.Status, &acquisition.Error, &updated); err != nil {
+	if err := row.Scan(&jobID, &albumID, &raw, &status, &notes, &updated); err != nil {
 		return Acquisition{}, err
 	}
 	if err := json.Unmarshal(raw, &acquisition); err != nil {
 		return Acquisition{}, err
 	}
+	// The canonical columns stay authoritative; the stored snapshot must not override them.
+	acquisition.JobID, acquisition.AlbumID = jobID, albumID
+	acquisition.Status, acquisition.Error = status, notes
 	return acquisition, nil
 }
 
