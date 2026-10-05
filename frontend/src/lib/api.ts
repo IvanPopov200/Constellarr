@@ -102,6 +102,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new Event('constellarr:unauthorized'))
     const detail = (await response.json().catch(() => null)) as { error?: unknown } | null
     throw new ApiError(
       typeof detail?.error === 'string'

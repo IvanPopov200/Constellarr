@@ -39,6 +39,8 @@ import {
 } from '@/components/tv-ui'
 import { errorMessage } from '@/lib/api'
 import { formatAge } from '@/lib/format'
+import { accessPermissions } from '@/lib/auth-api'
+import { useAuth } from '@/lib/auth-context'
 import { moviesApi, type MovieProfile } from '@/lib/movies-api'
 import { QualityProfilesTab } from '@/components/movies-page'
 import {
@@ -144,6 +146,8 @@ function LibraryView({
   profiles,
   roots,
   nextAirdates,
+  canWrite,
+  canReadSettings,
   onOpen,
   onAdd,
   onScan,
@@ -153,6 +157,8 @@ function LibraryView({
   profiles: MovieProfile[]
   roots: RootFolder[]
   nextAirdates: Map<string, number>
+  canWrite: boolean
+  canReadSettings: boolean
   onOpen: (id: string) => void
   onAdd: () => void
   onScan: () => void
@@ -279,18 +285,24 @@ function LibraryView({
       <EmptyState>
         <div className="space-y-3">
           <p className="text-sm">
-            Your TV library is empty. Add a series, or scan an existing folder to match files to episodes.
+            {canWrite
+              ? 'Your TV library is empty. Add a series, or scan an existing folder to match files to episodes.'
+              : 'Your TV library is empty. An administrator or operator can add series and scan folders.'}
           </p>
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={onAdd}>
-              <PlusIcon data-icon="inline-start" />
-              Add series
-            </Button>
-            <Button size="sm" variant="outline" onClick={onScan}>
-              <FolderSearchIcon data-icon="inline-start" />
-              Scan library
-            </Button>
-          </div>
+          {canWrite && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={onAdd}>
+                <PlusIcon data-icon="inline-start" />
+                Add series
+              </Button>
+              {canReadSettings && (
+                <Button size="sm" variant="outline" onClick={onScan}>
+                  <FolderSearchIcon data-icon="inline-start" />
+                  Scan library
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </EmptyState>
     )
@@ -530,15 +542,17 @@ function LibraryView({
                       </p>
                     </div>
                   </button>
-                  <span className="absolute top-2 left-2 rounded-md bg-background/85 p-1">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-primary"
-                      checked={selected.has(item.id)}
-                      onChange={() => toggle(item.id)}
-                      aria-label={`Select ${item.metadata.title || 'series'}`}
-                    />
-                  </span>
+                  {canWrite && (
+                    <span className="absolute top-2 left-2 rounded-md bg-background/85 p-1">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-primary"
+                        checked={selected.has(item.id)}
+                        onChange={() => toggle(item.id)}
+                        aria-label={`Select ${item.metadata.title || 'series'}`}
+                      />
+                    </span>
+                  )}
                 </div>
               </li>
             )
@@ -549,19 +563,21 @@ function LibraryView({
           <table className="w-full min-w-[64rem] border-collapse text-sm">
             <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
               <tr>
-                <th scope="col" className="w-10 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-primary"
-                    checked={visible.length > 0 && selected.size === visible.length}
-                    onChange={() =>
-                      setSelectedIds((previous) =>
-                        previous.size === visible.length ? new Set() : new Set(visible.map((item) => item.id)),
-                      )
-                    }
-                    aria-label="Select all visible series"
-                  />
-                </th>
+                {canWrite && (
+                  <th scope="col" className="w-10 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={visible.length > 0 && selected.size === visible.length}
+                      onChange={() =>
+                        setSelectedIds((previous) =>
+                          previous.size === visible.length ? new Set() : new Set(visible.map((item) => item.id)),
+                        )
+                      }
+                      aria-label="Select all visible series"
+                    />
+                  </th>
+                )}
                 <th scope="col" className="px-3 py-2 font-medium">Title</th>
                 <th scope="col" className="px-3 py-2 font-medium">Status</th>
                 <th scope="col" className="px-3 py-2 font-medium">Progress</th>
@@ -579,15 +595,17 @@ function LibraryView({
                 const profileName = profiles.find((entry) => entry.id === item.profileId)?.name || item.profileId || 'Default'
                 return (
                   <tr key={item.id} className="align-top">
-                    <td className="px-3 py-2.5">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-primary"
-                        checked={selected.has(item.id)}
-                        onChange={() => toggle(item.id)}
-                        aria-label={`Select ${item.metadata.title || 'series'}`}
-                      />
-                    </td>
+                    {canWrite && (
+                      <td className="px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary"
+                          checked={selected.has(item.id)}
+                          onChange={() => toggle(item.id)}
+                          aria-label={`Select ${item.metadata.title || 'series'}`}
+                        />
+                      </td>
+                    )}
                     <td className="px-3 py-2.5">
                       <button
                         type="button"
@@ -641,7 +659,7 @@ function LibraryView({
         </div>
       )}
 
-      {selected.size > 0 && (
+      {canWrite && selected.size > 0 && (
         <div className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-xl border border-border bg-card/95 p-3 shadow-lg backdrop-blur">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm font-medium">{selected.size} selected</p>
@@ -743,12 +761,14 @@ function WantedTab({
   active,
   series,
   details,
+  canWrite,
   onOpenSeries,
   onGrabbed,
 }: {
   active: boolean
   series: Series[]
   details: Record<string, Series>
+  canWrite: boolean
   onOpenSeries: (id: string) => void
   onGrabbed: (id: string) => void
 }) {
@@ -781,20 +801,23 @@ function WantedTab({
         <p className="text-sm text-muted-foreground">
           Monitored episodes with a missing file or a file below the profile cutoff appear here. Future episodes and
           active downloads stay out, and unknown air dates wait for a date before searching.
+          {!canWrite && ' Searching for releases requires library write access.'}
         </p>
-        <Button
-          size="sm"
-          disabled={syncing || searchable === 0}
-          title={searchable === 0 ? 'Nothing has an air date to search yet.' : undefined}
-          onClick={() => void runSync()}
-        >
-          {syncing ? (
-            <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-          ) : (
-            <SearchIcon data-icon="inline-start" />
-          )}
-          {syncing ? 'Searching…' : 'Search missing & upgrades'}
-        </Button>
+        {canWrite && (
+          <Button
+            size="sm"
+            disabled={syncing || searchable === 0}
+            title={searchable === 0 ? 'Nothing has an air date to search yet.' : undefined}
+            onClick={() => void runSync()}
+          >
+            {syncing ? (
+              <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+            ) : (
+              <SearchIcon data-icon="inline-start" />
+            )}
+            {syncing ? 'Searching…' : 'Search missing & upgrades'}
+          </Button>
+        )}
       </div>
 
       {error && <ErrorNote onRetry={() => void runSync()}>{error}</ErrorNote>}
@@ -850,15 +873,17 @@ function WantedTab({
                 <Button size="sm" variant="outline" onClick={() => onOpenSeries(item.id)}>
                   Open series
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    setRelease({ series: item, target: { season: episode.season, episode: episode.number } })
-                  }
-                >
-                  <SearchIcon data-icon="inline-start" />
-                  Search
-                </Button>
+                {canWrite && (
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      setRelease({ series: item, target: { season: episode.season, episode: episode.number } })
+                    }
+                  >
+                    <SearchIcon data-icon="inline-start" />
+                    Search
+                  </Button>
+                )}
               </li>
             )
           })}
@@ -1082,19 +1107,23 @@ function ActivityTab({
   )
 }
 
-function ProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChanged: () => void }) {
+function ProfilesTab({ profiles, canWrite, onChanged }: { profiles: MovieProfile[]; canWrite: boolean; onChanged: () => void }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
         TV uses the same quality profiles as movies, including the cutoff and release scoring rules. Changes here
         apply to both libraries.
       </p>
-      <QualityProfilesTab profiles={profiles} onChanged={onChanged} />
+      <QualityProfilesTab profiles={profiles} canWrite={canWrite} onChanged={onChanged} />
     </div>
   )
 }
 
 export function TVPage({ active }: { active: boolean }) {
+  const { can } = useAuth()
+  const canWrite = can(accessPermissions.libraryWrite)
+  const canReadSettings = can(accessPermissions.settingsRead)
+  const canWriteSettings = can(accessPermissions.settingsWrite)
   const [series, setSeries] = useState<Series[] | null>(null)
   const [profiles, setProfiles] = useState<MovieProfile[]>([])
   const [config, setConfig] = useState<TvConfig | null>(null)
@@ -1141,8 +1170,9 @@ export function TVPage({ active }: { active: boolean }) {
     const [listResult, calendarResult, profilesResult, configResult] = await Promise.allSettled([
       tvApi.list(request.signal),
       tvApi.calendar(request.signal),
-      moviesApi.profiles(request.signal),
-      tvApi.config(request.signal),
+      // Profiles and TV configuration sit behind settings.read; resolved stand-ins avoid a 403 fetch.
+      canReadSettings ? moviesApi.profiles(request.signal) : Promise.resolve([] as MovieProfile[]),
+      canReadSettings ? tvApi.config(request.signal) : Promise.resolve(null),
     ])
     if (requestId.current !== id) return
 
@@ -1158,14 +1188,20 @@ export function TVPage({ active }: { active: boolean }) {
     } else {
       setCalendarError(errorMessage(calendarResult.reason))
     }
-    if (profilesResult.status === 'fulfilled') setProfiles(profilesResult.value)
-    if (configResult.status === 'fulfilled') setConfig(configResult.value)
-    const failedSettings = [profilesResult, configResult].find((result) => result.status === 'rejected')
-    setSetupError(failedSettings ? errorMessage(failedSettings.reason) : '')
+    if (canReadSettings) {
+      if (profilesResult.status === 'fulfilled') setProfiles(profilesResult.value)
+      if (configResult.status === 'fulfilled') setConfig(configResult.value)
+      const failedSettings = [profilesResult, configResult].find((result) => result.status === 'rejected')
+      setSetupError(failedSettings ? errorMessage(failedSettings.reason) : '')
+    } else {
+      setProfiles([])
+      setConfig(null)
+      setSetupError('')
+    }
 
     const ids = [detailIdRef.current, ...wantedIdsRef.current].filter((value): value is string => Boolean(value))
     if (ids.length > 0) await loadDetails(ids, request.signal)
-  }, [loadDetails])
+  }, [canReadSettings, loadDetails])
 
   const live = useMemo(() => {
     const listActive = (series ?? []).some((item) => activeStatuses.has(stateKey(item)))
@@ -1311,13 +1347,15 @@ export function TVPage({ active }: { active: boolean }) {
     { id: 'wanted', label: 'Wanted', badge: wantedCount },
     { id: 'calendar', label: 'Calendar' },
     { id: 'activity', label: 'Activity' },
-    { id: 'profiles', label: 'Profiles', badge: profiles.length },
   ]
+  if (canReadSettings) tabs.push({ id: 'profiles', label: 'Profiles', badge: profiles.length })
+  // A tab can disappear when permissions change; fall back instead of rendering an empty panel.
+  const activeTab = tabs.some((item) => item.id === tab) ? tab : 'library'
 
   const onTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
     event.preventDefault()
-    const index = tabs.findIndex((item) => item.id === tab)
+    const index = tabs.findIndex((item) => item.id === activeTab)
     const offset = event.key === 'ArrowRight' ? 1 : -1
     const next = tabs[(index + offset + tabs.length) % tabs.length].id
     setTab(next)
@@ -1333,23 +1371,32 @@ export function TVPage({ active }: { active: boolean }) {
     )
   } else {
     panel = (
-      <div role="tabpanel" id="tv-panel" aria-labelledby={`tv-tab-${tab}`}>
-        <div hidden={tab !== 'library'}>
+      <div role="tabpanel" id="tv-panel" aria-labelledby={`tv-tab-${activeTab}`}>
+        <div hidden={activeTab !== 'library'}>
           <LibraryView
             series={series}
             profiles={profiles}
             roots={roots}
             nextAirdates={nextAirdates}
+            canWrite={canWrite}
+            canReadSettings={canReadSettings}
             onOpen={openSeries}
             onAdd={() => setAddOpen(true)}
             onScan={() => setScanOpen(true)}
             onBulk={bulkEdit}
           />
         </div>
-        {tab === 'wanted' && (
-          <WantedTab active={active} series={series} details={details} onOpenSeries={openSeries} onGrabbed={watchSeries} />
+        {activeTab === 'wanted' && (
+          <WantedTab
+            active={active}
+            series={series}
+            details={details}
+            canWrite={canWrite}
+            onOpenSeries={openSeries}
+            onGrabbed={watchSeries}
+          />
         )}
-        {tab === 'calendar' && (
+        {activeTab === 'calendar' && (
           <CalendarTab
             entries={calendar}
             error={calendarError}
@@ -1357,8 +1404,10 @@ export function TVPage({ active }: { active: boolean }) {
             onOpenSeries={openSeries}
           />
         )}
-        {tab === 'activity' && <ActivityTab series={series} onOpenSeries={openSeries} />}
-        {tab === 'profiles' && <ProfilesTab profiles={profiles} onChanged={() => void reload()} />}
+        {activeTab === 'activity' && <ActivityTab series={series} onOpenSeries={openSeries} />}
+        {activeTab === 'profiles' && (
+          <ProfilesTab profiles={profiles} canWrite={canWriteSettings} onChanged={() => void reload()} />
+        )}
       </div>
     )
   }
@@ -1370,14 +1419,18 @@ export function TVPage({ active }: { active: boolean }) {
         description="Search, organize, and monitor your series, seasons, and episodes."
         action={
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" onClick={() => setScanOpen(true)}>
-              <FolderSearchIcon data-icon="inline-start" />
-              Scan library
-            </Button>
-            <Button size="sm" onClick={() => setAddOpen(true)}>
-              <PlusIcon data-icon="inline-start" />
-              Add series
-            </Button>
+            {canWrite && canReadSettings && (
+              <Button size="sm" variant="outline" onClick={() => setScanOpen(true)}>
+                <FolderSearchIcon data-icon="inline-start" />
+                Scan library
+              </Button>
+            )}
+            {canWrite && (
+              <Button size="sm" onClick={() => setAddOpen(true)}>
+                <PlusIcon data-icon="inline-start" />
+                Add series
+              </Button>
+            )}
           </div>
         }
       />
@@ -1402,13 +1455,13 @@ export function TVPage({ active }: { active: boolean }) {
               type="button"
               role="tab"
               id={`tv-tab-${item.id}`}
-              aria-selected={tab === item.id}
+              aria-selected={activeTab === item.id}
               aria-controls="tv-panel"
-              tabIndex={tab === item.id ? 0 : -1}
+              tabIndex={activeTab === item.id ? 0 : -1}
               onClick={() => setTab(item.id)}
               className={cn(
                 '-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                tab === item.id
+                activeTab === item.id
                   ? 'border-primary text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground',
               )}
@@ -1426,17 +1479,18 @@ export function TVPage({ active }: { active: boolean }) {
 
       {panel}
 
-      {addOpen && (
+      {canWrite && addOpen && (
         <AddSeriesDialog
           active={active}
           profiles={profiles}
           roots={roots}
+          canReadSettings={canReadSettings}
           onClose={() => setAddOpen(false)}
           onAdded={addSeries}
         />
       )}
 
-      {scanOpen && (
+      {canWrite && canReadSettings && scanOpen && (
         <ScanDialog
           active={active}
           series={series ?? []}
@@ -1454,6 +1508,8 @@ export function TVPage({ active }: { active: boolean }) {
           series={detailSeries}
           profiles={profiles}
           roots={roots}
+          canWrite={canWrite}
+          canReadSettings={canReadSettings}
           onClose={() => {
             setDetailId(null)
             detailIdRef.current = null

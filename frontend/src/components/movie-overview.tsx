@@ -3,13 +3,18 @@ import { ArrowRight, Film, LoaderCircle, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { errorMessage } from '@/lib/api'
+import { accessPermissions } from '@/lib/auth-api'
+import { useAuth } from '@/lib/auth-context'
 import { moviesApi, type Movie } from '@/lib/movies-api'
 
 export function MovieOverview() {
+  const { can } = useAuth()
+  const canRead = can(accessPermissions.libraryRead)
   const [movies, setMovies] = useState<Movie[] | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
+    if (!canRead) return
     const controller = new AbortController()
     let fetching = false
     async function refresh() {
@@ -26,10 +31,12 @@ export function MovieOverview() {
     const timer = window.setInterval(refresh, 15_000)
     window.addEventListener('movies-changed', refresh)
     return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener('movies-changed', refresh) }
-  }, [])
+  }, [canRead])
 
   const downloaded = movies?.filter(movie => movie.files?.some(file => !file.missing)) ?? []
   const wanted = movies?.filter(movie => movie.monitored && !movie.files?.some(file => !file.missing)).length ?? 0
+
+  if (!canRead) return null
 
   return (
     <Card size="sm">

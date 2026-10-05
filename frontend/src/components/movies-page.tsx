@@ -34,6 +34,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { errorMessage } from '@/lib/api'
 import { formatAge, formatBytes } from '@/lib/format'
+import { accessPermissions } from '@/lib/auth-api'
+import { useAuth } from '@/lib/auth-context'
 import {
   moviesApi,
   type AddMovieInput,
@@ -536,6 +538,8 @@ function LibraryView({
   movies,
   profiles,
   roots,
+  canWrite,
+  canReadSettings,
   onOpenMovie,
   onAdd,
   onScan,
@@ -544,6 +548,8 @@ function LibraryView({
   movies: Movie[]
   profiles: MovieProfile[]
   roots: RootFolder[]
+  canWrite: boolean
+  canReadSettings: boolean
   onOpenMovie: (id: string) => void
   onAdd: () => void
   onScan: () => void
@@ -785,14 +791,18 @@ function LibraryView({
               <ListIcon />
             </Button>
           </div>
-          <Button size="sm" variant="outline" onClick={onScan}>
-            <FolderSearchIcon data-icon="inline-start" />
-            Scan library
-          </Button>
-          <Button size="sm" onClick={onAdd}>
-            <PlusIcon data-icon="inline-start" />
-            Add movie
-          </Button>
+          {canWrite && canReadSettings && (
+            <Button size="sm" variant="outline" onClick={onScan}>
+              <FolderSearchIcon data-icon="inline-start" />
+              Scan library
+            </Button>
+          )}
+          {canWrite && (
+            <Button size="sm" onClick={onAdd}>
+              <PlusIcon data-icon="inline-start" />
+              Add movie
+            </Button>
+          )}
         </div>
       </div>
 
@@ -933,7 +943,9 @@ function LibraryView({
       {visible.length === 0 ? (
         <EmptyState>
           {movies.length === 0
-            ? 'Your catalog is empty. Add a movie or scan an existing library folder.'
+            ? canWrite
+              ? 'Your catalog is empty. Add a movie or scan an existing library folder.'
+              : 'Your catalog is empty. An administrator or operator can add movies and scan folders.'
             : 'No movies match the current search and filters.'}
         </EmptyState>
       ) : view === 'grid' ? (
@@ -982,15 +994,17 @@ function LibraryView({
                       </p>
                     </div>
                   </button>
-                  <span className="absolute top-2 left-2 rounded-md bg-background/85 p-1">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-primary"
-                      checked={selected.has(movie.id)}
-                      onChange={() => toggle(movie.id)}
-                      aria-label={`Select ${movie.metadata.title || 'movie'}`}
-                    />
-                  </span>
+                  {canWrite && (
+                    <span className="absolute top-2 left-2 rounded-md bg-background/85 p-1">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-primary"
+                        checked={selected.has(movie.id)}
+                        onChange={() => toggle(movie.id)}
+                        aria-label={`Select ${movie.metadata.title || 'movie'}`}
+                      />
+                    </span>
+                  )}
                 </Card>
               </li>
             )
@@ -1001,15 +1015,17 @@ function LibraryView({
           <table className="w-full min-w-[64rem] border-collapse text-sm">
             <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
               <tr>
-                <th scope="col" className="w-10 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-primary"
-                    checked={visible.length > 0 && selected.size === visible.length}
-                    onChange={toggleAll}
-                    aria-label="Select all visible movies"
-                  />
-                </th>
+                {canWrite && (
+                  <th scope="col" className="w-10 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={visible.length > 0 && selected.size === visible.length}
+                      onChange={toggleAll}
+                      aria-label="Select all visible movies"
+                    />
+                  </th>
+                )}
                 <th scope="col" className="px-3 py-2 font-medium">Title</th>
                 <th scope="col" className="px-3 py-2 font-medium">Status</th>
                 <th scope="col" className="px-3 py-2 font-medium">Quality</th>
@@ -1027,15 +1043,17 @@ function LibraryView({
                 const runtime = runtimeText(movie)
                 return (
                   <tr key={movie.id} className="align-top">
-                    <td className="px-3 py-2.5">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-primary"
-                        checked={selected.has(movie.id)}
-                        onChange={() => toggle(movie.id)}
-                        aria-label={`Select ${movie.metadata.title || 'movie'}`}
-                      />
-                    </td>
+                    {canWrite && (
+                      <td className="px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary"
+                          checked={selected.has(movie.id)}
+                          onChange={() => toggle(movie.id)}
+                          aria-label={`Select ${movie.metadata.title || 'movie'}`}
+                        />
+                      </td>
+                    )}
                     <td className="px-3 py-2.5">
                       <button
                         type="button"
@@ -1104,7 +1122,7 @@ function LibraryView({
         </div>
       )}
 
-      {selected.size > 0 && (
+      {canWrite && selected.size > 0 && (
         <div className="sticky bottom-3 z-10 flex flex-col gap-3 rounded-xl border border-border bg-card/95 p-3 shadow-lg backdrop-blur">
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-sm font-medium">{selected.size} selected</p>
@@ -1209,7 +1227,7 @@ function LibraryView({
   )
 }
 
-function WantedList({ movies, onOpenMovie }: { movies: Movie[]; onOpenMovie: (id: string) => void }) {
+function WantedList({ movies, canWrite, onOpenMovie }: { movies: Movie[]; canWrite: boolean; onOpenMovie: (id: string) => void }) {
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<SyncResult | null>(null)
@@ -1245,15 +1263,18 @@ function WantedList({ movies, onOpenMovie }: { movies: Movie[]; onOpenMovie: (id
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           {wanted.length} monitored {wanted.length === 1 ? 'movie has' : 'movies have'} no file yet.
+          {!canWrite && ' Searching for releases requires library write access.'}
         </p>
-        <Button size="sm" disabled={syncing || wanted.length === 0} onClick={() => void runSync()}>
-          {syncing ? (
-            <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-          ) : (
-            <SearchIcon data-icon="inline-start" />
-          )}
-          {syncing ? 'Searching…' : 'Search all wanted'}
-        </Button>
+        {canWrite && (
+          <Button size="sm" disabled={syncing || wanted.length === 0} onClick={() => void runSync()}>
+            {syncing ? (
+              <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+            ) : (
+              <SearchIcon data-icon="inline-start" />
+            )}
+            {syncing ? 'Searching…' : 'Search all wanted'}
+          </Button>
+        )}
       </div>
 
       {error && <ErrorNote onRetry={() => void runSync()}>{error}</ErrorNote>}
@@ -1288,7 +1309,7 @@ function WantedList({ movies, onOpenMovie }: { movies: Movie[]; onOpenMovie: (id
               <StatusBadge movie={movie} />
               <Button size="sm" variant="outline" onClick={() => onOpenMovie(movie.id)}>
                 <SearchIcon data-icon="inline-start" />
-                Search releases
+                {canWrite ? 'Search releases' : 'View details'}
               </Button>
             </li>
           ))}
@@ -1585,7 +1606,7 @@ function draftToProfile(draft: ProfileDraft): MovieProfile {
   }
 }
 
-export function QualityProfilesTab({ profiles, onChanged }: { profiles: MovieProfile[]; onChanged: () => void }) {
+export function QualityProfilesTab({ profiles, canWrite, onChanged }: { profiles: MovieProfile[]; canWrite: boolean; onChanged: () => void }) {
   const fieldId = useId()
   const [selectedId, setSelectedId] = useState<string | null>(profiles[0]?.id ?? null)
   const [draft, setDraft] = useState<ProfileDraft>(() =>
@@ -1668,20 +1689,22 @@ export function QualityProfilesTab({ profiles, onChanged }: { profiles: MoviePro
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-medium">Quality profiles</h3>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setSelectedId(null)
-              setDraft(emptyProfileDraft())
-              setError('')
-              setNotice('')
-              setConfirmDelete(false)
-            }}
-          >
-            <PlusIcon data-icon="inline-start" />
-            New
-          </Button>
+          {canWrite && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setSelectedId(null)
+                setDraft(emptyProfileDraft())
+                setError('')
+                setNotice('')
+                setConfirmDelete(false)
+              }}
+            >
+              <PlusIcon data-icon="inline-start" />
+              New
+            </Button>
+          )}
         </div>
         {profiles.length === 0 ? (
           <EmptyState>No profiles yet. Create one to control quality and upgrades.</EmptyState>
@@ -1980,7 +2003,8 @@ export function QualityProfilesTab({ profiles, onChanged }: { profiles: MoviePro
           )}
 
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
-            {confirmDelete ? (
+            {canWrite &&
+              (confirmDelete ? (
               <>
                 <p className="mr-auto text-sm text-muted-foreground">
                   Delete this profile? Movies keep their files.
@@ -2026,8 +2050,13 @@ export function QualityProfilesTab({ profiles, onChanged }: { profiles: MoviePro
                   {draft.id ? 'Save profile' : 'Create profile'}
                 </Button>
               </>
-            )}
+            ))}
           </div>
+          {!canWrite && (
+            <p className="border-t border-border pt-4 text-xs text-muted-foreground">
+              Your role can view quality profiles but not change them.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -2227,7 +2256,7 @@ function WatchlistDialog({
   )
 }
 
-function WatchlistsTab({ profiles, roots }: { profiles: MovieProfile[]; roots: RootFolder[] }) {
+function WatchlistsTab({ profiles, roots, canWrite }: { profiles: MovieProfile[]; roots: RootFolder[]; canWrite: boolean }) {
   const [lists, setLists] = useState<Watchlist[] | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -2292,11 +2321,14 @@ function WatchlistsTab({ profiles, roots }: { profiles: MovieProfile[]; roots: R
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Sync IMDb lists on a schedule. New titles are added to the catalog and watched for releases.
+          {!canWrite && ' Changing watchlists requires settings write access.'}
         </p>
-        <Button size="sm" onClick={() => setEditing(emptyWatchlist(profiles, roots))}>
-          <PlusIcon data-icon="inline-start" />
-          New watchlist
-        </Button>
+        {canWrite && (
+          <Button size="sm" onClick={() => setEditing(emptyWatchlist(profiles, roots))}>
+            <PlusIcon data-icon="inline-start" />
+            New watchlist
+          </Button>
+        )}
       </div>
 
       {error && <ErrorNote onRetry={() => void load()}>{error}</ErrorNote>}
@@ -2341,23 +2373,27 @@ function WatchlistsTab({ profiles, roots }: { profiles: MovieProfile[]; roots: R
                   {list.error && <p className="text-xs text-destructive">{list.error}</p>}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={syncing === list.id}
-                    onClick={() => void sync(list)}
-                  >
-                    {syncing === list.id ? (
-                      <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-                    ) : (
-                      <RefreshCwIcon data-icon="inline-start" />
-                    )}
-                    {syncing === list.id ? 'Syncing…' : 'Sync now'}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(list)}>
-                    <PencilIcon data-icon="inline-start" />
-                    Edit
-                  </Button>
+                  {canWrite && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={syncing === list.id}
+                      onClick={() => void sync(list)}
+                    >
+                      {syncing === list.id ? (
+                        <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                      ) : (
+                        <RefreshCwIcon data-icon="inline-start" />
+                      )}
+                      {syncing === list.id ? 'Syncing…' : 'Sync now'}
+                    </Button>
+                  )}
+                  {canWrite && (
+                    <Button size="sm" variant="ghost" onClick={() => setEditing(list)}>
+                      <PencilIcon data-icon="inline-start" />
+                      Edit
+                    </Button>
+                  )}
                 </div>
               </div>
               {confirming === list.id && (
@@ -2383,17 +2419,19 @@ function WatchlistsTab({ profiles, roots }: { profiles: MovieProfile[]; roots: R
                   </Button>
                 </div>
               )}
-              <div className="flex justify-end">
-                <Button size="sm" variant="ghost" onClick={() => setConfirming(list.id)}>
-                  Delete watchlist
-                </Button>
-              </div>
+              {canWrite && (
+                <div className="flex justify-end">
+                  <Button size="sm" variant="ghost" onClick={() => setConfirming(list.id)}>
+                    Delete watchlist
+                  </Button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
       )}
 
-      {editing && (
+      {canWrite && editing && (
         <WatchlistDialog
           list={editing}
           profiles={profiles}
@@ -2426,6 +2464,8 @@ function MovieDetailDialog({
   movie,
   profiles,
   roots,
+  canWrite,
+  canReadSettings,
   autoSearch,
   onClose,
   onSave,
@@ -2437,6 +2477,8 @@ function MovieDetailDialog({
   movie: Movie
   profiles: MovieProfile[]
   roots: RootFolder[]
+  canWrite: boolean
+  canReadSettings: boolean
   autoSearch: boolean
   onClose: () => void
   onSave: (movie: Movie) => Promise<Movie>
@@ -2516,13 +2558,13 @@ function MovieDetailDialog({
   }
 
   useEffect(() => {
-    if (!autoSearch) return
+    if (!autoSearch || !canWrite) return
     const controller = new AbortController()
     searchController.current = controller
     // eslint-disable-next-line react-hooks/set-state-in-effect -- results are applied after the request settles
     void runReleaseSearch(controller.signal)
     return () => controller.abort()
-  }, [autoSearch, runReleaseSearch])
+  }, [autoSearch, canWrite, runReleaseSearch])
 
   useEffect(() => () => searchController.current?.abort(), [])
 
@@ -2694,7 +2736,7 @@ function MovieDetailDialog({
           action={<span className="text-xs text-muted-foreground">{movie.lastSearchAt ? `Last search ${formatAge(movie.lastSearchAt)}` : 'Never searched'}</span>}
         >
           {files.length === 0 ? (
-            <EmptyState>No file imported yet. Search releases to download this movie.</EmptyState>
+            <EmptyState>No file imported yet.{canWrite ? ' Search releases to download this movie.' : ''}</EmptyState>
           ) : (
             <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
               {files.map((file) => (
@@ -2753,102 +2795,137 @@ function MovieDetailDialog({
             </span>
           }
         >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Checkbox
-              id="detail-monitored"
-              label="Monitored"
-              description="Search for releases and upgrades automatically."
-              checked={form.monitored}
-              onChange={(monitored) => setForm({ ...form, monitored })}
-            />
-            <div className="space-y-2">
-              <label htmlFor="detail-profile" className="text-sm font-medium">
-                Quality profile
-              </label>
-              <Select
-                id="detail-profile"
-                className="h-9 w-full"
-                value={form.profileId}
-                onChange={(event) => setForm({ ...form, profileId: event.target.value })}
-              >
-                <option value="">Default</option>
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="detail-root" className="text-sm font-medium">
-                Root folder
-              </label>
-              <Select
-                id="detail-root"
-                className="h-9 w-full"
-                value={form.rootId}
-                onChange={(event) => setForm({ ...form, rootId: event.target.value })}
-              >
-                <option value="">Default</option>
-                {roots.map((root) => (
-                  <option key={root.id || root.path} value={root.id}>
-                    {root.path}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="detail-tags" className="text-sm font-medium">
-                Tags
-              </label>
-              <Input
-                id="detail-tags"
-                value={form.tags}
-                placeholder="4k, kids"
-                onChange={(event) => setForm({ ...form, tags: event.target.value })}
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <label htmlFor="detail-collection" className="text-sm font-medium">
-                Collection
-              </label>
-              <Input
-                id="detail-collection"
-                value={form.collection}
-                placeholder="The Matrix Collection"
-                onChange={(event) => setForm({ ...form, collection: event.target.value })}
-              />
-            </div>
-          </div>
-          {(profiles.length === 0 || roots.length === 0) && (
-            <p className="flex items-center gap-2 text-xs text-amber-300">
-              <CircleAlertIcon className="size-4 shrink-0" />
-              {roots.length === 0 ? (
-                <>
-                  Add a root folder in{' '}
-                  <a href="#storage" className="underline underline-offset-4">
-                    Storage & Paths
-                  </a>
-                  .
-                </>
+          {canWrite ? (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Checkbox
+                  id="detail-monitored"
+                  label="Monitored"
+                  description="Search for releases and upgrades automatically."
+                  checked={form.monitored}
+                  onChange={(monitored) => setForm({ ...form, monitored })}
+                />
+                {canReadSettings && (
+                  <div className="space-y-2">
+                    <label htmlFor="detail-profile" className="text-sm font-medium">
+                      Quality profile
+                    </label>
+                    <Select
+                      id="detail-profile"
+                      className="h-9 w-full"
+                      value={form.profileId}
+                      onChange={(event) => setForm({ ...form, profileId: event.target.value })}
+                    >
+                      <option value="">Default</option>
+                      {profiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+                {canReadSettings && (
+                  <div className="space-y-2">
+                    <label htmlFor="detail-root" className="text-sm font-medium">
+                      Root folder
+                    </label>
+                    <Select
+                      id="detail-root"
+                      className="h-9 w-full"
+                      value={form.rootId}
+                      onChange={(event) => setForm({ ...form, rootId: event.target.value })}
+                    >
+                      <option value="">Default</option>
+                      {roots.map((root) => (
+                        <option key={root.id || root.path} value={root.id}>
+                          {root.path}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label htmlFor="detail-tags" className="text-sm font-medium">
+                    Tags
+                  </label>
+                  <Input
+                    id="detail-tags"
+                    value={form.tags}
+                    placeholder="4k, kids"
+                    onChange={(event) => setForm({ ...form, tags: event.target.value })}
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <label htmlFor="detail-collection" className="text-sm font-medium">
+                    Collection
+                  </label>
+                  <Input
+                    id="detail-collection"
+                    value={form.collection}
+                    placeholder="The Matrix Collection"
+                    onChange={(event) => setForm({ ...form, collection: event.target.value })}
+                  />
+                </div>
+              </div>
+              {!canReadSettings ? (
+                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <CircleAlertIcon className="size-4 shrink-0" />
+                  The current root folder and quality profile stay as configured on the server.
+                </p>
               ) : (
-                'Create a quality profile in the Profiles tab.'
+                (profiles.length === 0 || roots.length === 0) && (
+                  <p className="flex items-center gap-2 text-xs text-amber-300">
+                    <CircleAlertIcon className="size-4 shrink-0" />
+                    {roots.length === 0 ? (
+                      <>
+                        Add a root folder in{' '}
+                        <a href="#storage" className="underline underline-offset-4">
+                          Storage & Paths
+                        </a>
+                        .
+                      </>
+                    ) : (
+                      'Create a quality profile in the Profiles tab.'
+                    )}
+                  </p>
+                )
               )}
-            </p>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>
+                  {saving ? (
+                    <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                  ) : (
+                    <SaveIcon data-icon="inline-start" />
+                  )}
+                  Save changes
+                </Button>
+              </div>
+            </>
+          ) : (
+            <dl className="grid gap-2 sm:grid-cols-2">
+              <MetaRow label="Monitoring">{movie.monitored ? 'Monitored' : 'Unmonitored'}</MetaRow>
+              <MetaRow label="Quality profile">
+                {canReadSettings ? profileName(profiles, movie.profileId) : movie.profileId ? 'Configured profile' : 'Default'}
+              </MetaRow>
+              <MetaRow label="Root folder">
+                {canReadSettings
+                  ? roots.find((root) => root.id === movie.rootId)?.path || movie.rootId || 'Default'
+                  : movie.rootId
+                    ? 'Configured root folder'
+                    : 'Default'}
+              </MetaRow>
+              <MetaRow label="Tags">{tagsOf(movie).join(', ') || 'None'}</MetaRow>
+              <MetaRow label="Collection">{movie.collection || 'None'}</MetaRow>
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                Editing movie settings requires library write access.
+              </p>
+            </dl>
           )}
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>
-              {saving ? (
-                <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-              ) : (
-                <SaveIcon data-icon="inline-start" />
-              )}
-              Save changes
-            </Button>
-          </div>
         </Section>
 
-        <Section title="Actions">
+        {canWrite && (
+          <Section title="Actions">
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
               {refreshing ? (
@@ -2929,10 +3006,12 @@ function MovieDetailDialog({
               )}
             </div>
           )}
-        </Section>
+          </Section>
+        )}
 
-        <Section
-          title="Releases"
+        {canWrite && (
+          <Section
+            title="Releases"
           action={
             <Button size="sm" variant="outline" disabled={searching} onClick={() => void search()}>
               {searching ? (
@@ -3026,7 +3105,8 @@ function MovieDetailDialog({
               })}
             </ul>
           )}
-        </Section>
+          </Section>
+        )}
 
         <Section title="History">
           {historyError ? (
@@ -3114,11 +3194,13 @@ function manualTitle(fields: ManualFields): Title {
 function AddMovieDialog({
   profiles,
   roots,
+  canReadSettings,
   onClose,
   onAdded,
 }: {
   profiles: MovieProfile[]
   roots: RootFolder[]
+  canReadSettings: boolean
   onClose: () => void
   onAdded: (input: AddMovieInput) => Promise<Movie>
 }) {
@@ -3270,42 +3352,46 @@ function AddMovieDialog({
             checked={options.monitored}
             onChange={(monitored) => setOptions({ ...options, monitored })}
           />
-          <div className="space-y-2">
-            <label htmlFor="add-profile" className="text-sm font-medium">
-              Quality profile
-            </label>
-            <Select
-              id="add-profile"
-              className="h-9 w-full"
-              value={options.profileId}
-              onChange={(event) => setOptions({ ...options, profileId: event.target.value })}
-            >
-              <option value="">Default</option>
-              {profiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="add-root" className="text-sm font-medium">
-              Root folder
-            </label>
-            <Select
-              id="add-root"
-              className="h-9 w-full"
-              value={options.rootId}
-              onChange={(event) => setOptions({ ...options, rootId: event.target.value })}
-            >
-              <option value="">Default</option>
-              {roots.map((root) => (
-                <option key={root.id || root.path} value={root.id}>
-                  {root.path}
-                </option>
-              ))}
-            </Select>
-          </div>
+          {canReadSettings && (
+            <div className="space-y-2">
+              <label htmlFor="add-profile" className="text-sm font-medium">
+                Quality profile
+              </label>
+              <Select
+                id="add-profile"
+                className="h-9 w-full"
+                value={options.profileId}
+                onChange={(event) => setOptions({ ...options, profileId: event.target.value })}
+              >
+                <option value="">Default</option>
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+          {canReadSettings && (
+            <div className="space-y-2">
+              <label htmlFor="add-root" className="text-sm font-medium">
+                Root folder
+              </label>
+              <Select
+                id="add-root"
+                className="h-9 w-full"
+                value={options.rootId}
+                onChange={(event) => setOptions({ ...options, rootId: event.target.value })}
+              >
+                <option value="">Default</option>
+                {roots.map((root) => (
+                  <option key={root.id || root.path} value={root.id}>
+                    {root.path}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div className="space-y-2">
             <label htmlFor="add-tags" className="text-sm font-medium">
               Tags
@@ -3328,15 +3414,22 @@ function AddMovieDialog({
               onChange={(event) => setOptions({ ...options, collection: event.target.value })}
             />
           </div>
-          {roots.length === 0 && (
-            <p className="flex items-center gap-2 text-xs text-amber-300 sm:col-span-2">
+          {!canReadSettings ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
               <CircleAlertIcon className="size-4 shrink-0" />
-              No root folder configured. Add one in{' '}
-              <a href="#storage" className="underline underline-offset-4">
-                Storage & Paths
-              </a>{' '}
-              so imports have a destination.
+              Movies use the server's default root folder and quality profile.
             </p>
+          ) : (
+            roots.length === 0 && (
+              <p className="flex items-center gap-2 text-xs text-amber-300 sm:col-span-2">
+                <CircleAlertIcon className="size-4 shrink-0" />
+                No root folder configured. Add one in{' '}
+                <a href="#storage" className="underline underline-offset-4">
+                  Storage & Paths
+                </a>{' '}
+                so imports have a destination.
+              </p>
+            )
           )}
         </div>
 
@@ -3754,6 +3847,10 @@ function ScanDialog({
 type Tab = 'library' | 'wanted' | 'calendar' | 'profiles' | 'watchlists' | 'activity'
 
 export function MoviesPage() {
+  const { can } = useAuth()
+  const canWrite = can(accessPermissions.libraryWrite)
+  const canReadSettings = can(accessPermissions.settingsRead)
+  const canWriteSettings = can(accessPermissions.settingsWrite)
   const [movies, setMovies] = useState<Movie[] | null>(null)
   const [profiles, setProfiles] = useState<MovieProfile[]>([])
   const [config, setConfig] = useState<MovieConfig | null>(null)
@@ -3798,6 +3895,14 @@ export function MoviesPage() {
       setLoadError(errorMessage(cause))
     }
 
+    // Profiles and configuration sit behind settings.read; the catalog still loads without them.
+    if (!canReadSettings) {
+      setProfiles([])
+      setConfig(null)
+      setSetupError('')
+      return
+    }
+
     const [profilesResult, configResult] = await Promise.allSettled([
       moviesApi.profiles(request.signal),
       moviesApi.config(request.signal),
@@ -3807,7 +3912,7 @@ export function MoviesPage() {
     if (configResult.status === 'fulfilled') setConfig(configResult.value)
     const failed = [profilesResult, configResult].find((result) => result.status === 'rejected')
     setSetupError(failed ? errorMessage(failed.reason) : '')
-  }, [])
+  }, [canReadSettings])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- state is set only after the fetch settles
@@ -3876,10 +3981,14 @@ export function MoviesPage() {
     setDetailId(id)
   }, [])
 
-  const searchMovie = useCallback((id: string) => {
-    setDetailSearch(true)
-    setDetailId(id)
-  }, [])
+  const searchMovie = useCallback(
+    (id: string) => {
+      // Release search needs library.write; readers open the details without a search.
+      setDetailSearch(canWrite)
+      setDetailId(id)
+    },
+    [canWrite],
+  )
 
   const live = useMemo(() => (movies ?? []).some((movie) => activeStatuses.has(stateKey(movie))), [movies])
   const shouldPoll = live || watched.length > 0
@@ -3915,15 +4024,19 @@ export function MoviesPage() {
     { id: 'library', label: 'Library' },
     { id: 'wanted', label: 'Wanted', badge: wantedCount },
     { id: 'calendar', label: 'Calendar' },
-    { id: 'profiles', label: 'Profiles', badge: profiles.length },
-    { id: 'watchlists', label: 'Watchlists' },
-    { id: 'activity', label: 'Activity' },
   ]
+  if (canReadSettings) {
+    tabs.push({ id: 'profiles', label: 'Profiles', badge: profiles.length })
+    tabs.push({ id: 'watchlists', label: 'Watchlists' })
+  }
+  tabs.push({ id: 'activity', label: 'Activity' })
+  // A tab can disappear when permissions change; fall back instead of rendering an empty panel.
+  const activeTab = tabs.some((item) => item.id === tab) ? tab : 'library'
 
   const onTabKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
     event.preventDefault()
-    const index = tabs.findIndex((item) => item.id === tab)
+    const index = tabs.findIndex((item) => item.id === activeTab)
     const offset = event.key === 'ArrowRight' ? 1 : -1
     setTab(tabs[(index + offset + tabs.length) % tabs.length].id)
   }
@@ -3938,10 +4051,12 @@ export function MoviesPage() {
             <Button asChild size="sm" variant="outline">
               <a href="#usenet">View queue</a>
             </Button>
-            <Button size="sm" onClick={() => setAddOpen(true)}>
-              <PlusIcon data-icon="inline-start" />
-              Add movie
-            </Button>
+            {canWrite && (
+              <Button size="sm" onClick={() => setAddOpen(true)}>
+                <PlusIcon data-icon="inline-start" />
+                Add movie
+              </Button>
+            )}
           </div>
         }
       />
@@ -3981,13 +4096,13 @@ export function MoviesPage() {
                 type="button"
                 role="tab"
                 id={`movies-tab-${item.id}`}
-                aria-selected={tab === item.id}
+                aria-selected={activeTab === item.id}
                 aria-controls="movies-panel"
-                tabIndex={tab === item.id ? 0 : -1}
+                tabIndex={activeTab === item.id ? 0 : -1}
                 onClick={() => setTab(item.id)}
                 className={cn(
                   '-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                  tab === item.id
+                  activeTab === item.id
                     ? 'border-primary text-foreground'
                     : 'border-transparent text-muted-foreground hover:text-foreground',
                 )}
@@ -4002,37 +4117,42 @@ export function MoviesPage() {
             ))}
           </div>
 
-          <div role="tabpanel" id="movies-panel" aria-labelledby={`movies-tab-${tab}`}>
-            <div hidden={tab !== 'library'}>
+          <div role="tabpanel" id="movies-panel" aria-labelledby={`movies-tab-${activeTab}`}>
+            <div hidden={activeTab !== 'library'}>
               <LibraryView
                 movies={movies}
                 profiles={profiles}
                 roots={roots}
+                canWrite={canWrite}
+                canReadSettings={canReadSettings}
                 onOpenMovie={openMovie}
                 onAdd={() => setAddOpen(true)}
                 onScan={() => setScanOpen(true)}
                 onBulkEdit={bulkEdit}
               />
             </div>
-            {tab === 'wanted' && <WantedList movies={movies} onOpenMovie={searchMovie} />}
-            {tab === 'calendar' && <CalendarTab onOpenMovie={openMovie} />}
-            {tab === 'profiles' && <QualityProfilesTab profiles={profiles} onChanged={() => void reload()} />}
-            {tab === 'watchlists' && <WatchlistsTab profiles={profiles} roots={roots} />}
-            {tab === 'activity' && <ActivityTab movies={movies} onOpenMovie={openMovie} />}
+            {activeTab === 'wanted' && <WantedList movies={movies} canWrite={canWrite} onOpenMovie={searchMovie} />}
+            {activeTab === 'calendar' && <CalendarTab onOpenMovie={openMovie} />}
+            {activeTab === 'profiles' && (
+              <QualityProfilesTab profiles={profiles} canWrite={canWriteSettings} onChanged={() => void reload()} />
+            )}
+            {activeTab === 'watchlists' && <WatchlistsTab profiles={profiles} roots={roots} canWrite={canWriteSettings} />}
+            {activeTab === 'activity' && <ActivityTab movies={movies} onOpenMovie={openMovie} />}
           </div>
         </>
       )}
 
-      {addOpen && (
+      {canWrite && addOpen && (
         <AddMovieDialog
           profiles={profiles}
           roots={roots}
+          canReadSettings={canReadSettings}
           onClose={() => setAddOpen(false)}
           onAdded={addMovie}
         />
       )}
 
-      {scanOpen && (
+      {canWrite && canReadSettings && scanOpen && (
         <ScanDialog
           movies={movies ?? []}
           roots={roots}
@@ -4048,6 +4168,8 @@ export function MoviesPage() {
           movie={detailMovie}
           profiles={profiles}
           roots={roots}
+          canWrite={canWrite}
+          canReadSettings={canReadSettings}
           autoSearch={detailSearch}
           onClose={() => {
             setDetailId(null)

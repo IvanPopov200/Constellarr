@@ -18,6 +18,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { api, errorMessage, type Sources, type SourceTestResult } from '@/lib/api'
+import { accessPermissions } from '@/lib/auth-api'
+import { useAuth } from '@/lib/auth-context'
 
 function ConfiguredBadge({ configured }: { configured: boolean }) {
   return (
@@ -67,6 +69,9 @@ function TestResult({ label, result }: { label: string; result: SourceTestResult
 }
 
 export function SourcesCard() {
+  const { can } = useAuth()
+  const canWrite = can(accessPermissions.settingsWrite)
+  const canRead = can(accessPermissions.settingsRead)
   const [sources, setSources] = useState<Sources | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
@@ -86,11 +91,12 @@ export function SourcesCard() {
   }, [])
 
   useEffect(() => {
+    if (!canRead) return
     const controller = new AbortController()
     // eslint-disable-next-line react-hooks/set-state-in-effect -- state is set only after the fetch settles
     void load(controller.signal)
     return () => controller.abort()
-  }, [load])
+  }, [canRead, load])
 
   const runTest = async () => {
     setTesting(true)
@@ -108,6 +114,8 @@ export function SourcesCard() {
   const configuredCount = sources
     ? Number(sources.indexer.configured) + Number(sources.usenet.configured)
     : 0
+
+  if (!canRead) return null
 
   return (
     <Card size="sm">
@@ -178,15 +186,17 @@ export function SourcesCard() {
         </div>
 
         <div>
-          <Button size="sm" variant="outline" disabled={testing} onClick={() => void runTest()}>
-            {testing && (
-              <LoaderCircleIcon
-                data-icon="inline-start"
-                className="animate-spin motion-reduce:animate-none"
-              />
-            )}
-            {testing ? 'Testing…' : 'Test connections'}
-          </Button>
+          {canWrite && (
+            <Button size="sm" variant="outline" disabled={testing} onClick={() => void runTest()}>
+              {testing && (
+                <LoaderCircleIcon
+                  data-icon="inline-start"
+                  className="animate-spin motion-reduce:animate-none"
+                />
+              )}
+              {testing ? 'Testing…' : 'Test connections'}
+            </Button>
+          )}
         </div>
 
         {testError && (

@@ -48,12 +48,14 @@ export function AddSeriesDialog({
   active,
   profiles,
   roots,
+  canReadSettings,
   onClose,
   onAdded,
 }: {
   active: boolean
   profiles: MovieProfile[]
   roots: RootFolder[]
+  canReadSettings: boolean
   onClose: () => void
   onAdded: (input: AddSeriesInput) => Promise<Series>
 }) {
@@ -212,42 +214,46 @@ export function AddSeriesDialog({
               ))}
             </Select>
           </div>
-          <div className="space-y-2">
-            <label htmlFor="tv-add-profile" className="text-sm font-medium">
-              Quality profile
-            </label>
-            <Select
-              id="tv-add-profile"
-              className="w-full"
-              value={options.profileId}
-              onChange={(event) => setOptions({ ...options, profileId: event.target.value })}
-            >
-              <option value="">Default</option>
-              {profiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="tv-add-root" className="text-sm font-medium">
-              Root folder
-            </label>
-            <Select
-              id="tv-add-root"
-              className="w-full"
-              value={options.rootId}
-              onChange={(event) => setOptions({ ...options, rootId: event.target.value })}
-            >
-              <option value="">Default</option>
-              {roots.map((root) => (
-                <option key={root.id || root.path} value={root.id}>
-                  {root.path}
-                </option>
-              ))}
-            </Select>
-          </div>
+          {canReadSettings && (
+            <div className="space-y-2">
+              <label htmlFor="tv-add-profile" className="text-sm font-medium">
+                Quality profile
+              </label>
+              <Select
+                id="tv-add-profile"
+                className="w-full"
+                value={options.profileId}
+                onChange={(event) => setOptions({ ...options, profileId: event.target.value })}
+              >
+                <option value="">Default</option>
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+          {canReadSettings && (
+            <div className="space-y-2">
+              <label htmlFor="tv-add-root" className="text-sm font-medium">
+                Root folder
+              </label>
+              <Select
+                id="tv-add-root"
+                className="w-full"
+                value={options.rootId}
+                onChange={(event) => setOptions({ ...options, rootId: event.target.value })}
+              >
+                <option value="">Default</option>
+                {roots.map((root) => (
+                  <option key={root.id || root.path} value={root.id}>
+                    {root.path}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div className="space-y-2">
             <label htmlFor="tv-add-tags" className="text-sm font-medium">
               Tags
@@ -259,15 +265,22 @@ export function AddSeriesDialog({
               onChange={(event) => setOptions({ ...options, tags: event.target.value })}
             />
           </div>
-          {roots.length === 0 && (
-            <p className="flex items-center gap-2 text-xs text-amber-300 sm:col-span-2">
+          {!canReadSettings ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
               <CircleAlertIcon className="size-4 shrink-0" />
-              No TV root folder configured. Add one in{' '}
-              <a href="#storage" className="underline underline-offset-4">
-                Storage & Paths
-              </a>{' '}
-              so imports have a destination.
+              Series use the server's default TV root folder and quality profile.
             </p>
+          ) : (
+            roots.length === 0 && (
+              <p className="flex items-center gap-2 text-xs text-amber-300 sm:col-span-2">
+                <CircleAlertIcon className="size-4 shrink-0" />
+                No TV root folder configured. Add one in{' '}
+                <a href="#storage" className="underline underline-offset-4">
+                  Storage & Paths
+                </a>{' '}
+                so imports have a destination.
+              </p>
+            )
           )}
         </div>
 

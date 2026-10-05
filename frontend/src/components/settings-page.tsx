@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Check, Database, Eye, EyeOff, Folder, HardDrive, KeyRound, LoaderCircle, Radio, RefreshCw, Save, Search, ShieldCheck } from 'lucide-react'
+import { Check, Database, Eye, EyeOff, Folder, HardDrive, KeyRound, LoaderCircle, Radio, RefreshCw, Save, Search, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { BackendStatus } from '@/components/backend-status'
 import { MovieConfiguration } from '@/components/movie-configuration'
 import { TVConfiguration } from '@/components/tv-configuration'
@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { api, errorMessage, type Settings, type SettingsUpdate, type SourceTestResult } from '@/lib/api'
+import { accessPermissions } from '@/lib/auth-api'
+import { useAuth } from '@/lib/auth-context'
 
 type Draft = SettingsUpdate & { fallbacks: string }
 
@@ -46,6 +48,9 @@ function TestResult({ result }: { result?: SourceTestResult }) {
 }
 
 export function SettingsPage({ section }: { section: 'connections' | 'storage' | 'system' }) {
+  const { can } = useAuth()
+  const canWrite = can(accessPermissions.settingsWrite)
+  const canRead = can(accessPermissions.settingsRead)
   const [saved, setSaved] = useState<Settings | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [error, setError] = useState('')
@@ -56,12 +61,13 @@ export function SettingsPage({ section }: { section: 'connections' | 'storage' |
   const dirty = saved !== null && draft !== null && JSON.stringify(draft) !== JSON.stringify(toDraft(saved))
 
   useEffect(() => {
+    if (!canRead) return
     const controller = new AbortController()
     api.getSettings(controller.signal).then(settings => { setSaved(settings); setDraft(toDraft(settings)) })
       .catch(cause => { if (!controller.signal.aborted) setError(errorMessage(cause)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [])
+  }, [canRead])
 
   useEffect(() => {
     if (!dirty) return
@@ -74,7 +80,7 @@ export function SettingsPage({ section }: { section: 'connections' | 'storage' |
 
   async function save(event: FormEvent) {
     event.preventDefault()
-    if (!draft) return
+    if (!draft || !canWrite) return
     setBusy('save'); setError(''); setNotice('')
     try {
       const { fallbacks, indexer, usenet } = draft
@@ -91,10 +97,26 @@ export function SettingsPage({ section }: { section: 'connections' | 'storage' |
   }
 
   async function test() {
+    if (!canWrite) return
     setBusy('test'); setTests(null); setError(''); setNotice('')
     try { setTests(await api.testSources()) }
     catch (cause) { setError(errorMessage(cause)) }
     finally { setBusy(null) }
+  }
+
+  // Without settings.read nothing on this page can be shown or fetched.
+  if (!canRead) {
+    return (
+      <div className="space-y-7">
+        <header className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        </header>
+        <p role="status" className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+          <ShieldAlert className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+          Server and connection settings require the settings read permission. Ask an administrator for access.
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -109,12 +131,13 @@ export function SettingsPage({ section }: { section: 'connections' | 'storage' |
       {notice && section === 'connections' && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-500"><Check className="mr-2 inline size-4" />{notice}</p>}
       {loading && <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading settings…</p>}
       {saved && draft && <form onSubmit={save} className="space-y-6">
+        <fieldset disabled={!canWrite} className="contents">
           {section === 'connections' && <div className="space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-4" />Credentials stay on your server.</p>
-              <Button type="button" variant="outline" size="sm" onClick={test} disabled={Boolean(busy) || dirty} title={dirty ? 'Save or discard changes before testing.' : undefined}>
+              {canWrite && <Button type="button" variant="outline" size="sm" onClick={test} disabled={Boolean(busy) || dirty} title={dirty ? 'Save or discard changes before testing.' : undefined}>
                 {busy === 'test' ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}Test connections
-              </Button>
+              </Button>}
             </div>
             <div className="grid items-start gap-5 xl:grid-cols-2">
               <Card className="shadow-none">
@@ -160,15 +183,17 @@ export function SettingsPage({ section }: { section: 'connections' | 'storage' |
             <BackendStatus />
             <Card className="shadow-none"><CardHeader className="border-b border-border"><CardTitle className="flex items-center gap-2"><Database className="size-4 text-muted-foreground" />Configuration</CardTitle><CardDescription>One place for your media setup.</CardDescription></CardHeader><CardContent className="gap-4 text-sm"><p className="text-muted-foreground">Connections are saved in PostgreSQL and restored on restart. Server environment values provide the initial defaults.</p><p className="flex items-center gap-2 text-xs text-muted-foreground"><KeyRound className="size-4 shrink-0" />Saved keys and passwords are never sent back to this interface.</p></CardContent></Card>
           </div>}
-        {section === 'connections' && <footer className="sticky bottom-0 mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 py-4 backdrop-blur-sm">
+        {section === 'connections' && canWrite && <footer className="sticky bottom-0 mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-background/95 py-4 backdrop-blur-sm">
           <p className="text-xs text-muted-foreground" role="status">{dirty ? 'You have unsaved changes.' : 'All changes saved.'}</p>
           <div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={!dirty || Boolean(busy)} onClick={() => { setDraft(toDraft(saved)); setError(''); setNotice(''); setTests(null) }}>Discard changes</Button><Button type="submit" size="sm" disabled={!dirty || Boolean(busy)}>{busy === 'save' ? <LoaderCircle className="animate-spin" /> : <Save />}Save changes</Button></div>
         </footer>}
+        {section === 'connections' && !canWrite && <p className="mt-6 border-t border-border pt-4 text-xs text-muted-foreground">Your role can view these settings but not change them.</p>}
+        </fieldset>
       </form>}
-      <div hidden={section === 'system'} inert={section === 'system'}>
+      <div hidden={section === 'system' || !canRead} inert={section === 'system' || !canRead}>
         <MovieConfiguration section={section === 'storage' ? 'storage' : 'connections'} />
       </div>
-      <div hidden={section !== 'storage'} inert={section !== 'storage'}>
+      <div hidden={section !== 'storage' || !canRead} inert={section !== 'storage' || !canRead}>
         <TVConfiguration />
       </div>
     </div>

@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Checkbox, ErrorNote, Notice, Select } from '@/components/tv-ui'
 import { errorMessage } from '@/lib/api'
+import { accessPermissions } from '@/lib/auth-api'
+import { useAuth } from '@/lib/auth-context'
 import { templateTokens } from '@/components/tv-shared'
 import { tvApi, type TvConfig } from '@/lib/tv-api'
 
@@ -21,6 +23,9 @@ function optionsWith(current: string, options: { value: string; label: string }[
 }
 
 export function TVConfiguration() {
+  const { can } = useAuth()
+  const canWrite = can(accessPermissions.settingsWrite)
+  const canRead = can(accessPermissions.settingsRead)
   const [saved, setSaved] = useState<TvConfig | null>(null)
   const [draft, setDraft] = useState<TvConfig | null>(null)
   const [loading, setLoading] = useState(true)
@@ -30,6 +35,7 @@ export function TVConfiguration() {
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
+    if (!canRead) return
     const controller = new AbortController()
     tvApi
       .config(controller.signal)
@@ -46,7 +52,7 @@ export function TVConfiguration() {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [reloadKey])
+  }, [canRead, reloadKey])
 
   const dirty = saved !== null && draft !== null && JSON.stringify(draft) !== JSON.stringify(saved)
   const rootsValid = draft === null || draft.rootFolders.every((root) => root.path.trim().length > 0)
@@ -60,7 +66,7 @@ export function TVConfiguration() {
   async function save(event: FormEvent) {
     event.preventDefault()
     event.stopPropagation()
-    if (!draft) return
+    if (!draft || !canWrite) return
     setBusy(true)
     setError('')
     setNotice('')
@@ -76,6 +82,8 @@ export function TVConfiguration() {
       setBusy(false)
     }
   }
+
+  if (!canRead) return null
 
   if (loading && !draft) {
     return (
@@ -306,29 +314,33 @@ export function TVConfiguration() {
         <p className="text-xs text-muted-foreground" role="status">
           {dirty ? 'You have unsaved TV settings.' : 'TV settings are saved.'}
         </p>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!dirty || busy}
-            onClick={() => {
-              setDraft(saved)
-              setError('')
-              setNotice('')
-            }}
-          >
-            Discard
-          </Button>
-          <Button type="submit" size="sm" disabled={!dirty || busy || !rootsValid}>
-            {busy ? (
-              <LoaderCircle className="animate-spin motion-reduce:animate-none" />
-            ) : (
-              <Save />
-            )}
-            Save TV settings
-          </Button>
-        </div>
+        {canWrite ? (
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!dirty || busy}
+              onClick={() => {
+                setDraft(saved)
+                setError('')
+                setNotice('')
+              }}
+            >
+              Discard
+            </Button>
+            <Button type="submit" size="sm" disabled={!dirty || busy || !rootsValid}>
+              {busy ? (
+                <LoaderCircle className="animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Save />
+              )}
+              Save TV settings
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Your role can view TV settings but not change them.</p>
+        )}
       </div>
     </form>
   )
