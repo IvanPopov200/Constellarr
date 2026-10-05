@@ -60,6 +60,7 @@ type OutputFile struct {
 
 type Job struct {
 	ID              string       `json:"id"`
+	Protocol        string       `json:"protocol"`
 	ReleaseID       string       `json:"releaseId"`
 	Title           string       `json:"title"`
 	Status          string       `json:"status"`
@@ -81,6 +82,7 @@ type Manager struct {
 	configMu sync.RWMutex
 	cfg      Config
 	indexer  *indexer.Client
+	torrents TorrentSource
 	updateMu sync.Mutex
 
 	started  atomic.Bool
@@ -201,6 +203,17 @@ func (m *Manager) Add(ctx context.Context, releaseID, title string) (Job, error)
 	if !errors.Is(err, ErrNotFound) {
 		return Job{}, err
 	}
+	if strings.HasPrefix(releaseID, TorrentPrefix) {
+		source := m.torrentSource()
+		if source == nil {
+			return Job{}, ErrNotConfigured
+		}
+		job, err := source.Add(ctx, releaseID, title)
+		if err != nil {
+			return Job{}, err
+		}
+		return m.saveTorrent(ctx, job, releaseID)
+	}
 	client := m.indexerClient()
 	if client == nil {
 		return Job{}, ErrNotConfigured
@@ -231,7 +244,19 @@ func (m *Manager) List(ctx context.Context) ([]Job, error) {
 }
 
 func (m *Manager) Get(ctx context.Context, id string) (Job, error) {
-	return m.jobByID(ctx, m.pool, id)
+	job, err := m.jobByID(ctx, m.pool, id)
+	if err != nil || job.Protocol != "torrent" {
+		return job, err
+	}
+	source := m.torrentSource()
+	if source == nil {
+		return Job{}, ErrNotConfigured
+	}
+	live, err := source.Get(ctx, id)
+	if err != nil {
+		return Job{}, err
+	}
+	return m.saveTorrent(ctx, live, job.ReleaseID)
 }
 
 func (m *Manager) Retry(ctx context.Context, id string) (Job, error) {
@@ -241,6 +266,17 @@ func (m *Manager) Retry(ctx context.Context, id string) (Job, error) {
 	}
 	if job.Status != statusFailed {
 		return Job{}, ErrConflict
+	}
+	if job.Protocol == "torrent" {
+		source := m.torrentSource()
+		if source == nil {
+			return Job{}, ErrNotConfigured
+		}
+		live, err := source.Retry(ctx, id)
+		if err != nil {
+			return Job{}, err
+		}
+		return m.saveTorrent(ctx, live, job.ReleaseID)
 	}
 	return m.requeueJob(ctx, m.pool, id)
 }
@@ -263,8 +299,8 @@ func (m *Manager) OpenFile(ctx context.Context, id, name string) (*os.File, erro
 	if !declared || name == "" || len(name) > maxOutputNameLen || !filepath.IsLocal(name) {
 		return nil, ErrNotFound
 	}
-	directory, ok := m.jobDir(job.ID, "output")
-	if !ok {
+	directory, err := m.OutputDirectory(job.ID)
+	if err != nil {
 		return nil, ErrNotFound
 	}
 	root, err := os.OpenRoot(directory)

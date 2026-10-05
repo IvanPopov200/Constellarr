@@ -567,6 +567,11 @@ func (s *Service) importJob(ctx context.Context, cfg Config, series Series, job 
 // publishSource imports one source file, recovering a moved destination through the journal.
 func (s *Service) publishSource(ctx context.Context, cfg Config, series Series, destRoot movies.RootFolder, sourceRoot, jobID string, source importSource, catalog []Episode, qualityName string, existing []string, journal map[string]journalFile) (library.File, error) {
 	opts := s.importOptions(cfg, series, destRoot, sourceRoot, episodeOption(catalog, source), qualityName, existing)
+	mode, err := s.Downloads.ImportMode(ctx, jobID, opts.Mode)
+	if err != nil {
+		return library.File{}, err
+	}
+	opts.Mode = mode
 	if handle, err := library.Open(sourceRoot, source.Name); err == nil {
 		info, statErr := handle.Stat()
 		handle.Close()

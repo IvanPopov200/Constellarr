@@ -29,7 +29,7 @@ func dbError(op string, cause error) error {
 	return fmt.Errorf("downloads: %s: %w", op, errDatabase)
 }
 
-const jobColumns = `id, release_id, title, status, bytes_done, bytes_total, segments_done, ` +
+const jobColumns = `id, release_id, title, protocol, status, bytes_done, bytes_total, segments_done, ` +
 	`segments_total, missing_segments, error, files, created_at, updated_at`
 
 type rowScanner interface {
@@ -42,7 +42,7 @@ func scanJob(row rowScanner, extra ...any) (Job, error) {
 		rawJSON []byte
 	)
 	dest := []any{
-		&job.ID, &job.ReleaseID, &job.Title, &job.Status, &job.BytesDone, &job.BytesTotal,
+		&job.ID, &job.ReleaseID, &job.Title, &job.Protocol, &job.Status, &job.BytesDone, &job.BytesTotal,
 		&job.SegmentsDone, &job.SegmentsTotal, &job.MissingSegments, &job.Error, &rawJSON,
 		&job.CreatedAt, &job.UpdatedAt,
 	}
@@ -85,7 +85,7 @@ func (m *Manager) jobByRelease(ctx context.Context, q querier, releaseID string)
 }
 
 func (m *Manager) listJobs(ctx context.Context, q querier) ([]Job, error) {
-	rows, err := q.Query(ctx, `SELECT `+jobColumns+` FROM downloads ORDER BY created_at DESC, id DESC LIMIT $1`, listLimit)
+	rows, err := q.Query(ctx, `SELECT `+jobColumns+` FROM downloads WHERE protocol = 'usenet' ORDER BY created_at DESC, id DESC LIMIT $1`, listLimit)
 	if err != nil {
 		return nil, dbError("list downloads", err)
 	}
@@ -126,7 +126,7 @@ func (m *Manager) claimNext(ctx context.Context, q querier) (Job, []byte, error)
 	defer tx.Rollback(ctx)
 	var id string
 	err = tx.QueryRow(ctx,
-		`SELECT id FROM downloads WHERE status = $1 ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1`,
+		`SELECT id FROM downloads WHERE protocol = 'usenet' AND status = $1 ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1`,
 		statusQueued).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Job{}, nil, ErrNotFound
@@ -150,7 +150,7 @@ func (m *Manager) claimNext(ctx context.Context, q querier) (Job, []byte, error)
 func (m *Manager) requeueInterrupted(ctx context.Context, q querier) error {
 	_, err := q.Exec(ctx,
 		`UPDATE downloads SET status = $1, updated_at = now()
-		 WHERE status IN ('downloading', 'verifying', 'repairing', 'extracting')`, statusQueued)
+		 WHERE protocol = 'usenet' AND status IN ('downloading', 'verifying', 'repairing', 'extracting')`, statusQueued)
 	if err != nil {
 		return dbError("requeue downloads", err)
 	}

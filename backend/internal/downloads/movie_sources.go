@@ -2,17 +2,26 @@ package downloads
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/IvanPopov200/Constellarr/backend/internal/indexer"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func (m *Manager) SearchMovie(ctx context.Context, imdbID, title string, year int) ([]indexer.Release, error) {
-	client := m.indexerClient()
-	if client == nil {
-		return nil, ErrNotConfigured
+	query := title
+	if year > 0 {
+		query = fmt.Sprintf("%s %d", title, year)
 	}
-	return client.SearchMovie(ctx, imdbID, title, year)
+	return m.searchMedia(ctx, query, func() ([]indexer.Release, error) {
+		client := m.indexerClient()
+		if client == nil {
+			return nil, ErrNotConfigured
+		}
+		return client.SearchMovie(ctx, imdbID, title, year)
+	})
 }
 
 func (m *Manager) openLibraryFile(ctx context.Context, id, name string) (*os.File, error) {
@@ -66,6 +75,19 @@ func (m *Manager) UnlinkedMovies(ctx context.Context) ([]Job, error) {
 }
 
 func (m *Manager) OutputDirectory(id string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	job, err := m.jobByID(ctx, m.pool, id)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return "", err
+	}
+	if job.Protocol == "torrent" {
+		source := m.torrentSource()
+		if source == nil {
+			return "", ErrNotConfigured
+		}
+		return source.OutputDirectory(id)
+	}
 	directory, ok := m.jobDir(id, "output")
 	if !ok {
 		return "", ErrInvalid

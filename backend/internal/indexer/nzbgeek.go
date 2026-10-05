@@ -30,6 +30,9 @@ const (
 
 type Release struct {
 	ID        string    `json:"id"`
+	Protocol  string    `json:"protocol,omitempty"`
+	Source    string    `json:"source,omitempty"`
+	Seeders   int       `json:"seeders,omitempty"`
 	Title     string    `json:"title"`
 	Size      int64     `json:"size"`
 	Published time.Time `json:"published"`
