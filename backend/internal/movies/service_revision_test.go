@@ -124,6 +124,50 @@ func TestRenamePreviewAndApplySingleFile(t *testing.T) {
 	}
 }
 
+func TestRenameFailureRestoresVideoAndSubtitles(t *testing.T) {
+	ctx := context.Background()
+	env := newTestEnv(t, "")
+	movie := env.manualMovie(t, "Rollback Film", 2004, false)
+	const original = "incoming/Rollback.Film.2004.mkv"
+	file := env.writeLibraryFile(t, original, "original-video")
+	subtitle := strings.TrimSuffix(original, ".mkv") + ".en.srt"
+	env.writeLibraryFile(t, subtitle, "original-subtitle")
+	movie.Files = []movies.File{file}
+	if _, err := env.service.Store.Save(ctx, movie); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := env.service.Rename(ctx, movie.ID, true)
+	if err != nil || len(preview.Files) != 1 {
+		t.Fatalf("preview = %+v, %v", preview, err)
+	}
+	locked, err := env.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer locked.Rollback(ctx)
+	if _, err := locked.Exec(ctx, `SELECT 1 FROM movies WHERE id = $1 FOR UPDATE`, movie.ID); err != nil {
+		t.Fatal(err)
+	}
+	limited, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	if _, err := env.service.Rename(limited, movie.ID, false); err == nil {
+		t.Fatal("rename unexpectedly committed against a locked catalog row")
+	}
+	for name, want := range map[string]string{original: "original-video", subtitle: "original-subtitle"} {
+		body, err := os.ReadFile(filepath.Join(env.rootPath(), name))
+		if err != nil || string(body) != want {
+			t.Fatalf("restored %s = %q, %v", name, body, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(env.rootPath(), preview.Files[0].To)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed rename retained its new video: %v", err)
+	}
+	stored, err := env.service.Store.Get(ctx, movie.ID)
+	if err != nil || len(stored.Files) != 1 || stored.Files[0].Path != original {
+		t.Fatalf("failed rename changed the catalog: %+v, %v", stored.Files, err)
+	}
+}
+
 func TestRenameAppliesMultipartSiblingsTogether(t *testing.T) {
 	ctx := context.Background()
 	env := newTestEnv(t, "")

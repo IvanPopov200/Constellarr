@@ -972,13 +972,32 @@ func (s *Service) Rename(ctx context.Context, id string, preview bool) (RenameRe
 	return result, nil
 }
 
+type movieRename struct {
+	root string
+	from string
+	to   string
+}
+
 func (s *Service) renameFiles(ctx context.Context, cfg Config, movie Movie, apply bool) (RenameResult, error) {
 	result := RenameResult{Files: make([]RenameFile, 0, len(movie.Files))}
 	files := append([]File{}, movie.Files...)
+	var moved []movieRename
+	restore := func(cause error) (RenameResult, error) {
+		for i := len(moved) - 1; i >= 0; i-- {
+			item := moved[i]
+			if err := library.MoveWithSubtitles(item.root, item.to, item.from); err != nil {
+				cause = errors.Join(cause, fmt.Errorf("movies: restore renamed file: %w", err))
+			}
+		}
+		return result, cause
+	}
 	if len(files) == 0 {
 		return result, nil
 	}
 	for _, root := range cfg.RootFolders {
+		if err := ctx.Err(); err != nil {
+			return restore(err)
+		}
 		present := make([]File, 0, len(files))
 		for _, file := range files {
 			if file.RootID == root.ID && filePresent(cfg, file) {
@@ -999,23 +1018,24 @@ func (s *Service) renameFiles(ctx context.Context, cfg Config, movie Movie, appl
 		}
 		sort.Slice(sources, func(i, j int) bool { return sources[i].Name < sources[j].Name })
 		opts := s.importOptions(cfg, movie, root, root.Path, qualityName)
+		opts.Mode = library.ModeMove
 		var outputs []library.File
 		if apply {
 			published, err := library.Import(ctx, opts, sources)
 			if err != nil {
-				return result, fmt.Errorf("movies: rename: %w", err)
+				return restore(fmt.Errorf("movies: rename: %w", err))
 			}
 			if len(published) != len(sources) {
-				return result, errors.New("movies: rename published an unexpected file set")
+				return restore(errors.New("movies: rename published an unexpected file set"))
 			}
 			outputs = published
 		} else {
 			planned, err := library.Preview(opts, sources)
 			if err != nil {
-				return result, fmt.Errorf("movies: rename: %w", err)
+				return restore(fmt.Errorf("movies: rename: %w", err))
 			}
 			if len(planned) != len(sources) {
-				return result, errors.New("movies: rename plan does not match the source files")
+				return restore(errors.New("movies: rename plan does not match the source files"))
 			}
 			outputs = planned
 		}
@@ -1024,7 +1044,7 @@ func (s *Service) renameFiles(ctx context.Context, cfg Config, movie Movie, appl
 			if !apply || source.Name == outputs[i].Path {
 				continue
 			}
-			s.moveJournalPath(ctx, root.Path, source.Name, outputs[i].Path)
+			moved = append(moved, movieRename{root.Path, source.Name, outputs[i].Path})
 			for j := range files {
 				if files[j].RootID == root.ID && files[j].Path == source.Name {
 					files[j].Path = outputs[i].Path
@@ -1033,19 +1053,43 @@ func (s *Service) renameFiles(ctx context.Context, cfg Config, movie Movie, appl
 				}
 			}
 		}
-		if apply {
-			if _, err := s.Store.Patch(ctx, movie.ID, map[string]any{"files": files, "error": ""}); err != nil {
-				return result, err
-			}
+	}
+	if apply && len(moved) > 0 {
+		if err := s.commitRename(ctx, movie.ID, files, moved); err != nil {
+			return restore(err)
 		}
 	}
 	return result, nil
 }
 
-func (s *Service) moveJournalPath(ctx context.Context, rootPath, from, to string) {
-	_, _ = s.Store.pool.Exec(ctx,
-		`UPDATE download_library_files SET path = $3 WHERE ready AND root_path = $1 AND path = $2`,
-		rootPath, from, to)
+func (s *Service) commitRename(ctx context.Context, id string, files []File, moved []movieRename) error {
+	body, err := encode(map[string]any{"files": files, "error": ""})
+	if err != nil {
+		return err
+	}
+	tx, err := s.Store.pool.Begin(ctx)
+	if err != nil {
+		return dbError("begin rename", err)
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `UPDATE movies SET data = data || $2::jsonb, updated_at = now() WHERE id = $1`, id, string(body))
+	if err != nil {
+		return dbError("save renamed files", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrNotFound
+	}
+	for _, item := range moved {
+		if _, err := tx.Exec(ctx,
+			`UPDATE download_library_files SET path = $3 WHERE ready AND root_path = $1 AND path = $2`,
+			item.root, item.from, item.to); err != nil {
+			return dbError("update rename journal", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return dbError("commit rename", err)
+	}
+	return nil
 }
 
 func (s *Service) Import(ctx context.Context, input ImportInput) (Movie, error) {
