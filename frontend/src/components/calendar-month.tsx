@@ -56,6 +56,7 @@ export function CalendarMonth({ month, entries, selectedDay, onSelectDay, today 
               key={key}
               type="button"
               onClick={() => onSelectDay(key)}
+              aria-label={`${new Date(year, monthIndex, day).toLocaleDateString(undefined, { dateStyle: 'full' })}, ${dayEntries.length} releases`}
               aria-pressed={selected}
               className={cn(
                 'min-h-24 space-y-1 border-r border-b border-border/50 p-1.5 text-left align-top transition-colors last:border-r-0 hover:bg-muted/40',

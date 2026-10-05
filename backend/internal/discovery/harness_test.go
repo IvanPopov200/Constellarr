@@ -76,15 +76,18 @@ type environment struct {
 	handler   http.Handler
 	music     *stubMusic
 	notified  *notifyLog
+	names     *nameLog
 	closeOnce sync.Once
 }
 
 type envOptions struct {
 	music     *stubMusic
 	metadata  *omdbFixture
+	indexer   *httptest.Server
 	withActor bool
 	withCan   bool
 	withStart bool
+	withNames bool
 }
 
 func newEnvironment(t *testing.T, opts envOptions) *environment {
@@ -98,7 +101,12 @@ func newEnvironment(t *testing.T, opts envOptions) *environment {
 	}
 	pool := testPool(t)
 	ctx := context.Background()
-	manager, err := downloads.New(ctx, pool, downloads.Config{Directory: t.TempDir()})
+	downloadConfig := downloads.Config{Directory: t.TempDir()}
+	if opts.indexer != nil {
+		downloadConfig.IndexerURL = opts.indexer.URL + "/api"
+		downloadConfig.APIKey = "synthetic-indexer-key"
+	}
+	manager, err := downloads.New(ctx, pool, downloadConfig)
 	if err != nil {
 		t.Fatalf("downloads.New: %v", err)
 	}
@@ -111,7 +119,11 @@ func newEnvironment(t *testing.T, opts envOptions) *environment {
 		t.Fatalf("tv.New: %v", err)
 	}
 	notified := &notifyLog{}
+	names := &nameLog{known: map[string]string{testUserA: "Ada Lovelace", testApprover: "Grace Hopper"}}
 	options := discovery.Options{Music: opts.music, Notify: notified.record}
+	if opts.withNames {
+		options.UserName = names.lookup
+	}
 	if opts.withActor {
 		options.Actor = testActor
 		options.Can = testCan
@@ -130,7 +142,7 @@ func newEnvironment(t *testing.T, opts envOptions) *environment {
 	service.Register(mux)
 	env := &environment{
 		pool: pool, movies: movieService, tv: tvService, service: service,
-		handler: mux, music: opts.music, notified: notified,
+		handler: mux, music: opts.music, notified: notified, names: names,
 	}
 	t.Cleanup(func() {
 		env.closeOnce.Do(func() {
@@ -195,6 +207,31 @@ func decode[T any](t *testing.T, raw []byte) T {
 	return value
 }
 
+// nameLog stands in for the auth directory and counts lookups.
+type nameLog struct {
+	mu    sync.Mutex
+	known map[string]string
+	calls []string
+}
+
+func (n *nameLog) lookup(_ context.Context, id string) string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.calls = append(n.calls, id)
+	return n.known[id]
+}
+
+func (n *nameLog) has(id string) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for _, call := range n.calls {
+		if call == id {
+			return true
+		}
+	}
+	return false
+}
+
 type notifyLog struct {
 	mu      sync.Mutex
 	records []discovery.Request
@@ -210,6 +247,45 @@ func (n *notifyLog) count() int {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return len(n.records)
+}
+
+func (n *notifyLog) failed() []discovery.Request {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	failures := []discovery.Request{}
+	for _, record := range n.records {
+		if record.Delivery.Phase == discovery.PhaseFailed {
+			failures = append(failures, record)
+		}
+	}
+	return failures
+}
+
+// newIndexerFixture serves one synthetic release so a grab can create a real download job.
+func newIndexerFixture(t *testing.T, releaseID, title string) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("t") {
+		case "movie", "search", "rss":
+			fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><item>
+<title>%s</title><guid isPermaLink="false">%s</guid>
+<pubDate>Mon, 02 Jan 2006 15:04:05 -0700</pubDate>
+<enclosure url="http://indexer.example/%s.nzb" length="4096" type="application/x-nzb"/>
+</item></channel></rss>`, title, releaseID, releaseID)
+		case "get":
+			if r.URL.Query().Get("id") != releaseID {
+				http.Error(w, "unexpected release", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/x-nzb")
+			fmt.Fprint(w, `<?xml version="1.0" encoding="UTF-8"?><nzb xmlns="http://www.newzbin.com/DTD/2003/nzb"></nzb>`)
+		default:
+			http.Error(w, "unexpected request", http.StatusBadRequest)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
 }
 
 // stubMusic stands in for the music module through the exported hook interface.

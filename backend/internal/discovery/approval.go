@@ -206,7 +206,7 @@ func (s *Service) finishApproval(ctx context.Context, id string) (Request, error
 	if current.Status != StatusApproving {
 		// A decision landed while the module was adding the media; keep that decision and note the outcome.
 		if err := s.addEvent(writeCtx, tx, current.ID, current.DecidedBy, "library-added", current.Status, current.Status,
-			sanitize("Added to the library as "+libraryID)); err != nil {
+			"The media was added to the library"); err != nil {
 			return Request{}, err
 		}
 		if err := tx.Commit(writeCtx); err != nil {
@@ -223,7 +223,7 @@ func (s *Service) finishApproval(ctx context.Context, id string) (Request, error
 		return Request{}, err
 	}
 	if err := s.addEvent(writeCtx, tx, current.ID, current.DecidedBy, "approved", StatusApproving, StatusApproved,
-		sanitize("Added to the library as "+libraryID)); err != nil {
+		"The media was added to the library"); err != nil {
 		return Request{}, err
 	}
 	if err := tx.Commit(writeCtx); err != nil {

@@ -291,6 +291,17 @@ func TestApprovalEditsProfileRootAndMonitoring(t *testing.T) {
 	if library[0].Monitored || library[0].ProfileID != profileID || library[0].RootID != rootID {
 		t.Fatalf("approved movie did not keep the approver's edits: %+v", library[0])
 	}
+	// An unmonitored approval must not start a search, even when the automation runs with force.
+	_, _ = env.movies.Sync(context.Background(), true)
+	time.Sleep(300 * time.Millisecond)
+	_, _ = env.movies.Sync(context.Background(), true)
+	library, err = env.movies.List(context.Background())
+	if err != nil || len(library) != 1 {
+		t.Fatalf("library = %+v (%v)", library, err)
+	}
+	if library[0].LastSearchAt != nil {
+		t.Fatalf("an unmonitored approval was searched anyway: %+v", library[0])
+	}
 }
 
 func TestApprovalFailureIsNotReportedAsApproved(t *testing.T) {
@@ -487,5 +498,153 @@ func TestRequestAuditRecordsActorAndTime(t *testing.T) {
 	}
 	if _, err := json.Marshal(detail); err != nil {
 		t.Fatalf("detail is not serializable: %v", err)
+	}
+}
+
+// TestUserNamesResolveWithoutLeakingIDs covers the bounded name hook and its fallbacks.
+func TestUserNamesResolveWithoutLeakingIDs(t *testing.T) {
+	metadataFixture := newOMDbFixture(t)
+	env := newEnvironment(t, envOptions{withActor: true, withNames: true, metadata: metadataFixture})
+	request := addMovieRequest(t, env, testUserA, "tt0133093", "The Matrix", 1999)
+	if status, raw := env.call(t, http.MethodPost, "/api/v1/requests/"+url.PathEscape(request.ID)+"/comments",
+		`{"body":"Looks good"}`, callOptions{user: testApprover, canApprove: true}); status != http.StatusCreated {
+		t.Fatalf("approver comment: status %d, body %s", status, raw)
+	}
+	if status, raw := env.call(t, http.MethodPost, "/api/v1/requests/"+url.PathEscape(request.ID)+"/approve", `{}`,
+		callOptions{user: testApprover, canApprove: true}); status != http.StatusOK {
+		t.Fatalf("approve: status %d, body %s", status, raw)
+	}
+	// A request from an account the directory no longer knows stays identifiable only by its stable ID.
+	deleted := addMovieRequest(t, env, testUserB, "tt0234215", "The Matrix Reloaded", 2003)
+
+	status, raw := env.call(t, http.MethodGet, "/api/v1/requests/"+url.PathEscape(request.ID), "",
+		callOptions{user: testApprover, canApprove: true})
+	if status != http.StatusOK {
+		t.Fatalf("detail: status %d, body %s", status, raw)
+	}
+	detail := decode[discovery.Detail](t, raw)
+	if detail.Request.UserID != testUserA || detail.Request.UserName != "Ada Lovelace" {
+		t.Fatalf("requester = %+v", detail.Request)
+	}
+	if detail.Request.DecidedBy != testApprover || detail.Request.DecidedByName != "Grace Hopper" {
+		t.Fatalf("approver = %+v", detail.Request)
+	}
+	if len(detail.Comments) != 1 || detail.Comments[0].UserID != testApprover || detail.Comments[0].UserName != "Grace Hopper" {
+		t.Fatalf("comments = %+v", detail.Comments)
+	}
+	names := map[string]string{}
+	for _, event := range detail.Events {
+		if event.ActorName == "" || event.ActorName == event.Actor {
+			t.Fatalf("event actor was not resolved: %+v", event)
+		}
+		names[event.Action] = event.ActorName
+		if strings.Contains(event.Message, detail.Request.LibraryID) && detail.Request.LibraryID != "" {
+			t.Fatalf("activity prose exposes the library ID: %+v", event)
+		}
+	}
+	if names["created"] != "Ada Lovelace" || names["approved"] != "Grace Hopper" {
+		t.Fatalf("event names = %v", names)
+	}
+	if names["available"] != "System" && names["available"] != "" {
+		t.Fatalf("automation actor name = %q; want System", names["available"])
+	}
+	if env.names.has("system") {
+		t.Fatal("the name hook was asked about the automation actor")
+	}
+	for _, resolved := range []string{detail.Request.UserName, detail.Request.DecidedByName, detail.Comments[0].UserName} {
+		if resolved == "" || resolved == detail.Request.UserID || resolved == detail.Request.DecidedBy || resolved == detail.Comments[0].UserID {
+			t.Fatalf("display name fell back to an internal ID: %q", resolved)
+		}
+	}
+	for _, event := range detail.Events {
+		if event.ActorName == event.Actor {
+			t.Fatalf("event actor name is the raw ID: %+v", event)
+		}
+	}
+
+	// Fallbacks and filtering by name.
+	status, raw = env.call(t, http.MethodGet, "/api/v1/requests?q=ada", "", callOptions{user: testApprover, canApprove: true})
+	if status != http.StatusOK {
+		t.Fatalf("filter by requester name: status %d, body %s", status, raw)
+	}
+	if list := decode[discovery.List](t, raw); len(list.Requests) != 1 || list.Requests[0].ID != request.ID {
+		t.Fatalf("filter by requester name = %s", raw)
+	}
+	status, raw = env.call(t, http.MethodGet, "/api/v1/requests?q=grace", "", callOptions{user: testApprover, canApprove: true})
+	if status != http.StatusOK {
+		t.Fatalf("filter by approver name: status %d, body %s", status, raw)
+	}
+	if list := decode[discovery.List](t, raw); len(list.Requests) != 1 || list.Requests[0].ID != request.ID {
+		t.Fatalf("filter by approver name = %s", raw)
+	}
+	status, raw = env.call(t, http.MethodGet, "/api/v1/requests?q="+testUserB, "", callOptions{user: testApprover, canApprove: true})
+	if status != http.StatusOK {
+		t.Fatalf("filter by stable ID: status %d, body %s", status, raw)
+	}
+	list := decode[discovery.List](t, raw)
+	if len(list.Requests) != 1 || list.Requests[0].ID != deleted.ID || list.Requests[0].UserName != "Deleted user" {
+		t.Fatalf("deleted requester = %s", raw)
+	}
+	if status, raw := env.call(t, http.MethodGet, "/api/v1/requests", "", callOptions{user: testUserB}); status != http.StatusOK {
+		t.Fatalf("own list: status %d, body %s", status, raw)
+	} else if own := decode[discovery.List](t, raw); len(own.Requests) != 1 || own.Requests[0].UserName != "Deleted user" {
+		t.Fatalf("own request view = %s", raw)
+	}
+}
+
+func rawString(value any) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
+// TestDeliveryFailureNotifiesOnce pins the one-notification-per-failure contract.
+func TestDeliveryFailureNotifiesOnce(t *testing.T) {
+	metadataFixture := newOMDbFixture(t)
+	indexer := newIndexerFixture(t, "matrix-release", "The.Matrix.1999.1080p.BluRay.x264-GROUP")
+	env := newEnvironment(t, envOptions{withActor: true, withNames: true, metadata: metadataFixture, indexer: indexer})
+	request := addMovieRequest(t, env, testUserA, "tt0133093", "The Matrix", 1999)
+	status, raw := env.call(t, http.MethodPost, "/api/v1/requests/"+url.PathEscape(request.ID)+"/approve", `{}`,
+		callOptions{user: testApprover, canApprove: true})
+	if status != http.StatusOK {
+		t.Fatalf("approve: status %d, body %s", status, raw)
+	}
+	approved := decode[discovery.Request](t, raw)
+	ctx := context.Background()
+	// A real grab gives the movie a download job, which is then failed on the downloads row.
+	if _, err := env.movies.Grab(ctx, approved.LibraryID, "matrix-release", false); err != nil {
+		t.Fatalf("grab: %v", err)
+	}
+	acquisitions, err := env.movies.Store.Acquisitions(ctx)
+	if err != nil {
+		t.Fatalf("acquisitions: %v", err)
+	}
+	jobID := ""
+	for _, acquisition := range acquisitions {
+		if acquisition.MovieID == approved.LibraryID {
+			jobID = acquisition.JobID
+		}
+	}
+	if jobID == "" {
+		t.Fatal("the grab created no acquisition")
+	}
+	execSQL(t, env, `UPDATE downloads SET status = 'failed', error = $2 WHERE id = $1`, jobID, "download failed")
+	before := env.notified.count()
+	for pass := 0; pass < 3; pass++ {
+		if _, err := env.service.Sync(ctx); err != nil {
+			t.Fatalf("Sync pass %d: %v", pass, err)
+		}
+	}
+	failures := env.notified.failed()
+	if len(failures) != 1 {
+		t.Fatalf("failure notifications = %d across three passes; want one", len(failures))
+	}
+	if failures[0].ID != request.ID || failures[0].Delivery.Message != "download failed" || failures[0].UserName != "Ada Lovelace" {
+		t.Fatalf("failure notification = %+v", failures[0])
+	}
+	if env.notified.count() <= before {
+		t.Fatal("the failure transition was never reported")
 	}
 }

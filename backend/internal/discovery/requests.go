@@ -290,11 +290,53 @@ func (s *Service) List(ctx context.Context, actor string, perms Permissions, fil
 		}
 	}
 	filter.Limit = clampLimit(filter.Limit)
+	// A name filter cannot run in SQL, so the queue scan stays bounded and filters in memory.
+	query := filter.Query
+	if query != "" {
+		filter.Query = ""
+		filter.Limit = clampScanLimit(filter.Limit)
+	}
 	requests, err := s.requestList(ctx, filter, actor, perms.Approve)
 	if err != nil {
 		return List{}, err
 	}
+	resolver := newNameResolver(s.userNameFn)
+	if query != "" {
+		requests = s.filterByName(ctx, resolver, requests, query, clampLimit(filter.Limit))
+	} else {
+		for index := range requests {
+			s.namesFor(ctx, resolver, &requests[index])
+		}
+	}
 	return List{Requests: requests, Types: s.Types(), CanApprove: perms.Approve, Permissions: perms}, nil
+}
+
+// filterByName matches the query against the visible fields and the resolved display name.
+func (s *Service) filterByName(ctx context.Context, resolver *nameResolver, requests []Request, query string, limit int) []Request {
+	needle := strings.ToLower(query)
+	kept := make([]Request, 0, len(requests))
+	for index := range requests {
+		request := &requests[index]
+		s.namesFor(ctx, resolver, request)
+		for _, value := range []string{request.Title, request.ProviderID, request.UserID, request.UserName, request.DecidedByName, request.Message} {
+			if strings.Contains(strings.ToLower(value), needle) {
+				kept = append(kept, *request)
+				break
+			}
+		}
+		if len(kept) >= limit {
+			break
+		}
+	}
+	return kept
+}
+
+// clampScanLimit widens the SQL scan so an in-memory name filter still sees enough rows.
+func clampScanLimit(limit int) int {
+	if limit *= 3; limit > maxListSize*3 {
+		return maxListSize * 3
+	}
+	return limit
 }
 
 func validStatus(status string) bool {
@@ -331,6 +373,14 @@ func (s *Service) Detail(ctx context.Context, actor string, perms Permissions, i
 	events, err := s.events(ctx, request.ID)
 	if err != nil {
 		return Detail{}, err
+	}
+	resolver := newNameResolver(s.userNameFn)
+	s.namesFor(ctx, resolver, &request)
+	for index := range comments {
+		comments[index].UserName = resolver.name(ctx, comments[index].UserID)
+	}
+	for index := range events {
+		events[index].ActorName = resolver.name(ctx, events[index].Actor)
 	}
 	return Detail{Request: request, Comments: comments, Events: events, CanApprove: perms.Approve, Permissions: perms}, nil
 }

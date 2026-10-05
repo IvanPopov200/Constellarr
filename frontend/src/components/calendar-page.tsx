@@ -102,6 +102,11 @@ export function CalendarPage() {
     setTypes((current) => (current.includes(type) ? current.filter((value) => value !== type) : [...current, type]))
   }
 
+  function selectMonth(value: Date) {
+    setMonth(value)
+    setSelectedDay(isoDay(value))
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -165,16 +170,16 @@ export function CalendarPage() {
       <div className="flex flex-wrap items-end gap-3">
         {view === 'month' ? (
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon-sm" aria-label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>
+            <Button variant="outline" size="icon-sm" aria-label="Previous month" onClick={() => selectMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>
               <ChevronLeft />
             </Button>
             <span className="min-w-40 text-center text-sm font-medium">
               {month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
             </span>
-            <Button variant="outline" size="icon-sm" aria-label="Next month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>
+            <Button variant="outline" size="icon-sm" aria-label="Next month" onClick={() => selectMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>
               <ChevronRight />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>
+            <Button variant="ghost" size="sm" onClick={() => selectMonth(new Date())}>
               Today
             </Button>
           </div>
@@ -224,9 +229,9 @@ export function CalendarPage() {
       )}
 
       {loading && entries.length === 0 && <LoadingNote>Loading the calendar…</LoadingNote>}
-      {!loading && entries.length === 0 && <EmptyNote>No releases in this range. Widen the dates or enable another media type.</EmptyNote>}
+      {!loading && view !== 'month' && entries.length === 0 && <EmptyNote>No releases in this range. Widen the dates or enable another media type.</EmptyNote>}
 
-      {view === 'month' && entries.length > 0 && (
+      {view === 'month' && !loading && (
         <div className="space-y-4">
           <CalendarMonth month={month} entries={entries} selectedDay={selectedDay} onSelectDay={setSelectedDay} today={today} />
           <div className="space-y-2">

@@ -122,6 +122,7 @@ func (s *Service) refreshDelivery(ctx context.Context, id string) (Request, erro
 	if request.Status != StatusApproved && request.Status != StatusAvailable {
 		return request, nil
 	}
+	previousPhase := request.Delivery.Phase
 	delivery, available, err := s.deliveryState(ctx, request)
 	if err != nil {
 		return Request{}, err
@@ -166,6 +167,13 @@ func (s *Service) refreshDelivery(ctx context.Context, id string) (Request, erro
 			return Request{}, err
 		}
 		request.Delivery = delivery
+		// Report one failure per transition so a failing download is not reported on every pass.
+		if delivery.Phase == PhaseFailed && previousPhase != PhaseFailed {
+			updated, err := s.refresh(ctx, id)
+			if err == nil {
+				s.notify(ctx, updated)
+			}
+		}
 	}
 	return request, nil
 }
@@ -338,6 +346,12 @@ func (s *Service) notify(ctx context.Context, request Request) {
 	s.notifyFn(ctx, request)
 }
 
+// refresh loads one request with display names, for single-request responses and notifications.
 func (s *Service) refresh(ctx context.Context, id string) (Request, error) {
-	return s.requestByID(ctx, s.pool, id)
+	request, err := s.requestByID(ctx, s.pool, id)
+	if err != nil {
+		return Request{}, err
+	}
+	s.namesFor(ctx, newNameResolver(s.userNameFn), &request)
+	return request, nil
 }

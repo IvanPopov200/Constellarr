@@ -59,32 +59,40 @@ type Permissions struct {
 	LibraryWrite  bool `json:"libraryWrite"`
 }
 
+// UserName resolves one account ID to a display name; a missing hook or unknown account stays unnamed.
+type UserName func(context.Context, string) string
+
 type Options struct {
-	Actor  Actor
-	Can    Can
-	Notify func(context.Context, Request)
-	Music  MusicLibrary
-	Clock  func() time.Time
+	Actor Actor
+	Can   Can
+	// Notify is called on decisions, availability changes, reverted approvals, and once when a
+	// delivery transitions into failed.
+	Notify   func(context.Context, Request)
+	UserName UserName
+	Music    MusicLibrary
+	Clock    func() time.Time
 }
 
 type Request struct {
-	ID           string     `json:"id"`
-	UserID       string     `json:"userId"`
-	MediaType    string     `json:"mediaType"`
-	Provider     string     `json:"provider"`
-	ProviderID   string     `json:"providerId"`
-	Title        string     `json:"title"`
-	Year         int        `json:"year"`
-	Poster       string     `json:"poster"`
-	Status       string     `json:"status"`
-	Message      string     `json:"message"`
-	DecisionNote string     `json:"decisionNote"`
-	DecidedBy    string     `json:"decidedBy"`
-	DecidedAt    *time.Time `json:"decidedAt"`
-	LibraryID    string     `json:"libraryId"`
-	Delivery     Delivery   `json:"delivery"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	UpdatedAt    time.Time  `json:"updatedAt"`
+	ID            string     `json:"id"`
+	UserID        string     `json:"userId"`
+	UserName      string     `json:"userName"`
+	MediaType     string     `json:"mediaType"`
+	Provider      string     `json:"provider"`
+	ProviderID    string     `json:"providerId"`
+	Title         string     `json:"title"`
+	Year          int        `json:"year"`
+	Poster        string     `json:"poster"`
+	Status        string     `json:"status"`
+	Message       string     `json:"message"`
+	DecisionNote  string     `json:"decisionNote"`
+	DecidedBy     string     `json:"decidedBy"`
+	DecidedByName string     `json:"decidedByName"`
+	DecidedAt     *time.Time `json:"decidedAt"`
+	LibraryID     string     `json:"libraryId"`
+	Delivery      Delivery   `json:"delivery"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
 }
 
 type Delivery struct {
@@ -111,6 +119,7 @@ type Event struct {
 	ID         int64     `json:"id"`
 	RequestID  string    `json:"requestId"`
 	Actor      string    `json:"actor"`
+	ActorName  string    `json:"actorName"`
 	Action     string    `json:"action"`
 	FromStatus string    `json:"fromStatus"`
 	ToStatus   string    `json:"toStatus"`
@@ -122,6 +131,7 @@ type Comment struct {
 	ID        int64     `json:"id"`
 	RequestID string    `json:"requestId"`
 	UserID    string    `json:"userId"`
+	UserName  string    `json:"userName"`
 	Body      string    `json:"body"`
 	CreatedAt time.Time `json:"createdAt"`
 }

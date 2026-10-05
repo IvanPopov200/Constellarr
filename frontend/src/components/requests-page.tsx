@@ -8,9 +8,12 @@ import { DeliveryProgress, EmptyNote, ErrorNote, LoadingNote, MediaBadge, Notice
 import { NewRequestDialog } from '@/components/requests-new-dialog'
 import { RequestDetailDialog } from '@/components/requests-detail-dialog'
 import { errorMessage } from '@/lib/api'
+import { useAuth } from '@/lib/auth-context'
 import {
   catalogHref,
+  catalogLabel,
   discoveryApi,
+  displayName,
   mediaTypeLabel,
   relativeAge,
   type MediaRequest,
@@ -30,6 +33,8 @@ const statusFilters = [
 const openStatuses = new Set(['pending', 'approving', 'approved'])
 
 export function RequestsPage() {
+  const { user } = useAuth()
+  const currentUserId = user?.id ?? null
   const [list, setList] = useState<RequestList | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -81,14 +86,13 @@ export function RequestsPage() {
       if (statusFilter === 'open' ? !openStatuses.has(request.status) : statusFilter !== 'all' && request.status !== statusFilter) return false
       if (typeFilter && request.mediaType !== typeFilter) return false
       if (!needle) return true
-      return (
-        request.title.toLowerCase().includes(needle) ||
-        request.providerId.toLowerCase().includes(needle) ||
-        request.userId.toLowerCase().includes(needle) ||
-        request.message.toLowerCase().includes(needle)
+      const requester = displayName(request.userId, request.userName, currentUserId, 'Unknown user')
+      const decider = displayName(request.decidedBy, request.decidedByName, currentUserId, 'Unknown user')
+      return [request.title, request.providerId, request.userId, requester, decider, request.message].some((value) =>
+        value.toLowerCase().includes(needle),
       )
     })
-  }, [requests, statusFilter, typeFilter, query])
+  }, [requests, statusFilter, typeFilter, query, currentUserId])
 
   const counts = useMemo(() => {
     const summary = { open: 0, available: 0, rejected: 0 }
@@ -106,7 +110,7 @@ export function RequestsPage() {
     setNotice('')
     try {
       await discoveryApi.approveRequest(request.id, { monitored: true })
-      setNotice(`Approved ${request.title}. The library now searches for releases.`)
+      setNotice(`Approved and monitored ${request.title}. The library now searches for releases.`)
       await reload()
     } catch (cause) {
       setError(errorMessage(cause))
@@ -221,14 +225,16 @@ export function RequestsPage() {
                         <MediaBadge type={request.mediaType} />
                       </div>
                       <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        {canApprove && <span>{request.userId}</span>}
+                        <span>{displayName(request.userId, request.userName, currentUserId, 'Unknown user')}</span>
                         <span>{relativeAge(request.createdAt)}</span>
                         <span className="font-mono">{request.providerId}</span>
                       </p>
                       {request.message && <p className="text-sm">{request.message}</p>}
                       {request.decisionNote && (
                         <p className="text-xs text-muted-foreground">
-                          {request.decidedBy ? `${request.decidedBy}: ` : ''}
+                          {request.decidedBy
+                            ? `${displayName(request.decidedBy, request.decidedByName, currentUserId, 'Unknown user')}: `
+                            : ''}
                           {request.decisionNote}
                         </p>
                       )}
@@ -239,7 +245,7 @@ export function RequestsPage() {
                         <Button asChild size="sm" variant="ghost">
                           <a href={catalog}>
                             <ExternalLink data-icon="inline-start" />
-                            Library
+                            {catalogLabel(request.mediaType)}
                           </a>
                         </Button>
                       )}
@@ -247,7 +253,12 @@ export function RequestsPage() {
                         Details
                       </Button>
                       {canApprove && request.status === 'pending' && (
-                        <Button size="sm" disabled={approving === request.id} onClick={() => void quickApprove(request)}>
+                        <Button
+                          size="sm"
+                          title="Approve with monitoring; use Details to pick a profile, root folder, or turn monitoring off."
+                          disabled={approving === request.id}
+                          onClick={() => void quickApprove(request)}
+                        >
                           {approving === request.id ? <LoaderCircle className="animate-spin" /> : <ThumbsUp />}
                           Approve
                         </Button>

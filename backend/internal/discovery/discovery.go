@@ -24,10 +24,11 @@ type Service struct {
 	// AI is the shared OpenAI-compatible provider used by recommendations and subtitle translation.
 	AI *ai.Service
 
-	actorFn  Actor
-	canFn    Can
-	notifyFn func(context.Context, Request)
-	now      func() time.Time
+	actorFn    Actor
+	canFn      Can
+	notifyFn   func(context.Context, Request)
+	userNameFn UserName
+	now        func() time.Time
 
 	syncMu  sync.Mutex
 	queueMu sync.Mutex
@@ -95,14 +96,15 @@ func New(ctx context.Context, pool *pgxpool.Pool, movieService *movies.Service, 
 		now = func() time.Time { return time.Now().UTC() }
 	}
 	return &Service{
-		pool:     pool,
-		movies:   movieService,
-		tv:       tvService,
-		music:    musicHook(opts.Music),
-		AI:       aiService,
-		actorFn:  opts.Actor,
-		canFn:    opts.Can,
-		notifyFn: opts.Notify,
-		now:      now,
+		pool:       pool,
+		movies:     movieService,
+		tv:         tvService,
+		music:      musicHook(opts.Music),
+		AI:         aiService,
+		actorFn:    opts.Actor,
+		canFn:      opts.Can,
+		notifyFn:   opts.Notify,
+		userNameFn: opts.UserName,
+		now:        now,
 	}, nil
 }

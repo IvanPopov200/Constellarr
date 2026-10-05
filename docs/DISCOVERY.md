@@ -2,12 +2,12 @@
 
 `backend/internal/discovery` owns media requests, the combined release calendar, and
 optional AI recommendations. `backend/internal/discovery/ai` owns the shared
-OpenAI-compatible provider used by recommendations and, later, subtitle translation.
+OpenAI-compatible provider used by recommendations and subtitle translation.
 
 ## Wiring
 
-`discovery.Service.Register` matches the `api.Module` interface that `api.Services.Modules`
-accepts, so the parent only adds the service to the module list:
+`cmd/constellarr/main.go` mounts `discovery.Service` alongside the other API modules,
+with authentication, music, shared translation, and operations notification hooks:
 
 ```go
 requests, err := discovery.New(shutdown, pool, movieLibrary, tvLibrary, discovery.Options{
@@ -16,7 +16,8 @@ requests, err := discovery.New(shutdown, pool, movieLibrary, tvLibrary, discover
         return userID, auth.Can(r.Context(), auth.PermRequestsApprove)
     },
     Can:    func(r *http.Request, permission string) bool { return auth.Can(r.Context(), permission) },
-    Notify: notifier.RequestDecision,     // optional, called after decisions and availability changes
+    Notify: notifier.RequestDecision,     // decisions, availability, reverted approvals, delivery failures
+    UserName: access.DisplayName,         // one bounded lookup per account ID, never a directory dump
     Music:  musicSource{service: musicLibrary},
 })
 requests.Start(shutdown) // background recovery and library tracking
@@ -32,6 +33,15 @@ api.New(pool, api.Services{
   extra permission while `Options.Can` is unset, so wiring both hooks is mandatory.
 - `Register` mounts all routes under `/api/v1`, including `/ai/*`; `api.New` keeps its
   host, origin, and content-type checks in front of them.
+- `Options.UserName` resolves one account ID to a display name for the interface. Responses
+  keep the stable `userId`/`decidedBy`/`actor` fields and add `userName`, `decidedByName`,
+  and `actorName`; lookups are memoised per response and capped at 250. Fallbacks: the
+  automation actor reads `System`, an ID the directory no longer knows reads
+  `Deleted user`, an unwired hook or an exhausted budget reads `Unknown user`, and the
+  interface shows `You` for the signed-in account. A missing hook never exposes raw IDs.
+- `Notify` also fires once when a request's delivery transitions into `failed` (download or
+  import), so operations alerts do not repeat on every poll; reverted approvals already
+  notify.
 - The auth route map in `internal/auth/permissions.go` lists the discovery patterns
   (`requests*` → `requests.read`/`requests.write`/`requests.approve`, `ai/config` and
   `ai/test` → `settings.read`/`settings.write`, `calendar*` → library reads). The
@@ -70,6 +80,11 @@ api.New(pool, api.Services{
   subtitle translation. `ai.NewClient(cfg)` builds a standalone `*ai.Client`.
 
 ## Requests API
+
+Display fields: `userName`, `decidedByName`, `actorName`, and comment `userName` carry names
+only; account IDs stay unchanged in `userId`, `decidedBy`, and `actor`. The list query `q`
+matches titles, provider IDs, stable account IDs, resolved names, and messages, scanning at
+most 600 newest requests before the in-memory name match.
 
 | Route | Purpose |
 | --- | --- |
@@ -144,6 +159,13 @@ and the accepted action.
 - `RecommendationsPanel` and `AISettings`: taste selection, candidate acceptance, and
   provider configuration. All four are exported for the app shell to mount.
 - `frontend/src/lib/discovery-api.ts` holds the typed client and the display helpers.
+- The request list and detail dialog show names (with `You` for the signed-in account) and
+  never print internal IDs as prose; the catalog action is labelled for its section
+  (`Open Movies`, `Open TV Shows`, `Open Music`). Per-title deep links need a hook in the
+  movie or TV page, which those modules own today.
+- The approval notice reflects the monitoring choice: monitored approvals say the library
+  searches and imports the title, unmonitored approvals say nothing runs until it is
+  monitored.
 - `AISettings` renders read-only without `settings.read`, disables its fields and hides
   save/test/model controls without `settings.write`, and reports "Configured" from the
   endpoint and model alone; the stored key is surfaced as a separate badge. It is the only

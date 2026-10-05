@@ -6,10 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { DeliveryProgress, DiscoveryDialog, EmptyNote, ErrorNote, Field, LoadingNote, MediaBadge, Notice, RequestStatusBadge, Choice, Toggle } from '@/components/requests-shared'
 import { errorMessage } from '@/lib/api'
+import { useAuth } from '@/lib/auth-context'
 import {
   approverOptions,
   catalogHref,
+  catalogLabel,
   discoveryApi,
+  displayName,
   mediaTypeLabel,
   relativeAge,
   requestStatusLabel,
@@ -29,6 +32,8 @@ type Props = {
 const monitorModes = ['all', 'future', 'missing', 'existing', 'first', 'latest', 'none']
 
 export function RequestDetailDialog({ id, canApprove, permissions, onClose, onChanged }: Props) {
+  const { user } = useAuth()
+  const currentUserId = user?.id ?? null
   const [detail, setDetail] = useState<RequestDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -84,14 +89,19 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
     setNotice('')
     try {
       if (kind === 'approve') {
+        const monitoredNow = monitored
         await discoveryApi.approveRequest(id, {
           profileId: profileId || undefined,
           rootId: rootId || undefined,
-          monitored,
+          monitored: monitoredNow,
           monitorMode: monitorMode || undefined,
           note: note.trim() || undefined,
         })
-        setNotice('Approved. The library now searches and imports this title.')
+        setNotice(
+          monitoredNow
+            ? 'Approved and monitored. The library now searches and imports this title.'
+            : 'Approved without monitoring. Nothing is searched or imported until you monitor it.',
+        )
         setRejecting(false)
       } else if (kind === 'reject') {
         await discoveryApi.rejectRequest(id, reason.trim())
@@ -125,7 +135,11 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
       active
       size="wide"
       title={request?.title ?? 'Request'}
-      description={request ? `${mediaTypeLabel(request.mediaType)} · requested by ${request.userId}` : 'Loading request'}
+      description={
+        request
+          ? `${mediaTypeLabel(request.mediaType)} · requested by ${displayName(request.userId, request.userName, currentUserId, 'Unknown user')}`
+          : 'Loading request'
+      }
       onClose={onClose}
     >
       {loading && <LoadingNote>Loading the request…</LoadingNote>}
@@ -149,7 +163,10 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
               {request.decisionNote && (
                 <p className="text-muted-foreground">
                   <span className="font-medium text-foreground">{requestStatusLabel(request.status)}</span>
-                  {request.decidedBy ? ` by ${request.decidedBy}` : ''}: {request.decisionNote}
+                  {request.decidedBy
+                    ? ` by ${displayName(request.decidedBy, request.decidedByName, currentUserId, 'Unknown user')}`
+                    : ''}
+                  : {request.decisionNote}
                 </p>
               )}
             </div>
@@ -159,16 +176,16 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
             <DeliveryProgress delivery={request.delivery} />
             <p className="text-xs text-muted-foreground">
               {request.libraryId
-                ? `Library association: ${request.libraryId}`
+                ? 'Linked to a catalog entry in your library.'
                 : request.status === 'approved' || request.status === 'available'
-                  ? 'Waiting for the library association'
-                  : 'No library association yet'}
+                  ? 'Waiting for the library to link this request'
+                  : 'Not linked to the library yet'}
             </p>
             {catalog && (
               <Button asChild size="sm" variant="outline">
                 <a href={catalog}>
                   <ExternalLink data-icon="inline-start" />
-                  Open in the library
+                  {catalogLabel(request.mediaType)}
                 </a>
               </Button>
             )}
@@ -284,7 +301,9 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
               {(detail?.comments ?? []).map((entry) => (
                 <li key={entry.id} className="rounded-lg border border-border p-3 text-sm">
                   <p className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">{entry.userId}</span>
+                    <span className="font-medium text-foreground">
+                      {displayName(entry.userId, entry.userName, currentUserId, 'Unknown user')}
+                    </span>
                     <span>{relativeAge(entry.createdAt)}</span>
                   </p>
                   <p className="mt-1 whitespace-pre-wrap break-words">{entry.body}</p>
@@ -324,7 +343,10 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
                 <li key={event.id} className="rounded-lg border border-border p-3 text-xs">
                   <p className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
                     <span>
-                      <span className="font-medium text-foreground">{event.actor}</span> {event.action}
+                      <span className="font-medium text-foreground">
+                        {displayName(event.actor, event.actorName, currentUserId, 'System')}
+                      </span>{' '}
+                      {event.action}
                       {event.toStatus ? ` → ${requestStatusLabel(event.toStatus)}` : ''}
                     </span>
                     <span>{relativeAge(event.createdAt)}</span>

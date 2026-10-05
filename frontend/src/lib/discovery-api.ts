@@ -24,6 +24,7 @@ export type Delivery = {
 export type MediaRequest = {
   id: string
   userId: string
+  userName: string
   mediaType: MediaType
   provider: string
   providerId: string
@@ -34,6 +35,7 @@ export type MediaRequest = {
   message: string
   decisionNote: string
   decidedBy: string
+  decidedByName: string
   decidedAt: string | null
   libraryId: string
   delivery: Delivery
@@ -45,6 +47,7 @@ export type RequestEvent = {
   id: number
   requestId: string
   actor: string
+  actorName: string
   action: string
   fromStatus: string
   toStatus: string
@@ -56,6 +59,7 @@ export type RequestComment = {
   id: number
   requestId: string
   userId: string
+  userName: string
   body: string
   createdAt: string
 }
@@ -355,6 +359,19 @@ export function catalogHref(mediaType: string, libraryId: string) {
   if (mediaType === 'movie') return '#movies'
   if (mediaType === 'tv') return '#tv-shows'
   return '#music'
+}
+
+export function catalogLabel(mediaType: string) {
+  if (mediaType === 'movie') return 'Open Movies'
+  if (mediaType === 'tv') return 'Open TV Shows'
+  return 'Open Music'
+}
+
+// displayName keeps internal account IDs out of the interface and marks the caller as You.
+export function displayName(id: string, name: string, currentUserId: string | null, fallback: string) {
+  if (!id) return ''
+  if (currentUserId && id === currentUserId) return 'You'
+  return name || fallback
 }
 
 export function relativeAge(value: string) {
