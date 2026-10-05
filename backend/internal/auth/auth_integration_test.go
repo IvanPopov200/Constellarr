@@ -870,8 +870,7 @@ func TestRequireWrapper(t *testing.T) {
 	}
 }
 
-// TestAPITokensCannotManageAccountCredentials guards the credential boundary: only a
-// cookie session may list, mint, change, or revoke tokens and change the password.
+// Account credentials require a cookie session, even when an API token has broad permissions.
 func TestAPITokensCannotManageAccountCredentials(t *testing.T) {
 	env := newEnv(t)
 	admin, _ := env.setupAdmin(t)
@@ -936,8 +935,6 @@ func TestRestoreRequiresAccountAdministrationAndSession(t *testing.T) {
 	env.check(t, admin, http.MethodPost, "/api/v1/operations/backups/example/restore", http.StatusOK)
 }
 
-// TestGenericMutationAudit covers the middleware fallback for authenticated mutations
-// that do not record their own audit entry.
 func TestGenericMutationAudit(t *testing.T) {
 	env := newEnv(t)
 	admin, _ := env.setupAdmin(t)
@@ -1022,8 +1019,6 @@ func TestServiceStartsAfterDownloadsMigrations(t *testing.T) {
 	}
 }
 
-// TestBackgroundLifecycleRestarts exercises repeated cleanup-goroutine shutdown,
-// which must not panic or leak when Close races the goroutine start.
 func TestBackgroundLifecycleRestarts(t *testing.T) {
 	env := newEnv(t)
 	for range 50 {

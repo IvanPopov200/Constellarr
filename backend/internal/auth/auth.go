@@ -1,5 +1,3 @@
-// Package auth implements password accounts, sessions, scoped API tokens, roles,
-// and permission enforcement for the Constellarr API.
 package auth
 
 import (

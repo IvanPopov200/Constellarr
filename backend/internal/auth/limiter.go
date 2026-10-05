@@ -22,8 +22,6 @@ type limiterEntry struct {
 	windowEnd time.Time
 }
 
-// loginLimiter throttles credential guessing per account and per client address
-// with bounded maps, so neither key type can grow without limit.
 type loginLimiter struct {
 	mu    sync.Mutex
 	ips   map[string]limiterEntry
@@ -82,8 +80,7 @@ func (l *loginLimiter) record(entries map[string]limiterEntry, key string, now t
 	entries[key] = entry
 }
 
-// makeRoom keeps existing blocks: expired entries are dropped first, then the
-// newest one, so rotating usernames or addresses cannot erase active limits.
+// Drop expired entries first, then the newest, so rotating names cannot erase active blocks.
 func makeRoom(entries map[string]limiterEntry, limit int, now time.Time) {
 	if len(entries) < limit {
 		return

@@ -65,8 +65,7 @@ type UserName func(context.Context, string) string
 type Options struct {
 	Actor Actor
 	Can   Can
-	// Notify is called on decisions, availability changes, reverted approvals, and once when a
-	// delivery transitions into failed.
+	// Notify covers decisions, availability, reverted approvals, and transitions into delivery failure.
 	Notify   func(context.Context, Request)
 	UserName UserName
 	Music    MusicLibrary

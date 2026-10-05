@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { errorMessage, request } from '@/lib/api'
+import { useAuth } from '@/lib/auth-context'
 import { moviesApi, type MovieProfile } from '@/lib/movies-api'
 import {
   migrationApi,
@@ -87,6 +88,8 @@ function Notice({ tone, children }: { tone: 'ok' | 'error' | 'warn'; children: R
 type MusicConfig = { qualityProfiles: { id: string; name: string; formats: string[] | null }[] }
 
 export function MigrationPage() {
+  const { can } = useAuth()
+  const canReadSettings = can('settings.read')
   const [step, setStep] = useState<'connections' | 'review' | 'import'>('connections')
   const [drafts, setDrafts] = useState<Record<MigrationApp, Draft>>(
     () => Object.fromEntries(migrationApps.map(app => [app, { ...emptyDraft }])) as Record<MigrationApp, Draft>,
@@ -126,13 +129,14 @@ export function MigrationPage() {
   const connections = useMemo(() => draftConnections(drafts), [drafts])
 
   useEffect(() => {
+    if (!canReadSettings) return
     const controller = new AbortController()
     moviesApi.profiles(controller.signal).then(setProfiles).catch(() => setProfiles([]))
     request<MusicConfig>('/music/config', { signal: controller.signal })
       .then(config => setMusicProfiles(config.qualityProfiles ?? []))
       .catch(() => setMusicProfiles([]))
     return () => controller.abort()
-  }, [])
+  }, [canReadSettings])
 
   function change(app: MigrationApp, patch: Partial<Draft>) {
     setDrafts(current => ({ ...current, [app]: { ...current[app], ...patch } }))

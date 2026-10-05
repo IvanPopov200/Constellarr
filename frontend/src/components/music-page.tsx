@@ -247,7 +247,7 @@ function AlbumDialog({
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
-            disabled={busy !== '' || !canWrite}
+            disabled={busy !== ''}
             onClick={() =>
               act('search', async () => {
                 const found = canWrite ? await musicApi.searchAlbum(album.id) : await musicApi.releaseSearch('', album.id)

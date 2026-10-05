@@ -136,7 +136,7 @@ export function RequestsPage() {
             {loading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
             Refresh
           </Button>
-          <Button size="sm" onClick={() => setCreating(true)} disabled={types.length === 0}>
+          <Button size="sm" onClick={() => setCreating(true)} disabled={types.length === 0 || !permissions.requestsWrite}>
             <Plus />
             New request
           </Button>
@@ -195,7 +195,7 @@ export function RequestsPage() {
             <p className="text-sm text-muted-foreground">
               Nothing requested yet. Search for a title and the approver queue takes it from there.
             </p>
-            <Button size="sm" variant="outline" onClick={() => setCreating(true)} disabled={types.length === 0}>
+            <Button size="sm" variant="outline" onClick={() => setCreating(true)} disabled={types.length === 0 || !permissions.requestsWrite}>
               <Plus />
               New request
             </Button>
@@ -272,7 +272,7 @@ export function RequestsPage() {
         })}
       </ul>
 
-      {creating && (
+      {creating && permissions.requestsWrite && (
         <NewRequestDialog
           types={types}
           onClose={() => setCreating(false)}
@@ -290,7 +290,7 @@ export function RequestsPage() {
           canApprove={canApprove}
           permissions={permissions}
           onClose={() => setSelected(null)}
-          onChanged={() => void reload()}
+          onChanged={() => { setNotice(''); void reload() }}
         />
       )}
     </div>

@@ -120,8 +120,7 @@ func TestRoutePermissions(t *testing.T) {
 	}
 }
 
-// TestEveryRegisteredRouteIsMapped scans service packages so a new route cannot ship
-// without a permission rule; unmapped routes are denied at runtime.
+// New routes must declare permissions; unmapped routes are denied at runtime.
 func TestEveryRegisteredRouteIsMapped(t *testing.T) {
 	var files []string
 	for _, glob := range []string{"../*/*.go", "../*/*/*.go"} {
@@ -294,8 +293,7 @@ func TestLoginLimiterBlocksAndResets(t *testing.T) {
 	}
 }
 
-// TestLoginLimiterKeepsBlocksUnderUsernameChurn rotates usernames from one address
-// to try to flush the limiter; existing blocks and the memory bound must survive.
+// Username churn must not evict an address block.
 func TestLoginLimiterKeepsBlocksUnderUsernameChurn(t *testing.T) {
 	limiter := newLoginLimiter()
 	const ip = "192.0.2.10"
@@ -331,8 +329,6 @@ func TestLoginLimiterKeepsBlocksUnderUsernameChurn(t *testing.T) {
 	}
 }
 
-// TestCanonicalAuthMigrationDefinesTables keeps downloads/migrations/007_auth.sql
-// authoritative now that the auth package embeds no DDL of its own.
 func TestCanonicalAuthMigrationDefinesTables(t *testing.T) {
 	body, err := os.ReadFile("../downloads/migrations/007_auth.sql")
 	if err != nil {

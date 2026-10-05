@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { EmptyNote, ErrorNote, Field, LoadingNote, Notice, Choice, Toggle } from '@/components/requests-shared'
 import { errorMessage } from '@/lib/api'
+import { useAuth } from '@/lib/auth-context'
 import {
   approverOptions,
   discoveryApi,
@@ -19,6 +20,7 @@ import {
 } from '@/lib/discovery-api'
 
 export function RecommendationsPanel() {
+  const { can } = useAuth()
   const [history, setHistory] = useState<Recommendation[]>([])
   const [types, setTypes] = useState<MediaType[]>([])
   const [permissions, setPermissions] = useState<Permissions>({ approve: false, requestsWrite: false, libraryWrite: false })
@@ -206,11 +208,10 @@ export function RecommendationsPanel() {
             )}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
-                Set the endpoint and model under{' '}
-                <a className="underline underline-offset-4" href="#connections">
-                  Settings → Connections → AI provider
-                </a>
-                .
+                {can('settings.read') ? <>
+                  Configure the AI provider in{' '}
+                  <a className="underline underline-offset-4" href="#connections">Connections</a>.
+                </> : 'An administrator configures the AI provider for your server.'}
               </p>
               <Button type="submit" size="sm" disabled={busy !== ''}>
                 {busy === 'generate' ? <LoaderCircle className="animate-spin" /> : <WandSparkles />}
