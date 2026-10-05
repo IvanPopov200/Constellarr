@@ -480,8 +480,14 @@ func (s *Service) Remove(ctx context.Context, id string, deleteFiles bool) error
 				if !ok {
 					continue
 				}
-				if err := library.Archive(root.Path, file.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-					return fmt.Errorf("movies: archive %s: %w", file.Path, err)
+				sidecars, err := library.SubtitleSidecars(root.Path, file.Path)
+				if err != nil {
+					return err
+				}
+				for _, owned := range append(sidecars, library.File{Path: file.Path}) {
+					if err := library.Archive(root.Path, owned.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+						return fmt.Errorf("movies: archive %s: %w", owned.Path, err)
+					}
 				}
 			}
 			s.forgetJournalFiles(ctx, cfg, movie.Files)

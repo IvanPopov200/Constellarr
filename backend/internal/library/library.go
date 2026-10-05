@@ -213,6 +213,9 @@ func Import(ctx context.Context, opts Options, sources []Source) ([]File, error)
 
 	files := make([]File, 0, len(p.targets))
 	for _, t := range p.targets {
+		if t.auxiliary {
+			continue
+		}
 		files = append(files, File{Path: t.destRel, Size: t.size})
 	}
 	if p.mode == ModeMove {

@@ -1558,26 +1558,18 @@ func (s *Service) commitRename(ctx context.Context, episodes []Episode, planned 
 	return nil
 }
 
-// restoreRenamedFiles puts moved files back and drops the sidecar this rename wrote, best effort.
 func (s *Service) restoreRenamedFiles(planned []renamePlan) error {
 	var problems []error
 	for i := len(planned) - 1; i >= 0; i-- {
 		plan := planned[i]
-		root, err := os.OpenRoot(plan.root.Path)
-		if err != nil {
+		if err := library.MoveWithSubtitles(plan.root.Path, plan.to, plan.from); err != nil {
 			problems = append(problems, err)
 			continue
 		}
-		if _, err := root.Lstat(plan.from); err == nil {
-			problems = append(problems, fmt.Errorf("%s reappeared before its rename was restored", plan.from))
+		if root, err := os.OpenRoot(plan.root.Path); err == nil {
+			_ = root.Remove(strings.TrimSuffix(plan.to, path.Ext(plan.to)) + ".nfo")
 			root.Close()
-			continue
 		}
-		if err := root.Rename(plan.to, plan.from); err != nil {
-			problems = append(problems, err)
-		}
-		_ = root.Remove(strings.TrimSuffix(plan.to, path.Ext(plan.to)) + ".nfo")
-		root.Close()
 	}
 	return errors.Join(problems...)
 }

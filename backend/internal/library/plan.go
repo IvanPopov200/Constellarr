@@ -25,28 +25,30 @@ var templateTokens = []string{"title", "year", "imdbId", "quality", "original", 
 var episodeTemplateTokens = map[string]bool{"season": true, "episode": true, "episodeCode": true, "episodeTitle": true}
 
 type target struct {
-	srcRel   string
-	size     int64
-	destRel  string
-	part     string
-	tempRel  string
-	existed  bool
-	owned    bool
-	destSize int64
-	destHash digest
-	replace  bool
-	publish  bool
-	inPlace  bool
+	srcRel    string
+	size      int64
+	destRel   string
+	part      string
+	tempRel   string
+	existed   bool
+	owned     bool
+	destSize  int64
+	destHash  digest
+	replace   bool
+	publish   bool
+	inPlace   bool
+	auxiliary bool
 }
 
 type plan struct {
-	root       string
-	sourceRoot string
-	mode       string
-	folderRel  string
-	targets    []*target
-	sidecars   []nfoSidecar
-	existing   map[string]bool
+	root           string
+	sourceRoot     string
+	mode           string
+	folderRel      string
+	targets        []*target
+	sidecars       []nfoSidecar
+	existing       map[string]bool
+	subtitleOwners map[string]string
 }
 
 // Preview returns the deterministic destinations an import would publish.
@@ -57,6 +59,9 @@ func Preview(opts Options, sources []Source) ([]File, error) {
 	}
 	files := make([]File, 0, len(p.targets))
 	for _, t := range p.targets {
+		if t.auxiliary {
+			continue
+		}
 		files = append(files, File{Path: t.destRel, Size: t.size})
 	}
 	return files, nil
@@ -124,7 +129,10 @@ func buildPlan(opts Options, sources []Source) (*plan, error) {
 		return nil, err
 	}
 	p.sidecars = sidecars
-	for _, t := range targets {
+	if err := planSubtitles(p, sourceHandle, rootHandle); err != nil {
+		return nil, err
+	}
+	for _, t := range p.targets {
 		if sourceRoot == root && t.srcRel == t.destRel {
 			t.inPlace = true
 			continue
@@ -448,6 +456,9 @@ func checkDir(root *os.Root, dir string) error {
 func (p *plan) staleExisting() []string {
 	var stale []string
 	for rel := range p.existing {
+		if owner := p.subtitleOwners[rel]; owner != "" && p.unchangedVideo(owner) {
+			continue
+		}
 		if rel == recycleDir || strings.HasPrefix(rel, recycleDir+"/") {
 			continue
 		}
