@@ -1114,8 +1114,7 @@ type tvOwnedFile struct {
 	path string
 }
 
-// tvOwnedFiles lists exact videos plus their NFO sidecars, deduplicated across shared episodes.
-func tvOwnedFiles(cfg Config, episodes []Episode) []tvOwnedFile {
+func tvOwnedFiles(cfg Config, episodes []Episode) ([]tvOwnedFile, error) {
 	seen := map[string]bool{}
 	owned := make([]tvOwnedFile, 0, len(episodes)*2)
 	add := func(root movies.RootFolder, rel string) {
@@ -1136,6 +1135,13 @@ func tvOwnedFiles(cfg Config, episodes []Episode) []tvOwnedFile {
 				continue
 			}
 			add(root, file.Path)
+			subtitles, err := library.SubtitleSidecars(root.Path, file.Path)
+			if err != nil {
+				return nil, err
+			}
+			for _, subtitle := range subtitles {
+				add(root, subtitle.Path)
+			}
 			for _, sidecar := range tvSidecarCandidates(file.Path) {
 				if tvOwnedSidecarPresent(root, sidecar) {
 					add(root, sidecar)
@@ -1143,7 +1149,7 @@ func tvOwnedFiles(cfg Config, episodes []Episode) []tvOwnedFile {
 			}
 		}
 	}
-	return owned
+	return owned, nil
 }
 
 // tvSidecarCandidates never returns a path above the series folder derived from the owned video.
@@ -1202,7 +1208,10 @@ func (s *Service) Remove(ctx context.Context, id string, deleteFiles bool) error
 			if err != nil {
 				return err
 			}
-			owned := tvOwnedFiles(cfg, episodes)
+			owned, err := tvOwnedFiles(cfg, episodes)
+			if err != nil {
+				return err
+			}
 			for _, file := range owned {
 				if err := library.Archive(file.root.Path, file.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 					return fmt.Errorf("tv: archive %s: %w", file.path, err)

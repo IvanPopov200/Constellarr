@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { api, errorMessage, type Job, type Release } from '@/lib/api'
+import { accessPermissions } from '@/lib/auth-api'
+import { useAuth } from '@/lib/auth-context'
 import { formatAge, formatBytes } from '@/lib/format'
 
 type SearchState =
@@ -31,6 +33,9 @@ export function ReleaseSearch({
   const [state, setState] = useState<SearchState>({ status: 'idle' })
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const { can } = useAuth()
+  const canSearch = can(accessPermissions.downloadsRead)
+  const canDownload = can(accessPermissions.downloadsWrite)
   const requestId = useRef(0)
   const controller = useRef<AbortController | null>(null)
   const jobStatus = useMemo(() => new Map(jobs.map((job) => [job.releaseId, job.status])), [jobs])
@@ -72,6 +77,14 @@ export function ReleaseSearch({
     } finally {
       setPendingId(null)
     }
+  }
+
+  if (!canSearch) {
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Release search requires the downloads read permission.
+      </p>
+    )
   }
 
   return (
@@ -171,19 +184,21 @@ export function ReleaseSearch({
                       </time>
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant={status === 'failed' ? 'outline' : 'default'}
-                    className="self-start sm:self-auto"
-                    disabled={status !== undefined || pendingId !== null}
-                    aria-label={`${label}: ${release.title}`}
-                    onClick={() => void download(release)}
-                  >
-                    {!label.startsWith('Adding') && !status && (
-                      <DownloadIcon data-icon="inline-start" />
-                    )}
-                    {label}
-                  </Button>
+                  {canDownload && (
+                    <Button
+                      size="sm"
+                      variant={status === 'failed' ? 'outline' : 'default'}
+                      className="self-start sm:self-auto"
+                      disabled={status !== undefined || pendingId !== null}
+                      aria-label={`${label}: ${release.title}`}
+                      onClick={() => void download(release)}
+                    >
+                      {!label.startsWith('Adding') && !status && (
+                        <DownloadIcon data-icon="inline-start" />
+                      )}
+                      {label}
+                    </Button>
+                  )}
                 </li>
               )
             })}

@@ -283,6 +283,45 @@ func TestDownloadRetriesAndReportsCRCFailure(t *testing.T) {
 	}
 }
 
+func TestDownloadRejectsWrongArticlePartAndRetriesFallback(t *testing.T) {
+	tlsCfg, roots := testTLSMaterial(t)
+	withTestRoots(t, roots)
+	content := pattern(128)
+	const id = "wrong-part@test"
+	primary := newFakeNNTP(t, tlsCfg, "127.0.0.1:0", "user", "secret", map[string][]byte{
+		id: yencPart(t, "unrelated.bin", content[64:], 2, 2, 64, 128),
+	})
+	fallback := newFakeNNTP(t, tlsCfg, fmt.Sprintf("[::1]:%d", primary.port()), "user", "secret", map[string][]byte{
+		id: yencPart(t, "video.mkv", content, 1, 1, 0, 128),
+	})
+	dir := t.TempDir()
+	parts := filepath.Join(dir, cacheDirName)
+	if err := os.MkdirAll(parts, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSegment(parts, segment{MessageID: id, FileName: "unrelated.bin", FileSize: 128, Part: 2, Total: 2, PartBegin: 64, PartSize: 64, Data: content[64:]}); err != nil {
+		t.Fatal(err)
+	}
+	cfg := testConfig(primary, 1)
+	cfg.FallbackHosts = []string{"::1"}
+	nzb := buildNZB(nzbSpec{subject: `"video.mkv" yEnc (1/1)`, ids: []string{id}})
+	result, err := Download(context.Background(), nzb, dir, cfg, nil)
+	if err != nil || len(result.Files) != 1 || result.MissingSegments != 0 {
+		t.Fatalf("download = %+v, %v", result, err)
+	}
+	data, err := os.ReadFile(result.Files[0])
+	if err != nil || !bytes.Equal(data, content) {
+		t.Fatalf("assembled wrong article: %v", err)
+	}
+	if primary.fetchCount(id) == 0 || fallback.fetchCount(id) != 1 {
+		t.Fatal("invalid cached or primary article prevented fallback")
+	}
+	cfg.FallbackHosts = nil
+	if _, err := Download(context.Background(), nzb, t.TempDir(), cfg, nil); err == nil {
+		t.Fatal("wrong multipart article was accepted without a valid fallback")
+	}
+}
+
 func TestDownloadUsesFallbackHostForMissingArticle(t *testing.T) {
 	tlsCfg, roots := testTLSMaterial(t)
 	withTestRoots(t, roots)

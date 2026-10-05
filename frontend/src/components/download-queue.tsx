@@ -18,6 +18,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { errorMessage, type Job, type JobStatus, type OutputFile } from '@/lib/api'
+import { accessPermissions } from '@/lib/auth-api'
+import { useAuth } from '@/lib/auth-context'
 import { formatAge, formatBytes } from '@/lib/format'
 
 const statusLabels: Record<JobStatus, string> = {
@@ -110,6 +112,9 @@ export function DownloadQueue({
 }) {
   const [retryingId, setRetryingId] = useState<string | null>(null)
   const [retryError, setRetryError] = useState<string | null>(null)
+  const { can } = useAuth()
+  const canRetry = can(accessPermissions.downloadsWrite)
+  const canLibrary = can(accessPermissions.libraryRead)
 
   const retry = async (job: Job) => {
     setRetryingId(job.id)
@@ -182,7 +187,7 @@ export function DownloadQueue({
               <InboxIcon className="size-4" />
               No downloads yet. Search for a release and choose Download.
             </p>
-            {emptyAction && (
+            {emptyAction && canLibrary && (
               <Button asChild size="sm" variant="outline">
                 <a href={emptyAction.href}>{emptyAction.label}</a>
               </Button>
@@ -219,7 +224,7 @@ export function DownloadQueue({
                   <OutputFiles files={job.files} />
                 )}
 
-                {job.status === 'failed' && (
+                {job.status === 'failed' && canRetry && (
                   <div>
                     <Button
                       size="sm"

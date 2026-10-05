@@ -29,6 +29,10 @@ services:
       - ${DOWNLOAD_DIR:-./data}:/data
     ports:
       - 127.0.0.1:${APP_PORT:-8080}:8080
+      - ${TORRENT_PORT:-51413}:51413/tcp
+      - ${TORRENT_PORT:-51413}:51413/udp
+      - ${TORRENT_PRIVATE_PORT:-51414}:51414/tcp
+      - ${TORRENT_PRIVATE_PORT:-51414}:51414/udp
     depends_on:
       postgres:
         condition: service_healthy

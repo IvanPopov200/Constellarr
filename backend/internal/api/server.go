@@ -22,6 +22,12 @@ type Services struct {
 	Downloads *downloads.Manager
 	Movies    *movies.Service
 	TV        *tv.Service
+	Modules   []Module
+	Guard     func(http.Handler) http.Handler
+}
+
+type Module interface {
+	Register(*http.ServeMux)
 }
 
 func New(pool *pgxpool.Pool, services ...Services) http.Handler {
@@ -41,6 +47,15 @@ func New(pool *pgxpool.Pool, services ...Services) http.Handler {
 	mux.HandleFunc("/api", notFound)
 	mux.HandleFunc("/healthz", liveness)
 	mux.Handle("/", newSPA(web.Dist()))
+	var handler http.Handler = mux
+	if len(services) != 0 {
+		for _, module := range services[0].Modules {
+			module.Register(mux)
+		}
+		if services[0].Guard != nil {
+			handler = services[0].Guard(handler)
+		}
+	}
 	hosts := allowedHosts()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !hosts.permits(r.Host) {
@@ -52,7 +67,7 @@ func New(pool *pgxpool.Pool, services ...Services) http.Handler {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-site requests are not allowed"})
 			return
 		}
-		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete {
+		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
 			if origin := r.Header.Get("Origin"); origin != "" {
 				parsed, err := url.Parse(origin)
 				if err != nil || !allowedOrigin(parsed, r.Host) {
@@ -61,12 +76,14 @@ func New(pool *pgxpool.Pool, services ...Services) http.Handler {
 				}
 			}
 			contentType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-			if r.Method != http.MethodDelete && (err != nil || contentType != "application/json") {
+			logout := r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/logout" && r.ContentLength == 0
+			bodyRequired := r.Method != http.MethodDelete && !logout
+			if bodyRequired && (err != nil || contentType != "application/json") {
 				writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "use application/json"})
 				return
 			}
 		}
-		mux.ServeHTTP(w, r)
+		handler.ServeHTTP(w, r)
 	})
 }
 

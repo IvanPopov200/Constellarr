@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Dialog } from 'radix-ui'
 import {
   CableIcon,
+  CalendarDaysIcon,
   CaptionsIcon,
   ChevronRightIcon,
   DownloadIcon,
@@ -10,12 +11,15 @@ import {
   HardDriveIcon,
   InboxIcon,
   LayoutDashboardIcon,
+  LogOutIcon,
   MagnetIcon,
   MenuIcon,
   MusicIcon,
+  ImportIcon,
   PanelLeftCloseIcon,
   PanelLeftIcon,
   SettingsIcon,
+  ShieldCheckIcon,
   TvIcon,
   UsersIcon,
   XIcon,
@@ -24,7 +28,8 @@ import type { LucideIcon } from 'lucide-react'
 import { BackendStatusChip } from '@/components/backend-status'
 import { Button } from '@/components/ui/button'
 import { cn } from 'cn'
-import { routeLabels, type Route } from '@/lib/navigation'
+import { routeLabels, routePermissions, type Route } from '@/lib/navigation'
+import { useAuth } from '@/lib/auth-context'
 
 const routeSections: Record<Route, string> = {
   overview: 'Workspace',
@@ -33,11 +38,14 @@ const routeSections: Record<Route, string> = {
   'tv-shows': 'Workspace',
   music: 'Workspace',
   subtitles: 'Workspace',
+  calendar: 'Workspace',
   usenet: 'Downloads',
   torrents: 'Downloads',
   connections: 'System',
   storage: 'System',
   users: 'System',
+  migration: 'System',
+  backups: 'System',
   system: 'System',
 }
 
@@ -51,6 +59,7 @@ const navSections: { label: string; items: { route: Route; icon: LucideIcon }[] 
       { route: 'tv-shows', icon: TvIcon },
       { route: 'music', icon: MusicIcon },
       { route: 'subtitles', icon: CaptionsIcon },
+      { route: 'calendar', icon: CalendarDaysIcon },
     ],
   },
   {
@@ -66,6 +75,8 @@ const navSections: { label: string; items: { route: Route; icon: LucideIcon }[] 
       { route: 'connections', icon: CableIcon },
       { route: 'storage', icon: HardDriveIcon },
       { route: 'users', icon: UsersIcon },
+      { route: 'migration', icon: ImportIcon },
+      { route: 'backups', icon: ShieldCheckIcon },
       { route: 'system', icon: SettingsIcon },
     ],
   },
@@ -174,10 +185,13 @@ function NavList({
   onNavigate?: () => void
 }) {
   const id = useId()
+  const { can } = useAuth()
 
   return (
     <nav aria-label="Primary" className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
       {navSections.map((section) => {
+        const items = section.items.filter(item => !routePermissions[item.route] || can(routePermissions[item.route]!))
+        if (items.length === 0) return null
         const headingId = `${id}-${section.label}`
         return (
           <div key={section.label}>
@@ -191,7 +205,7 @@ function NavList({
               {section.label}
             </p>
             <ul aria-labelledby={headingId} className="flex flex-col gap-0.5">
-              {section.items.map((item) => (
+              {items.map((item) => (
                 <li key={item.route}>
                   <NavLink
                     route={item.route}
@@ -242,6 +256,7 @@ export function AppShell({
   children: ReactNode
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { can, user, logout } = useAuth()
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const mainRef = useRef<HTMLElement>(null)
   const navigatedRef = useRef(false)
@@ -355,7 +370,9 @@ export function AppShell({
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
-            <BackendStatusChip />
+            {can('monitoring.read') && <BackendStatusChip />}
+            <Button asChild variant="ghost" size="sm"><a href="#users" aria-label="My account"><UsersIcon /><span className="hidden max-w-32 truncate sm:inline">{user?.name}</span></a></Button>
+            <Button variant="ghost" size="icon-sm" aria-label="Sign out" onClick={() => void logout().catch(() => {})}><LogOutIcon /></Button>
           </div>
         </header>
 

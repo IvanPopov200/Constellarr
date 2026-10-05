@@ -554,6 +554,11 @@ func (s *Service) importSourcesResult(ctx context.Context, cfg Config, movie Mov
 		templateQuality = quality.Parse(sources[0].Name).Quality
 	}
 	opts := s.importOptions(cfg, movie, destRoot, sourceRoot, templateQuality)
+	mode, err := s.Downloads.ImportMode(ctx, jobID, opts.Mode)
+	if err != nil {
+		return Movie{}, nil, err
+	}
+	opts.Mode = mode
 	present, recovered, err := s.recoverSources(ctx, jobID, sourceRoot, destRoot, sources)
 	if err != nil {
 		return Movie{}, nil, err

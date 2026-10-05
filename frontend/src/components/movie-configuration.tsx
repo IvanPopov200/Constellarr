@@ -19,6 +19,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { errorMessage } from '@/lib/api'
+import { accessPermissions } from '@/lib/auth-api'
+import { useAuth } from '@/lib/auth-context'
 import { moviesApi, type ConfigTest, type MovieConfig } from '@/lib/movies-api'
 import { cn } from 'cn'
 
@@ -189,6 +191,9 @@ function Checkbox({
 }
 
 export function MovieConfiguration({ section }: { section: 'connections' | 'storage' }) {
+  const { can } = useAuth()
+  const canWrite = can(accessPermissions.settingsWrite)
+  const canRead = can(accessPermissions.settingsRead)
   const [saved, setSaved] = useState<MovieConfig | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
   const [loading, setLoading] = useState(true)
@@ -198,6 +203,7 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
   const [tests, setTests] = useState<ConfigTest | null>(null)
 
   useEffect(() => {
+    if (!canRead) return
     const controller = new AbortController()
     moviesApi
       .config(controller.signal)
@@ -212,7 +218,7 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [])
+  }, [canRead])
 
   const dirty = saved !== null && draft !== null && JSON.stringify(draft) !== JSON.stringify(toDraft(saved))
   const rootsValid = draft === null || draft.rootFolders.every((root) => root.path.trim().length > 0)
@@ -227,7 +233,7 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
   async function save(event: FormEvent) {
     event.preventDefault()
     event.stopPropagation()
-    if (!draft) return
+    if (!draft || !canWrite) return
     setBusy('save')
     setError('')
     setNotice('')
@@ -264,6 +270,8 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
     }
   }
 
+  if (!canRead) return null
+
   if (loading) {
     return (
       <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -287,7 +295,7 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
     )
   }
 
-  const footer = (
+  const footer = canWrite ? (
     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
       <p className="text-xs text-muted-foreground" role="status">
         {dirty ? 'You have unsaved movie settings.' : 'Movie settings are saved.'}
@@ -334,6 +342,10 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
         </Button>
       </div>
     </div>
+  ) : (
+    <p className="border-t border-border pt-4 text-xs text-muted-foreground">
+      Your role can view movie settings but not change them.
+    </p>
   )
 
   return (

@@ -95,7 +95,7 @@ func Download(ctx context.Context, nzb []byte, dir string, cfg Config, onProgres
 		for _, s := range files[i].segments {
 			state.totalBytes += s.bytes
 			state.totalSegments++
-			tasks = append(tasks, segmentTask{file: i, messageID: s.messageID})
+			tasks = append(tasks, segmentTask{file: i, messageID: s.messageID, number: s.number})
 			wanted[s.messageID] = struct{}{}
 		}
 	}

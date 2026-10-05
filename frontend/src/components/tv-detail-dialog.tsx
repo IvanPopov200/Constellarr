@@ -83,6 +83,8 @@ export function SeriesDetailDialog({
   series,
   profiles,
   roots,
+  canWrite,
+  canReadSettings,
   onClose,
   onSave,
   onReload,
@@ -94,6 +96,8 @@ export function SeriesDetailDialog({
   series: Series
   profiles: MovieProfile[]
   roots: RootFolder[]
+  canWrite: boolean
+  canReadSettings: boolean
   onClose: () => void
   onSave: (series: Series) => Promise<Series>
   onReload: () => void
@@ -381,27 +385,31 @@ export function SeriesDetailDialog({
           title="Episodes"
           action={
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={monitorBusy !== ''}
-                onClick={() => void monitorScope(null, true, 'all')}
-              >
-                {monitorBusy === 'all' ? (
-                  <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <CheckIcon data-icon="inline-start" />
-                )}
-                Monitor all
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={monitorBusy !== ''}
-                onClick={() => void monitorScope(null, false, 'none')}
-              >
-                Unmonitor all
-              </Button>
+              {canWrite && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={monitorBusy !== ''}
+                  onClick={() => void monitorScope(null, true, 'all')}
+                >
+                  {monitorBusy === 'all' ? (
+                    <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                  ) : (
+                    <CheckIcon data-icon="inline-start" />
+                  )}
+                  Monitor all
+                </Button>
+              )}
+              {canWrite && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={monitorBusy !== ''}
+                  onClick={() => void monitorScope(null, false, 'none')}
+                >
+                  Unmonitor all
+                </Button>
+              )}
               {seasons.length > 1 && (
                 <Select
                   aria-label="Season selector"
@@ -449,7 +457,7 @@ export function SeriesDetailDialog({
                         {wanted > 0 ? ` · ${wanted} wanted` : ''}
                       </span>
                       <span className="ml-auto flex flex-wrap items-center gap-1.5">
-                        {season > 0 && (
+                        {canWrite && season > 0 && (
                           <Button
                             size="xs"
                             variant="outline"
@@ -462,23 +470,25 @@ export function SeriesDetailDialog({
                             Season pack
                           </Button>
                         )}
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          disabled={monitorBusy !== ''}
-                          onClick={(event) => {
-                            event.preventDefault()
-                            void monitorScope(season, !allMonitored, `season-${season}`)
-                          }}
-                        >
-                          {monitorBusy === `season-${season}` ? (
-                            <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-                          ) : allMonitored ? (
-                            'Unmonitor'
-                          ) : (
-                            'Monitor'
-                          )}
-                        </Button>
+                        {canWrite && (
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            disabled={monitorBusy !== ''}
+                            onClick={(event) => {
+                              event.preventDefault()
+                              void monitorScope(season, !allMonitored, `season-${season}`)
+                            }}
+                          >
+                            {monitorBusy === `season-${season}` ? (
+                              <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                            ) : allMonitored ? (
+                              'Unmonitor'
+                            ) : (
+                              'Monitor'
+                            )}
+                          </Button>
+                        )}
                       </span>
                     </summary>
                     <ul className="divide-y divide-border border-t border-border">
@@ -494,7 +504,7 @@ export function SeriesDetailDialog({
                               type="checkbox"
                               className="size-4 accent-primary"
                               checked={episode.monitored}
-                              disabled={pending}
+                              disabled={pending || !canWrite}
                               onChange={(event) => void toggleEpisode(episode, event.target.checked)}
                               aria-label={`Monitor ${seasonLabel(episode.season)} episode ${episode.number}`}
                             />
@@ -522,14 +532,16 @@ export function SeriesDetailDialog({
                             {episode.status && (!file || episode.status === 'cutoff-unmet') && <StatusBadge status={episode.status} />}
                             {activeStatuses.has(episode.status) && file && <StatusBadge status={episode.status} />}
                             <EpisodeFileLink seriesId={series.id} episode={episode} />
-                            <Button
-                              size="xs"
-                              variant="outline"
-                              onClick={() => setReleaseTarget({ season: episode.season, episode: episode.number })}
-                            >
-                              <SearchIcon data-icon="inline-start" />
-                              Search
-                            </Button>
+                            {canWrite && (
+                              <Button
+                                size="xs"
+                                variant="outline"
+                                onClick={() => setReleaseTarget({ season: episode.season, episode: episode.number })}
+                              >
+                                <SearchIcon data-icon="inline-start" />
+                                Search
+                              </Button>
+                            )}
                           </li>
                         )
                       })}
@@ -539,16 +551,19 @@ export function SeriesDetailDialog({
               })}
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => setReleaseTarget({ season: -1, episode: 0 })}>
-              <SearchIcon data-icon="inline-start" />
-              Search whole series
-            </Button>
-          </div>
+          {canWrite && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setReleaseTarget({ season: -1, episode: 0 })}>
+                <SearchIcon data-icon="inline-start" />
+                Search whole series
+              </Button>
+            </div>
+          )}
         </Section>
 
-        <Section
-          title="Manual episode"
+        {canWrite && (
+          <Section
+            title="Manual episode"
           action={
             <Button size="sm" variant="ghost" onClick={() => setManualOpen((current) => !current)}>
               {manualOpen ? 'Hide' : 'Add episode'}
@@ -624,15 +639,20 @@ export function SeriesDetailDialog({
             </p>
           )}
         </Section>
+        )}
 
         <Section
           title="Monitoring and organization"
           action={
-            <span className="text-xs text-muted-foreground" role="status">
-              {dirty ? 'Unsaved changes' : 'Saved'}
-            </span>
+            canWrite ? (
+              <span className="text-xs text-muted-foreground" role="status">
+                {dirty ? 'Unsaved changes' : 'Saved'}
+              </span>
+            ) : undefined
           }
         >
+          {canWrite ? (
+            <>
           <div className="grid gap-4 sm:grid-cols-2">
             <Checkbox
               id="tv-detail-monitored"
@@ -659,42 +679,46 @@ export function SeriesDetailDialog({
                 ))}
               </Select>
             </div>
-            <div className="space-y-2">
-              <label htmlFor="tv-detail-profile" className="text-sm font-medium">
-                Quality profile
-              </label>
-              <Select
-                id="tv-detail-profile"
-                className="w-full"
-                value={form.profileId}
-                onChange={(event) => setForm({ ...form, profileId: event.target.value })}
-              >
-                <option value="">Default</option>
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="tv-detail-root" className="text-sm font-medium">
-                Root folder
-              </label>
-              <Select
-                id="tv-detail-root"
-                className="w-full"
-                value={form.rootId}
-                onChange={(event) => setForm({ ...form, rootId: event.target.value })}
-              >
-                <option value="">Default</option>
-                {roots.map((root) => (
-                  <option key={root.id || root.path} value={root.id}>
-                    {root.path}
-                  </option>
-                ))}
-              </Select>
-            </div>
+            {canReadSettings && (
+              <div className="space-y-2">
+                <label htmlFor="tv-detail-profile" className="text-sm font-medium">
+                  Quality profile
+                </label>
+                <Select
+                  id="tv-detail-profile"
+                  className="w-full"
+                  value={form.profileId}
+                  onChange={(event) => setForm({ ...form, profileId: event.target.value })}
+                >
+                  <option value="">Default</option>
+                  {profiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>
+                      {profile.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+            {canReadSettings && (
+              <div className="space-y-2">
+                <label htmlFor="tv-detail-root" className="text-sm font-medium">
+                  Root folder
+                </label>
+                <Select
+                  id="tv-detail-root"
+                  className="w-full"
+                  value={form.rootId}
+                  onChange={(event) => setForm({ ...form, rootId: event.target.value })}
+                >
+                  <option value="">Default</option>
+                  {roots.map((root) => (
+                    <option key={root.id || root.path} value={root.id}>
+                      {root.path}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
             <div className="space-y-2 sm:col-span-2">
               <label htmlFor="tv-detail-tags" className="text-sm font-medium">
                 Tags
@@ -707,21 +731,28 @@ export function SeriesDetailDialog({
               />
             </div>
           </div>
-          {(profiles.length === 0 || roots.length === 0) && (
-            <p className="flex items-center gap-2 text-xs text-amber-300">
+          {!canReadSettings ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
               <CircleAlertIcon className="size-4 shrink-0" />
-              {roots.length === 0 ? (
-                <>
-                  Add a TV root folder in{' '}
-                  <a href="#storage" className="underline underline-offset-4">
-                    Storage & Paths
-                  </a>
-                  .
-                </>
-              ) : (
-                'Create a shared quality profile in Movies → Profiles.'
-              )}
+              The current root folder and quality profile stay as configured on the server.
             </p>
+          ) : (
+            (profiles.length === 0 || roots.length === 0) && (
+              <p className="flex items-center gap-2 text-xs text-amber-300">
+                <CircleAlertIcon className="size-4 shrink-0" />
+                {roots.length === 0 ? (
+                  <>
+                    Add a TV root folder in{' '}
+                    <a href="#storage" className="underline underline-offset-4">
+                      Storage & Paths
+                    </a>
+                    .
+                  </>
+                ) : (
+                  'Create a shared quality profile in Movies → Profiles.'
+                )}
+              </p>
+            )
           )}
           <div className="flex justify-end">
             <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>
@@ -733,9 +764,35 @@ export function SeriesDetailDialog({
               Save changes
             </Button>
           </div>
+            </>
+          ) : (
+            <dl className="grid gap-2 sm:grid-cols-2">
+              <MetaRow label="Monitoring">{form.monitored ? 'Monitored' : 'Unmonitored'}</MetaRow>
+              <MetaRow label="Monitor mode">{monitorModeLabel(series.monitorMode || 'all')}</MetaRow>
+              <MetaRow label="Quality profile">
+                {canReadSettings
+                  ? profiles.find((profile) => profile.id === series.profileId)?.name || series.profileId || 'Default'
+                  : series.profileId
+                    ? 'Configured profile'
+                    : 'Default'}
+              </MetaRow>
+              <MetaRow label="Root folder">
+                {canReadSettings
+                  ? roots.find((root) => root.id === series.rootId)?.path || series.rootId || 'Default'
+                  : series.rootId
+                    ? 'Configured root folder'
+                    : 'Default'}
+              </MetaRow>
+              <MetaRow label="Tags">{tagsOf(series).join(', ') || 'None'}</MetaRow>
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                Editing series settings requires library write access.
+              </p>
+            </dl>
+          )}
         </Section>
 
-        <Section title="Actions">
+        {canWrite && (
+          <Section title="Actions">
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
               {refreshing ? (
@@ -821,7 +878,8 @@ export function SeriesDetailDialog({
               )}
             </div>
           )}
-        </Section>
+          </Section>
+        )}
 
         <Section title="History">
           {historyError ? (

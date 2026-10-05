@@ -143,9 +143,12 @@ export function ReleaseDialog({
                             {formatAge(release.published)}
                           </time>
                           {matched > 1 ? ` · covers ${matched} episodes` : ''}
+                          {release.source ? ` · ${release.source}` : ''}
+                          {release.protocol === 'torrent' && release.seeders !== undefined ? ` · ${release.seeders} seeders` : ''}
                         </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline">{release.protocol === 'torrent' ? 'Torrent' : 'Usenet'}</Badge>
                         {release.pack && <Badge variant="outline">Season pack</Badge>}
                         {decision.upgrade && <Badge variant="outline">Upgrade</Badge>}
                         <Badge

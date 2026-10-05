@@ -1,15 +1,26 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import type { MouseEvent } from 'react'
 import { AppShell, PageHeading } from '@/components/app-shell'
-import { routeLabels, type Route } from '@/lib/navigation'
+import { routeLabels, routePermissions, type Route } from '@/lib/navigation'
+import { useAuth } from '@/lib/auth-context'
+import { UsersPage } from '@/components/users-page'
+import { RequestsPage } from '@/components/requests-page'
+import { CalendarPage } from '@/components/calendar-page'
+import { RecommendationsPanel } from '@/components/recommendations-panel'
+import { AISettings } from '@/components/recommendations-ai-settings'
+import { MigrationPage } from '@/components/migration-page'
 import { DownloadQueue } from '@/components/download-queue'
 import { Overview } from '@/components/overview'
 import { ReleaseSearch } from '@/components/release-search'
 import { MoviesPage } from '@/components/movies-page'
 import { TVPage } from '@/components/tv-page'
+import { MusicPage, MusicSettings } from '@/components/music-page'
+import { SubtitlesPage } from '@/components/subtitles-page'
+import { TorrentsPage } from '@/components/torrents-page'
+import { OperationsPage } from '@/components/operations-page'
+import { BackupPanel } from '@/components/operations-backup-panel'
 import { SettingsPage } from '@/components/settings-page'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { isActiveJob } from '@/lib/api'
 import { useDownloads } from '@/lib/use-downloads'
 
@@ -18,13 +29,6 @@ document.documentElement.classList.add('dark')
 
 const routeIds = Object.keys(routeLabels) as Route[]
 const routeAliases: Record<string, Route> = { search: 'movies', downloads: 'usenet', settings: 'connections' }
-const plannedSections: Partial<Record<Route, string>> = {
-  requests: 'Track requests for movies, shows, and music.',
-  music: 'Manage artists, albums, and your music library.',
-  subtitles: 'Find and manage subtitles for your movies and shows.',
-  torrents: 'Manage torrent downloads and seeding.',
-  users: 'Manage accounts and access to your server.',
-}
 
 function readRoute(): Route {
   const hash = window.location.hash.replace(/^#\/?/, '')
@@ -43,8 +47,11 @@ function skipToContent(event: MouseEvent<HTMLAnchorElement>) {
 }
 
 function App() {
-  const { jobs, error, refresh, download, retry } = useDownloads()
-  const route = useSyncExternalStore(subscribeToHash, readRoute, () => 'overview' as Route)
+  const { can } = useAuth()
+  const { jobs, error, refresh, download, retry } = useDownloads(can('downloads.read'))
+  const requestedRoute = useSyncExternalStore(subscribeToHash, readRoute, () => 'overview' as Route)
+  const permission = routePermissions[requestedRoute]
+  const route = permission && !can(permission) ? 'overview' : requestedRoute
 
   useEffect(() => {
     if (window.location.hash !== `#${route}`) {
@@ -52,9 +59,8 @@ function App() {
     }
   }, [route])
 
-  const plannedDescription = plannedSections[route]
   const activeDownloads = jobs?.filter(isActiveJob).length ?? 0
-  const settingsSection = route === 'connections' || route === 'storage' || route === 'system' ? route : null
+  const settingsSection = route === 'connections' || route === 'storage' ? route : null
 
   return (
     <>
@@ -67,22 +73,38 @@ function App() {
       </a>
       <AppShell route={route} activeDownloads={activeDownloads}>
         {route === 'overview' && (
-          <Overview jobs={jobs} error={error} onRetry={retry} onRefresh={refresh} />
+          <div className="space-y-6">
+            <Overview jobs={jobs} error={error} onRetry={retry} onRefresh={refresh} />
+            {can('library.read') && <RecommendationsPanel />}
+          </div>
         )}
 
-        <div hidden={route !== 'movies'} inert={route !== 'movies'}>
+        {can('library.read') && <div hidden={route !== 'movies'} inert={route !== 'movies'}>
           <div className="flex flex-col gap-6">
             <MoviesPage />
-            <details className="rounded-xl border border-border p-4">
+            {can('downloads.write') && <details className="rounded-xl border border-border p-4">
               <summary className="cursor-pointer text-sm font-medium">Search an NZB release directly</summary>
               <div className="mt-4"><ReleaseSearch jobs={jobs ?? []} onDownload={download} /></div>
-            </details>
+            </details>}
           </div>
-        </div>
+        </div>}
 
-        <div hidden={route !== 'tv-shows'} inert={route !== 'tv-shows'}>
+        {can('library.read') && <div hidden={route !== 'tv-shows'} inert={route !== 'tv-shows'}>
           <TVPage active={route === 'tv-shows'} />
-        </div>
+        </div>}
+
+        {route === 'users' && <UsersPage />}
+        {route === 'requests' && <RequestsPage />}
+        {route === 'calendar' && <CalendarPage />}
+        {route === 'migration' && <MigrationPage />}
+        {route === 'music' && <MusicPage />}
+        {route === 'subtitles' && <SubtitlesPage />}
+        {route === 'torrents' && <TorrentsPage />}
+        {route === 'system' && <OperationsPage />}
+        {route === 'backups' && <div className="space-y-6">
+          <PageHeading title="Backups" description="Back up, import, and restore your server configuration and library database." />
+          <BackupPanel />
+        </div>}
 
         {route === 'usenet' && (
           <div className="flex flex-col gap-6">
@@ -90,9 +112,9 @@ function App() {
               title="Usenet"
               description="Transfer and processing stages for queued NZB releases."
               action={
-                <Button asChild size="sm">
+                can('library.read') ? <Button asChild size="sm">
                   <a href="#movies">Search releases</a>
-                </Button>
+                </Button> : undefined
               }
             />
             <DownloadQueue
@@ -100,26 +122,16 @@ function App() {
               error={error}
               onRetry={retry}
               onRefresh={refresh}
-              emptyAction={{ label: 'Search releases', href: '#movies' }}
+              emptyAction={can('library.read') ? { label: 'Search releases', href: '#movies' } : undefined}
             />
           </div>
         )}
 
-        {plannedDescription && (
-          <div className="flex flex-col gap-6">
-            <PageHeading title={routeLabels[route]} description={plannedDescription} />
-            <Card className="max-w-3xl">
-              <CardContent className="items-start gap-4">
-                <p className="text-sm text-muted-foreground">This section is planned and isn’t available yet.</p>
-                {route === 'requests' && <Button asChild size="sm"><a href="#movies">Find a movie</a></Button>}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        <div hidden={!settingsSection} inert={!settingsSection}>
-          <SettingsPage section={settingsSection ?? 'connections'} />
-        </div>
+        {settingsSection && can('settings.read') && <div>
+          <SettingsPage section={settingsSection} />
+          <div className="mt-6"><MusicSettings section={settingsSection} /></div>
+          {settingsSection === 'connections' && <div className="mt-6"><AISettings /></div>}
+        </div>}
       </AppShell>
     </>
   )

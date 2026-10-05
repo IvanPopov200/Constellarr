@@ -1,0 +1,2051 @@
+{
+ "format": 1,
+ "purpose": "Corresponding source for GPL/LGPL components redistributed in Constellarr runtime artifacts (Alpine 3.24 packages and Python packages from PyPI).",
+ "selection_rule": "Alpine package origins whose declared license expression contains GPL or LGPL terms, plus the Python GPL package auditok. Origins whose expression offers a non-GPL/LGPL alternative are marked \"elective_alternative\": true and are not collected by default.",
+ "checksums": "sha512/sha256 values copied from the shipped Alpine APKBUILDs (sha512sums/sha256sums) and from PyPI release metadata.",
+ "collector": "third_party/collect_sources.py",
+ "notes": [
+  "Alpine recipes (APKBUILD) are bundled in-repo under third_party/licenses/alpine/.",
+  "par2cmdline corresponding source is additionally bundled in-repo under third_party/licenses/par2cmdline/.",
+  "Source files are downloaded to an external output directory; they are not stored in git."
+ ],
+ "entries": [
+  {
+   "origin": "ffmpeg",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/ffmpeg/APKBUILD-3.24-stable",
+   "packages": [
+    "ffmpeg-8.1.2-r0",
+    "ffmpeg-libavcodec-8.1.2-r0",
+    "ffmpeg-libavdevice-8.1.2-r0",
+    "ffmpeg-libavfilter-8.1.2-r0",
+    "ffmpeg-libavformat-8.1.2-r0",
+    "ffmpeg-libavutil-8.1.2-r0",
+    "ffmpeg-libswresample-8.1.2-r0",
+    "ffmpeg-libswscale-8.1.2-r0"
+   ],
+   "license": "GPL-2.0-or-later AND LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "ffmpeg-8.1.2.tar.xz",
+     "url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
+     "role": "source",
+     "sha512": "b3adc16fe426217bb607da01c4137cee0a9788fc08e077874336db185d2b7287746a7dc94cf0181ea92cd8afcdb06094ee9456e2986112354f84538cb9a5ed0b"
+    },
+    {
+     "name": "add-av_stream_get_first_dts-for-chromium.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fffmpeg%2Fadd-av_stream_get_first_dts-for-chromium.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "0c2284bc053c92478ce6e3665e03273cb93926534c6f927eb60e060c7770c68dca12724853adbcac03c4a58df81f2de938d54e82f43c7e789d345bed872ffc69"
+    },
+    {
+     "name": "posix-ioctl.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fffmpeg%2Fposix-ioctl.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "790b3ea796855f0572531eec8bb436f8ae2b894e29ea7fa2bf7fcddbbc1a58da5c403b366bc116729b92da54ca6d74c82df3bb71c5069e41ae8540a38f7151ae"
+    }
+   ]
+  },
+  {
+   "origin": "libasyncns",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/libasyncns/APKBUILD-3.24-stable",
+   "packages": [
+    "libasyncns-0.8-r5"
+   ],
+   "license": "LGPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "libasyncns-0.8.tar.gz",
+     "url": "https://dev.alpinelinux.org/archive/libasyncns-0.8.tar.gz",
+     "role": "source",
+     "sha512": "2daad3a2d9eb875e0575843d9e9e2787be6cbba89211fd073fa8898ff80e0a891c7da1a7b0ef70f306318cb3a963ecd65d53d24d08b5f6b98e7cd2a3b3bdcda7"
+    }
+   ]
+  },
+  {
+   "origin": "libbluray",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/libbluray/APKBUILD-3.24-stable",
+   "packages": [
+    "libbluray-1.4.0-r0"
+   ],
+   "license": "LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "libbluray-1.4.0.tar.xz",
+     "url": "https://download.videolan.org/pub/videolan/libbluray/1.4.0/libbluray-1.4.0.tar.xz",
+     "role": "source",
+     "sha512": "7284169b32624e5ca4fd71b260a4cc2921efafb1f63143a562568be45e373bfcbfeac63895d5659ccdcb11d7dbd0236cc46ccb15c12eff855703010e46991f27"
+    }
+   ]
+  },
+  {
+   "origin": "libdvdcss",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/libdvdcss/APKBUILD-3.24-stable",
+   "packages": [
+    "libdvdcss-1.4.3-r0"
+   ],
+   "license": "GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "libdvdcss-1.4.3.tar.bz2",
+     "url": "https://download.videolan.org/pub/libdvdcss/1.4.3/libdvdcss-1.4.3.tar.bz2",
+     "role": "source",
+     "sha512": "0f9c0244feff5ca62459823810a39ede745b63fedb682707fcbaf0dff11fff42998cef31a281bb6380930123d079780d37a79871f6e628cdca9cfa06c64befb6"
+    },
+    {
+     "name": "replace-error.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Flibdvdcss%2Freplace-error.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "6aa9510b662d39527935f90fc500d27a8ff6bfc45a967ee3b3affcb0637a3d9ce9acb0967e88c65711a74eeb2061c63b14c542ec47b1dded29a5729f7e659f8e"
+    }
+   ]
+  },
+  {
+   "origin": "libdvdnav",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/libdvdnav/APKBUILD-3.24-stable",
+   "packages": [
+    "libdvdnav-6.1.1-r1"
+   ],
+   "license": "GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "libdvdnav-6.1.1.tar.bz2",
+     "url": "https://download.videolan.org/pub/videolan/libdvdnav/6.1.1/libdvdnav-6.1.1.tar.bz2",
+     "role": "source",
+     "sha512": "889bc987113189bfdfc1ebf603b256e5b228be37196455dcfdc7f66debe18e7298b82b807e86ff18a8925e491395ed4007c87cf18ba1ff1ccc213d86f5342a10"
+    }
+   ]
+  },
+  {
+   "origin": "libdvdread",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/libdvdread/APKBUILD-3.24-stable",
+   "packages": [
+    "libdvdread-6.1.3-r2"
+   ],
+   "license": "GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "libdvdread-6.1.3.tar.bz2",
+     "url": "https://download.videolan.org/pub/videolan/libdvdread/6.1.3/libdvdread-6.1.3.tar.bz2",
+     "role": "source",
+     "sha512": "c98055829ccbbe2bb7b5df48f6e279cf6e91ecab39a35c37081581452f7df7531c1d7b8abd641c55eeee357235b2658b31478dbc307995cffdf8c011bd0dd0bc"
+    }
+   ]
+  },
+  {
+   "origin": "libplacebo",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/libplacebo/APKBUILD-3.24-stable",
+   "packages": [
+    "libplacebo-7.360.1-r0"
+   ],
+   "license": "LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "libplacebo-v7.360.1.tar.gz",
+     "url": "https://code.videolan.org/videolan/libplacebo/-/archive/v7.360.1/libplacebo-v7.360.1.tar.gz",
+     "role": "source",
+     "sha512": "ea41f3852a5d877313d1969d771b0ba38338906a2a872abc67d2990f50c68848757616dc21cde1dbaa7e0fd46282e455bc7b3b14bfea14079935ff3afe7096e1"
+    },
+    {
+     "name": "glslang-deps.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Flibplacebo%2Fglslang-deps.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "aef8c624063643b199e23a7ecd21075ba18aa4c581a3ada6d892f0f75d110f81021f3c61efb4879d508c69ec1d7da0c554f94a767e6864c46e89f7bb1ffc1114"
+    }
+   ]
+  },
+  {
+   "origin": "libssh",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/libssh/APKBUILD-3.24-stable",
+   "packages": [
+    "libssh-0.12.2-r0"
+   ],
+   "license": "LGPL-2.1-or-later BSD-2-Clause",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "libssh-0.12.2.tar.xz",
+     "url": "https://www.libssh.org/files/0.12/libssh-0.12.2.tar.xz",
+     "role": "source",
+     "sha512": "92b95d64772906fc0fe497fed4dc34a160f2397f71ef3871dc1ea0fe1e8e3c00df699ed0efdc0b754feb23e2140bda17be41d16aee48ff715487384023fdd467"
+    }
+   ]
+  },
+  {
+   "origin": "libudfread",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/libudfread/APKBUILD-3.24-stable",
+   "packages": [
+    "libudfread-1.2.0-r1"
+   ],
+   "license": "LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "libudfread-1.2.0.tar.gz",
+     "url": "https://code.videolan.org/videolan/libudfread/-/archive/1.2.0/libudfread-1.2.0.tar.gz",
+     "role": "source",
+     "sha512": "63cdd8ce9b7525d17f8f685b87d1232334ebfe9ffcd48b3bb189231f4d3c88c11a19d3435be9252058d374b1cbd86eb38a045c969699730cb9729a541582f645"
+    }
+   ]
+  },
+  {
+   "origin": "mbedtls3",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/mbedtls3/APKBUILD-3.24-stable",
+   "packages": [
+    "mbedtls3-3.6.7-r0"
+   ],
+   "license": "Apache-2.0 OR GPL-2.0-or-later",
+   "elective_alternative": true,
+   "files": [
+    {
+     "name": "mbedtls-3.6.7.tar.bz2",
+     "url": "https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.7/mbedtls-3.6.7.tar.bz2",
+     "role": "source",
+     "sha512": "d37e23e804753a7fa51aeb901b45c7255e9618b987ffc680af49760d2a5b5d38998d58ecb29a68ecdf29f49e37b5b681b3046fb775426115f1365cfefae9e273"
+    }
+   ]
+  },
+  {
+   "origin": "par2cmdline",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/par2cmdline/APKBUILD-3.24-stable",
+   "packages": [
+    "par2cmdline-1.1.1-r0"
+   ],
+   "license": "GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "par2cmdline-1.1.1.tar.bz2",
+     "url": "https://github.com/Parchive/par2cmdline/releases/download/v1.1.1/par2cmdline-1.1.1.tar.bz2",
+     "role": "source",
+     "sha512": "13b78bb16958e808123ed47c5248f205e0f23b51c507d4d2ff6efccc4a4448970bddd0e4bdd9825b77ff9e26e16f847f8b7f76b19eedc18d4d6f23e8d7cf9acd"
+    }
+   ]
+  },
+  {
+   "origin": "pulseaudio",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/pulseaudio/APKBUILD-3.24-stable",
+   "packages": [
+    "libpulse-17.0-r7"
+   ],
+   "license": "LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "pulseaudio-17.0.tar.xz",
+     "url": "https://www.freedesktop.org/software/pulseaudio/releases/pulseaudio-17.0.tar.xz",
+     "role": "source",
+     "sha512": "be0aec46204d9c9188a796fbe41b4cf6f0f5e6b16fa08ce359b8f0f51253f0ade364b89448bbf5faa2af7e59deb6c72194734c3233944250dcfd4f31968a5e97"
+    },
+    {
+     "name": "51-pulseaudio.conf",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fpulseaudio%2F51-pulseaudio.conf/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "ebb7700018cf64fe6dcb747365cd2fb816deb6e06e7368af779284b51b1f0749e24f8e70b0b72fa6bff4178a02af934f728c3b115c8c1f77aa1a3490879af731"
+    },
+    {
+     "name": "link-libintl.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fpulseaudio%2Flink-libintl.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "2c31c5bc592e748248215f8f62f85687cfec230b05f65441e6dafa5fa77d4967e97636209b2011a4501ed1337ecd880b264baa175586fc85183a980846cb8146"
+    },
+    {
+     "name": "remove-once-test.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fpulseaudio%2Fremove-once-test.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "c1223cf42538d91f31dbcb1a167537a1d3b6e8a3bf1b454cdebf95c25ca6f3b444848e9d546f092988851f71fe2c9dd9c4a781a58795e2f57d98563963a4630a"
+    },
+    {
+     "name": "volume-tests-fix.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fpulseaudio%2Fvolume-tests-fix.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "835b7b6273bf23a71d2ca21500fe734fc44f4011c1625c1e55ec4addb690249cd0d6188617ff996d0a79e69c995f574f5e3d32dd929805721d1bba9dcefa41a9"
+    },
+    {
+     "name": "alsa-ucm-assert-1.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fpulseaudio%2Falsa-ucm-assert-1.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "3bd3fd600042e851c54b0d1299803552cdc61dbded2122afeafa649958262b9739dff229100cd306cadb6b5dfe979153312d6758dc1f4bd261f39742a501c533"
+    },
+    {
+     "name": "alsa-ucm-assert-2.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fpulseaudio%2Falsa-ucm-assert-2.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "5871cb4a3ed4a9232462a8d8f77a610fc8ff6aef3e7a85fa19e4e8c27383beb8be063c1c587cdafa9bd8e37eb6d6cd7d81c80c133b086386689850f8d2d8c97f"
+    },
+    {
+     "name": "pulseaudio.initd",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fpulseaudio%2Fpulseaudio.initd/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "a2cc31f830f35bdfb0e32eea663d2f86997acef6343154fcea295ae10058ba06561014ac81c81d658619e59bd679e7a6b00d3a4f35dc2f4a737397551d95ab78"
+    },
+    {
+     "name": "pulseaudio.confd",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fpulseaudio%2Fpulseaudio.confd/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "75b54581591519d63a3362b155c0f9b0501a60763ab394693a456c44d0216138cf3a40bdd0f7442028663bc045e9ffee286f8f8eaf2ee3bb17379b43615fee0e"
+    }
+   ]
+  },
+  {
+   "origin": "soxr",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/soxr/APKBUILD-3.24-stable",
+   "packages": [
+    "soxr-0.1.3-r7"
+   ],
+   "license": "LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "soxr-0.1.3.tar.xz",
+     "url": "https://sourceforge.net/projects/soxr/files/soxr-0.1.3-Source.tar.xz/download",
+     "role": "source",
+     "sha512": "f4883ed298d5650399283238aac3dbe78d605b988246bea51fa343d4a8ce5ce97c6e143f6c3f50a3ff81795d9c19e7a07217c586d4020f6ced102aceac46aaa8"
+    }
+   ]
+  },
+  {
+   "origin": "v4l-utils",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/v4l-utils/APKBUILD-3.24-stable",
+   "packages": [
+    "v4l-utils-libs-1.32.0-r1"
+   ],
+   "license": "LGPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "v4l-utils-1.32.0.tar.xz",
+     "url": "https://linuxtv.org/downloads/v4l-utils/v4l-utils-1.32.0.tar.xz",
+     "role": "source",
+     "sha512": "5bf24c28ec66a7ac1a0c9ee976521d825d4c2f8abbbeb59c7ac55e89db10dde6ebb643d238d217d636d79fda363244558fee1effe8c5e8c573c1a3e957fe391f"
+    },
+    {
+     "name": "disable-nls.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fv4l-utils%2Fdisable-nls.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "749599bc1f1c07c65ec2dcfc2261622c5b61106166bcdd93a5face11aacc138166e2c504a30c9bc4f93e245c19d5c39c8fb4f78f5182db3b0b56f0c95c2261fd"
+    },
+    {
+     "name": "ioctl-types.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fv4l-utils%2Fioctl-types.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "739230a8269e39dae27435990dc3a28c285682a644c3461a749c7278041fe4145c61524fad32fd43fdd3b69dcb6a339ef72ad1b58212dfa798c4f209cb6cf217"
+    },
+    {
+     "name": "omit-unavailable-functions.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fv4l-utils%2Fomit-unavailable-functions.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "887a2a0f761c2a18ea4e22f4fb5ea43943fe4884ace08af3c18a84631362a22ed7dcbd7ef1b762f721b48e690eb14d19eabd2174ebd3ae6217dffaf6b760b682"
+    }
+   ]
+  },
+  {
+   "origin": "vidstab",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/vidstab/APKBUILD-3.24-stable",
+   "packages": [
+    "vidstab-1.1.1-r0"
+   ],
+   "license": "GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "vid.stab-v1.1.1.tar.gz",
+     "url": "https://github.com/georgmartius/vid.stab/archive/v1.1.1/vid.stab-v1.1.1.tar.gz",
+     "role": "source",
+     "sha512": "b27ac95ab5302e9500af5a52cb09f557b9dacbdc4dc57a9781e2f9ae65a6ffea396f9819bca1f6a103f9d1896bf3061f1cb647166b14b8de8e89a1b15f010e5c"
+    }
+   ]
+  },
+  {
+   "origin": "x264",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/x264/APKBUILD-3.24-stable",
+   "packages": [
+    "x264-libs-0.164.3108-r1"
+   ],
+   "license": "GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "x264-31e19f92f00c7003fa115047ce50978bc98c3a0d.tar.gz",
+     "url": "https://code.videolan.org/videolan/x264/-/archive/31e19f92f00c7003fa115047ce50978bc98c3a0d/x264-31e19f92f00c7003fa115047ce50978bc98c3a0d.tar.gz",
+     "role": "source",
+     "sha512": "707ff486677a1b5502d6d8faa588e7a03b0dee45491c5cba89341be4be23d3f2e48272c3b11d54cfc7be1b8bf4a3dfc3c3bb6d9643a6b5a2ed77539c85ecf294"
+    },
+    {
+     "name": "version.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fx264%2Fversion.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "d3eb0294a7beb36d26fb068af3220b7e24b95799be4aa39120344d439b160311e3e8e69c5b3dc1b8e747e3d46c38cd8af619470ff9375aa84ae6cc652c527d23"
+    },
+    {
+     "name": "incompatible-pointer.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fx264%2Fincompatible-pointer.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "b5e834bd542cc67ff14e46820d9dd379a2f0148a217d0118a8ee6fba29da6461fc15370bbad09481f0391f579ca7a4271acd157287090e1ed0e4fb1018f230fb"
+    }
+   ]
+  },
+  {
+   "origin": "xvidcore",
+   "ecosystem": "alpine",
+   "repo": "community",
+   "apkbuild": "third_party/licenses/alpine/community/xvidcore/APKBUILD-3.24-stable",
+   "packages": [
+    "xvidcore-1.3.7-r2"
+   ],
+   "license": "GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "xvidcore-1.3.7.tar.bz2",
+     "url": "https://downloads.xvid.com/downloads/xvidcore-1.3.7.tar.bz2",
+     "role": "source",
+     "sha512": "e2b22e7a7e103af7adcc999d95484f991a0a33df02b912fe042b2e23d2af07381c737d23158dbf0fad770ee680572f86fbe04ab2ef33c81e2e0180ead2acc8ed"
+    },
+    {
+     "name": "xvidcore-c23.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/community%2Fxvidcore%2Fxvidcore-c23.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "1694dbb646217ae60560bf426c833691187c4676e4ebdef1ad45a0de00de73878fc75daadb2fabad0ab5b6904bd2c71d7657286a3b96738a1532d30d492730b6"
+    }
+   ]
+  },
+  {
+   "origin": "alpine-baselayout",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/alpine-baselayout/APKBUILD-3.24-stable",
+   "packages": [
+    "alpine-baselayout-3.7.2-r1",
+    "alpine-baselayout-data-3.7.2-r1"
+   ],
+   "license": "GPL-2.0-only",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "crontab",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2Fcrontab/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "6e169c0975a1ad1ad871a863e8ee83f053de9ad0b58d94952efa4c28a8c221445d9e9732ad8b52832a50919c2f39aa965a929b3d5b3f9e62f169e2b2e0813d82"
+    },
+    {
+     "name": "color_prompt.sh.disabled",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2Fcolor_prompt.sh.disabled/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "558071efdce2fe92afe4277006235b1a6368b070337c7567e5632a1a3fe531f87ca692eb36f3dda498d4d29d1f834fc8f7139f2985669ae3400b6d103d6f4c5e"
+    },
+    {
+     "name": "20locale.sh",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2F20locale.sh/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "03361d912cf29c127608697ee14bfa5972f82a5c475e653378ca5f7670cbd8183efc7c8c339ff046ff6537944fe00c4a732bb6b552aecaecd1214ed3e11bdf90"
+    },
+    {
+     "name": "usr_merge_nag.sh",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2Fusr_merge_nag.sh/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "a3783aaebd3df882c3b946cd79cfca5cbe5e830bbaf4347ca66c5af51c803db70684f5ae3fe91b34d966f43b3979074200ddfb0cad24e94e0cca3516acc9cecb"
+    },
+    {
+     "name": "aliases.conf",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2Faliases.conf/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "bfe947bdd69e7d93b32c8cb4e2cabe5717cb6c1e1f49a74015ac2cfb13e96d1f12c4be23ae93a1d61aaa3760d33a032fa9bd99f227fb21223a76b5f5908acc65"
+    },
+    {
+     "name": "blacklist.conf",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2Fblacklist.conf/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "b5a098097592612d244e03c295d660701c15deba25b6da6c32817d562a1c0b7e1c4f5ed260979780251b2e66a640324b1819469beb8cd2687a61fb789d81afd3"
+    },
+    {
+     "name": "i386.conf",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2Fi386.conf/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "49109d434b577563849c43dd8141961ca798dada74d4d3f49003dac1911f522c43438b8241fa254e4faacdd90058f4d39a7d69b1f493f6d57422c1f706547c95"
+    },
+    {
+     "name": "group",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2Fgroup/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "b5eb01165c714861e860f17c0156911ff882a9010306b7fc4cdb22251acf8b1c91a3fa1d44cc41cb3d9b50892e2f98f43da57b002c5c33200c1bf49c3d2d587d"
+    },
+    {
+     "name": "inittab",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2Finittab/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "37d7b8348e604b12c055d9d7e79afb568ededea7153ff552c9f383cffd537d9c78cfd9facd612d2a6753fc626ff608a6d22d62637585a33166aa28f59fabed22"
+    },
+    {
+     "name": "passwd",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2Fpasswd/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "f0d12f365839e7e262ec91e151119de7f2f253e9d0443157de4d52e183f421fbbb9eb0a83b9267a9ee850bebe41bff3c3cef553f9bda6e70d59a754a955be57d"
+    },
+    {
+     "name": "profile",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2Fprofile/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "4eb857ed59c2edb257636d2bf196989e514a273e9701e9f076c9ae8c1589b4898269180569960acf072c0981ec7ea54014fd230f014401d6bb92314285d1e6aa"
+    },
+    {
+     "name": "protocols-6.4",
+     "url": "https://salsa.debian.org/md/netbase/-/raw/v6.4/etc/protocols",
+     "role": "auxiliary",
+     "sha512": "3a00083bcdf5a9e884c9d07877d52311e3d99e79cbee656e236ba06e08ba0dddb7ba76494fdc9dd1a826c48e197a790a69e6bb458e9df64832d6b5e904e9fd15"
+    },
+    {
+     "name": "services-6.4",
+     "url": "https://salsa.debian.org/md/netbase/-/raw/v6.4/etc/services",
+     "role": "auxiliary",
+     "sha512": "47b0f3ee73af2d259bd206a026204be0ea25531a895a0b035a904b38fe5407bc3dd2beab7f8fcb3d760587e6159702ebdb9cbc4f508942befdf7f10c10c87888"
+    },
+    {
+     "name": "hier.7",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falpine-baselayout%2Fhier.7/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "1088668c3bad677c47ef772f2d3af6cd23edfe95c6aeb3b83434a4c767ceccda56b9ffe98a002de49c2642d08b6468c1491913d1c017ec457ca20f7bb7019550"
+    }
+   ]
+  },
+  {
+   "origin": "alsa-lib",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/alsa-lib/APKBUILD-3.24-stable",
+   "packages": [
+    "alsa-lib-1.2.15.3-r0"
+   ],
+   "license": "LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "alsa-lib-1.2.15.3.tar.bz2",
+     "url": "https://alsa-project.org/files/pub/lib/alsa-lib-1.2.15.3.tar.bz2",
+     "role": "source",
+     "sha512": "7fc0fa8a5ae02d3404d2c262c6a14fcbb8b08e25993eac86b9e89b8419ed4d293b422da77b3eb7a1930f26c316b638e5aa7bdba78b0ada9908b0362d132a0cc0"
+    },
+    {
+     "name": "remove-test.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Falsa-lib%2Fremove-test.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "8d0f34d9a0431a8113e0b0e5dfe69b7166c619fcfe085b5d4823f215d481682473f5cc41fb0dd819371af5909fdc66e6e833b4efaddec05a12afc7168fd09aad"
+    }
+   ]
+  },
+  {
+   "origin": "apk-tools",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/apk-tools/APKBUILD-3.24-stable",
+   "packages": [
+    "apk-tools-3.0.8-r0",
+    "libapk-3.0.8-r0"
+   ],
+   "license": "GPL-2.0-only",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "apk-tools-v3.0.8.tar.gz",
+     "url": "https://gitlab.alpinelinux.org/alpine/apk-tools/-/archive/v3.0.8/apk-tools-v3.0.8.tar.gz",
+     "role": "source",
+     "sha512": "3616435508dead5240f8d9fe74e87e2aa93262f9e466f50af8f60100e166403393b1e491c115395864d4179b219699831ecb61dc60960b5dfb1f10816d75f95f"
+    },
+    {
+     "name": "repo-hash-sha1.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fapk-tools%2Frepo-hash-sha1.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "6f6442d73d994964d78f06433a611902cbb066a457f3532544278b1422aa0aa276ccec1f2438ea7e93a8a048d3fdbf72ccd9a79d210f44870fda467bc43cb9fd"
+    }
+   ]
+  },
+  {
+   "origin": "busybox",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/busybox/APKBUILD-3.24-stable",
+   "packages": [
+    "busybox-1.37.0-r31",
+    "busybox-binsh-1.37.0-r31",
+    "ssl_client-1.37.0-r31"
+   ],
+   "license": "GPL-2.0-only",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "busybox-1.37.0.tar.bz2",
+     "url": "https://busybox.net/downloads/busybox-1.37.0.tar.bz2",
+     "role": "source",
+     "sha512": "ad8fd06f082699774f990a53d7a73b189ed404fe0a2166aff13eae4d9d8ee5c9239493befe949c98801fe7897520dbff3ed0224faa7205854ce4fa975e18467e"
+    },
+    {
+     "name": "0001-wget-add-header-Accept.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0001-wget-add-header-Accept.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "b148e37fc23d65ac011fa85142fcd645a55171593e889a86743b1557d9be05b6c39e8d0a798a536dfa29d17f71d6fb0b422f031128415b07ddec3c209ce93814"
+    },
+    {
+     "name": "0002-adduser-default-to-sbin-nologin-as-shell-for-system-.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0002-adduser-default-to-sbin-nologin-as-shell-for-system-.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "c725043253cae924b989cfba739d024b172b20a300de63acd26d4ec0624a13b5ea4b07f53cf991c4991cb611454c70ebe5bdb8e1a8e62d5d5d7e2e3823bed2bf"
+    },
+    {
+     "name": "0003-ash-add-built-in-BB_ASH_VERSION-variable.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0003-ash-add-built-in-BB_ASH_VERSION-variable.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "e9ba4f56bd0841f6b998f79aaf73a09c4096fec0f817594be294c12a03ba712f1103fb8b0716fcf2fb04f5dc9efa04aa6dc9b61150b3df00b302ab6f9608d313"
+    },
+    {
+     "name": "0004-Avoid-redefined-warnings-when-buiding-with-utmps.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0004-Avoid-redefined-warnings-when-buiding-with-utmps.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "c6acd1a4cbbc8b7b6c66b20c4cb958c12e887a43edbea35c0c4db3b4139afc5b4246058f503a5aaac0d05badffee93e6bf91111ad0cc856d9f5074baa7194df8"
+    },
+    {
+     "name": "0005-libbb-sockaddr2str-ensure-only-printable-characters-.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0005-libbb-sockaddr2str-ensure-only-printable-characters-.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "0c4eba3a6690b4989ced7f40a2f2369fe8ca97caa226838bde6412031290722d380a27203c67f8a2bfb3319590c67a0a108f8d8a04cff9add54085bdea520c25"
+    },
+    {
+     "name": "0006-modinfo-add-k-option-for-kernel-version.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0006-modinfo-add-k-option-for-kernel-version.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "68637265f28f73e1538045bb23f6a585248a73d60eb81b1fb75a67e9946b9f3928ebb6d8794976f724a6f0e0324748e3eafbf1dff5e1c78254200cb3acbc51cd"
+    },
+    {
+     "name": "0007-nologin-Install-applet-to-sbin-instead-of-usr-sbin.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0007-nologin-Install-applet-to-sbin-instead-of-usr-sbin.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "6a0714d051dc29e39d62271c317455bb7d1b28117f60cdc3e887dddbb38df28ae5c17da8033b4250c1bed76f1e8e29b2c013e87f9d547a5bdf75c4b9433fc2bd"
+    },
+    {
+     "name": "0008-pgrep-add-support-for-matching-against-UID-and-RUID.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0008-pgrep-add-support-for-matching-against-UID-and-RUID.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "220da5e908ae3c6f836faf8549f5c610e74a76563103152f9d20e2b2ca1663ba7baf803067286684753a2c737427c5fcf317d7da60293412f601b4ca17e77e00"
+    },
+    {
+     "name": "0009-properly-fix-wget-https-support.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0009-properly-fix-wget-https-support.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "b4697696c2c44f5c2c2be167774784b87f45d7d1433db8ed040ae37a99d01275a2a0b79db7e6314636f76db0f7b69288f1f7d2fb96c097929524d49832ea0913"
+    },
+    {
+     "name": "0010-fsck-resolve-LABEL-.-UUID-.-spec-to-device.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0010-fsck-resolve-LABEL-.-UUID-.-spec-to-device.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "16e490902496cfe199551432dd3cce480d20d79b98056b6fd5086a5b5a16ace0cda8357d8fb7bdc3e758273c3ec91e416f926c3e54dbeb54136c6853ce23bc7e"
+    },
+    {
+     "name": "0011-nslookup-sanitize-all-printed-strings-with-printable.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0011-nslookup-sanitize-all-printed-strings-with-printable.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "6671165e7dc3546b42edc7cf3304ddb755c707a7c7976bc544f7da6ad974c09bfa5e7cc2e83a98ece8e919808ae73199b19930d390c8ac34527f58f28ba836b6"
+    },
+    {
+     "name": "0012-ash-exec-busybox.static.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0012-ash-exec-busybox.static.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "f2a44cf6903d6ecac3bd226b2abb2fbd692f883dc0d296df0a8d2c34350673c51f18d68bc9819d7badbab0541839f4e91361d85f014159af8e0fab82e324f84e"
+    },
+    {
+     "name": "0013-app-location-for-cpio-vi-and-lspci.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0013-app-location-for-cpio-vi-and-lspci.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "9788eed96fc490ea393e760657b8d8d7a09696e24515e30099dffe8c3d534a6018ca2cf17e689e8740438b2fdcc0c3ed67dc841e6c03f39322d12b60edc66a97"
+    },
+    {
+     "name": "0014-udhcpc-set-default-discover-retries-to-5.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0014-udhcpc-set-default-discover-retries-to-5.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "52094fb50723d924feeb31b86d8b71143505b8d66f6b881c43859c1a346d5a52ef8fb5aa7806f1f1892cbd083b03fc294d1181761eef01ffb564717e121a2300"
+    },
+    {
+     "name": "0015-ping-make-ping-work-without-root-privileges.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0015-ping-make-ping-work-without-root-privileges.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "dae2f3a137edcbf31e0afb8565f372a549ba67997c391e755a9f29b4c986219a9516b1e1be589fddf81f136d6c7700c91fb83c46aed74c018a58ab06ea2d0567"
+    },
+    {
+     "name": "0016-fbsplash-support-console-switching.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0016-fbsplash-support-console-switching.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "6ede756c01ce7fdcd02a38188a86f4cacff4066eb5032bbb716edf8d4eb3e437de767f04cd0ed8a3e915ee10270465be59248f72d2e7a15abc3d865feba0a361"
+    },
+    {
+     "name": "0017-fbsplash-support-image-and-bar-alignment-and-positio.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0017-fbsplash-support-image-and-bar-alignment-and-positio.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "85209a0fb5368dfbb831095d381ec135313c26030f3eb4c5df8a40051fa6932e6b49a91965ea745b670efbc7a8e32707a08bfde36c923912f5e67fe2d6bbb1a5"
+    },
+    {
+     "name": "0018-depmod-support-generating-kmod-binary-index-files.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0018-depmod-support-generating-kmod-binary-index-files.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "67a21b4754534b5faceee3da1c24e037e8e259924fd415cdfd5aabfff6c2bea3d15d58cd32c29359bf5b311e666ad1ff01a1ec043be1051ba359c52921449c18"
+    },
+    {
+     "name": "0019-Add-flag-for-not-following-symlinks-when-recursing.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0019-Add-flag-for-not-following-symlinks-when-recursing.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "b74cb8d9c635432f7a2205a91debf023cc4e5fcf5cf8b25e690711afaf24956f772aa70782f266a9b997e16069b828f993a015e93248842808a721e00a8530b7"
+    },
+    {
+     "name": "0020-udhcpc-Don-t-background-if-n-is-given.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0020-udhcpc-Don-t-background-if-n-is-given.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "95b82ac5cd0367c15008dd3568ffb68f6489065618fe3f5d04c30650a5492d1314374a3d83b5aeea078b003b43c1b856a0a1b52434fdfe0e3eb299fd44d16a59"
+    },
+    {
+     "name": "0021-tests-fix-tarball-creation.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0021-tests-fix-tarball-creation.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "65a62f6013d2ee55e0ba32836adf48fd572fe7f931b50bb56bf778673a5ea6883d85c08bda0df4b87f5181433a3663bd15d805f75cdef3974e355a05f5b13c70"
+    },
+    {
+     "name": "0022-tests-musl-doesn-t-seem-to-recognize-UTC0-as-a-timez.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0022-tests-musl-doesn-t-seem-to-recognize-UTC0-as-a-timez.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "99f3469a057040b38f4a66053109fb874bac7b4ec0481c515fe675c24ed8f99a89b756fce977ad122edff43aedf722ebdd7e7e475adb5edbae207fdcc4429b5d"
+    },
+    {
+     "name": "0023-Hackfix-to-disable-HW-acceleration-for-MD5-SHA1-on-x.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0023-Hackfix-to-disable-HW-acceleration-for-MD5-SHA1-on-x.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "d82c99af216d8f4a90cf7dae78ca73ad348fa1c70cd50a65376a768a6426e87071e1036cc9c3ab3606986cc99886b4a4f53685d4f26f3aec20c0cb07df5a936a"
+    },
+    {
+     "name": "0024-umount-Implement-O-option-to-unmount-by-mount-option.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0024-umount-Implement-O-option-to-unmount-by-mount-option.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "a67640383d0b02c1a1eb177543270776922c09bdf8ac442d5dfa16ba63b99cf31f105b8db4f5ca21413be1057e55cc4a42314143bea505027d3a36e7e7e786a9"
+    },
+    {
+     "name": "0025-find-fix-xdev-depth-and-delete.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0025-find-fix-xdev-depth-and-delete.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "e6aaa90843082ee01d4a0e14756399bbed386e6ff30ed853bb1420bc351a8a15b773be60d5f86f9a3ddbe5106e08e2b185b44e64a6ef210eb26b270dc32b211f"
+    },
+    {
+     "name": "0026-awk.c-fix-CVE-2023-42366-bug-15874.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0026-awk.c-fix-CVE-2023-42366-bug-15874.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "e2c6367162b886654d64a1988e383c05e2792183265c3542d68e535daa5a9509c3e6a42b9aad0367a872fd494089a7b3911e8a438c47db16fbf21b656b030382"
+    },
+    {
+     "name": "0027-awk-Mark-test-for-handling-of-start-of-word-pattern-.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0027-awk-Mark-test-for-handling-of-start-of-word-pattern-.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "82b203472b8cdb790c15dbdb5374de45dbe2fcf926c16910b890540278d4ff6bb843fed3a8840a0eb6d340e0eac27ced0c2a4103d37848b51c61e94a3f0436da"
+    },
+    {
+     "name": "0028-od-Skip-od-B-on-big-endian.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0028-od-Skip-od-B-on-big-endian.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "711c92902f4d99863c0433e0670999a456c588cf8a1a4729678244d61607aa82269c1944942617650902ce242fbfe3f9d68593ae0a21e4c17bfc04470f4253ba"
+    },
+    {
+     "name": "0029-ash-reject-unknown-long-options.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0029-ash-reject-unknown-long-options.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "d9625580bdfe7036e0a3e01c33ddffcc8c70737dfa031c9f97a5a45635910dbd5cf3ebb8d28256a10ee7a13efa1e396a93404099db7a5143adf924a953d4cbe7"
+    },
+    {
+     "name": "0030-hexdump-Skip-a-single-test-on-big-endian-systems.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0030-hexdump-Skip-a-single-test-on-big-endian-systems.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "3b9542d3ec24d9d3fd12b69f60ca1014b49240b92d8517e4467f62b0e266102a73cdac784766a5548a909e08a497c577b1e880604d1859eee18ac455d8bc56b2"
+    },
+    {
+     "name": "0031-syslogd-fix-wrong-OPT_locallog-flag-detection.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0031-syslogd-fix-wrong-OPT_locallog-flag-detection.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "4c2b7d7c623b318087f20b0bef9140cfa3f83111bfc922bba50ddd16edb8844c848c8b93c5d31303b7f253673fbff8ccf3d4ab4b9dad52fde3e04744b0782170"
+    },
+    {
+     "name": "0032-lineedit-fix-some-tab-completions-written-to-stdout.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0032-lineedit-fix-some-tab-completions-written-to-stdout.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "ac56a170a31f4329d00155a2a7d3950c4fe365e69e2e6b773a28fe3faa214a1330f0dd910bf0712453f033abc9e8465f9cec80f4e3e820a5d6ffafbf36e503e7"
+    },
+    {
+     "name": "0033-lineedit-use-stdout-for-shell-history-builtin.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0033-lineedit-use-stdout-for-shell-history-builtin.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "82c328921c4034b561f31fe5da77fd1a03033911bb6f50383b59885b184e010bbf66065ce0d90e0bc138a7608a4a5b51cab5d3598f974ee600d06eb161d5b0c3"
+    },
+    {
+     "name": "0034-adduser-remove-preconfigured-GECOS-full-name-field.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0034-adduser-remove-preconfigured-GECOS-full-name-field.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "04ed80099092bf6cafa293d13039184307197d5b71e2052a7b5650eed4364845cca3910e701e01c67a23dff7c9552506b682d553d6bdd7dfcbc7724e98595c4d"
+    },
+    {
+     "name": "0035-cpio-map-F-to-file-long-option.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0035-cpio-map-F-to-file-long-option.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "8ea1f59ad19c4dc42d95af3a1e590180483689536dbd6932fd500e1f6bcbc1eb12b50e81b6ea26ea93297ce527d1aa850fbe0b23210a3db79039409392935242"
+    },
+    {
+     "name": "0001-hexdump-fix-regression-with-n4-e-u.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0001-hexdump-fix-regression-with-n4-e-u.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "ac026f8b289d1431c46d51a8c512eb0184aa81de1c41971a87c99bcdc5c63c2d9abed412cad20d3032b480d87a52ee2602411149eb5f271fa9d051165a7b8188"
+    },
+    {
+     "name": "0001-awk-fix-handling-of-literal-backslashes-in-replaceme.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0001-awk-fix-handling-of-literal-backslashes-in-replaceme.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "7165661f3972f1800faf8d263126e3f238bb26bb7891230dbaad2d085e49e2ababc555294ecefed9d8ff00d93c8c3963e786db796cf3d03d68bf9e0492305d0c"
+    },
+    {
+     "name": "0001-tunctl-fix-segfault-on-ioctl-failure.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0001-tunctl-fix-segfault-on-ioctl-failure.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "9548603cbadf690ab31354642ab3f7bef1b9f696df6b661ea644548fb831b2f78a47a9b09b5489aa43da7061dcc6808864d130d053906f44090983f5cb3dc169"
+    },
+    {
+     "name": "0001-init-add-support-for-separate-reboot-action.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0001-init-add-support-for-separate-reboot-action.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "211d8a70b7e40d885e2961bb1a1143af3666901dd81c79d1a5b1ddb1d3c069bd1083417188e35513f9a678791d9cd2a08373c6151596a5162904131e489baf46"
+    },
+    {
+     "name": "0001-blkdiscard-ship-link-to-sbin-instead-of-usr-bin.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0001-blkdiscard-ship-link-to-sbin-instead-of-usr-bin.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "b8b408974dbcf803889786500d37970c3c3fc3ff7b651998616301691c29287e786ecca07a5b959ed31cf22b0c54b9da82385650c3961afb9f7c09233f46f864"
+    },
+    {
+     "name": "0001-tar-fix-TOCTOU-symlink-race-condition.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0001-tar-fix-TOCTOU-symlink-race-condition.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "906d6c9ff1a9b911997f8ca9debfc07c48c7f5ac8eac51860b076e8483979ea175028f7207cbe878769e58213e8293ada155b03c9691077ce2f6a91820ab319a"
+    },
+    {
+     "name": "0001-netstat-sanitize-process-names.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0001-netstat-sanitize-process-names.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "bc6dcd9651f02da3d848e8c848b536fe412311f7bdc66ff65912a1aa175c96c8d5336e5a4e21f8a73b76438c9d1bae444736994ec460d5645917fa46273fff88"
+    },
+    {
+     "name": "0001-tar-fix-16018-masking-of-potentially-malicious-tar-cpio-content.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0001-tar-fix-16018-masking-of-potentially-malicious-tar-cpio-content.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "fa200c556a8b79506aa398e0d81eb2690726860ab15e48ba80c1680abab2a48e9093bf3c5a67dc5d8eef90a3e15e5a873a9eef1047cef0c031b233f8a211ee68"
+    },
+    {
+     "name": "0001-mount-fix-parsing-proc-mounts-with-long-lines.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2F0001-mount-fix-parsing-proc-mounts-with-long-lines.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "626078b2d05c5821e5d23e8cb35c7bb5ea8bd76b54aa49a00844ab698d4b88b7084381b30fe5ce2e3796aa5f3559db16f0cc6a949d70a8725b153f2090999889"
+    },
+    {
+     "name": "acpid.logrotate",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2Facpid.logrotate/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "aa93095e20de88730f526c6f463cef711b290b9582cdbd8c1ba2bd290019150cbeaa7007c2e15f0362d5b9315dd63f60511878f0ea05e893f4fdfb4a54af3fb1"
+    },
+    {
+     "name": "busyboxconfig",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2Fbusyboxconfig/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "b45b8a3e3433cb271035135904aa0376d70c397f291c63cd2d4fdf4848998a1e172b21eacbddbb6edf1d2207172318fa18e90646408b2562453d3f80a55c3274"
+    },
+    {
+     "name": "busyboxconfig-extras",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2Fbusyboxconfig-extras/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "2f6efba02078647137f0518284c60004bf28d29a77146d488f813c4db6971ccf6ec5157734c521516e6f3aa570c804fe3ed2c69c46a3ef8636c5f88758948eb7"
+    },
+    {
+     "name": "bbsuid.c",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2Fbbsuid.c/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "0becc2186d6c32fb0c401cf7bc0e46268b38ce8892db33be1daf40273024c1c02d518283f44086a313a2ccef34230a1d945ec148cc173f26e6aa9d88a7426e54"
+    },
+    {
+     "name": "dad.if-up",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2Fdad.if-up/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "afc27da5f95bec3e3ccb5b1fcb5bd80a8317d8753e6c70cc0750d0875313e44bf2e487472c8499d7bbe5afba3e583c75548ccdcff4dcadc94bb791f53fb77ba3"
+    },
+    {
+     "name": "ssl_client.c",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2Fssl_client.c/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "1c7c78afb274d1316725b22585452efd7de9a80ad326f099f25e34d0877c5d81ced579e2dc795314221e316f58071374f61ee22c6ffd34072266525f65d3614c"
+    },
+    {
+     "name": "default.script",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2Fdefault.script/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "6a34185447d48537317379181abc703f47f93f6a5399d8dcb33fcb0d9247c8659ef739b011ec9e16052505d9a5e4950d557d7f5a8236f5744be0b206390e9a10"
+    },
+    {
+     "name": "udhcpc.conf",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2Fudhcpc.conf/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "5f9ff70f99a970e88460c0de81a6637d8a82252fba6715e259833f16ed8cbfc3440972b1fa454eb77dbbcd1e244774c96b4eef96f71a2b67a9039a0dd5e6fc1e"
+    },
+    {
+     "name": "securetty",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2Fsecuretty/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "38d6ce0dfff65ce7ec644f5d7aca70de943f4d5fb8820c772f5d945926b678de280f19831d3f3d0dc0dcda16812841748b57eaa745b784a5e216a59657afbd71"
+    },
+    {
+     "name": "acpid-poweroff.sh",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2Facpid-poweroff.sh/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "95187d7f4f91a1be353d9c5922238da6ff1f688a1a7366678c10163c683ba7fd82b3fecc71e86e04197aa322322e0152a3cf86b4ceca19dd04e9a9c763fede2f"
+    },
+    {
+     "name": "mdev.initd",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fbusybox%2Fmdev.initd/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "6ce0b2a8fe69cc7ea657c5b9076aba51c8f0beeaafa4a887d8673bcc9f9cf8ee40f4b07d2d901ec7a1a1e4f29c150c496559559e803595d0bd487dec56b530a2"
+    }
+   ],
+   "unresolved_source_entries": [
+    "\"acpid.initd",
+    "dnsd.initd httpd.initd inetd.initd udhcpd.initd"
+   ]
+  },
+  {
+   "origin": "dbus",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/dbus/APKBUILD-3.24-stable",
+   "packages": [
+    "dbus-libs-1.16.2-r2"
+   ],
+   "license": "AFL-2.1 OR GPL-2.0-or-later",
+   "elective_alternative": true,
+   "files": [
+    {
+     "name": "dbus-1.16.2.tar.xz",
+     "url": "https://dbus.freedesktop.org/releases/dbus/dbus-1.16.2.tar.xz",
+     "role": "source",
+     "sha512": "5c26f52d85984bb9ae1dde8d7e73921eacbdf020a61ff15f00a4c240cb38a121553ee04bd66e62b28425ff9bc50f4f5e15135166573ac0888332a01a0db1faa2"
+    },
+    {
+     "name": "dbus.initd",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fdbus%2Fdbus.initd/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "ba871572fbac54ea4599a1f81653797c020302fc97876509a763693979787e16ad42252d18e02941296f7853712b003e0f7565977c1cfce581de2b16efc82897"
+    },
+    {
+     "name": "dbus.confd",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fdbus%2Fdbus.confd/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "ea5df31eab4635da8af241c29878ca59927479f7bef71252416806d1504023da3c951a61bd6150fab0e1dbdde5ccfd91616db6043875b7babdf2bada873450dc"
+    },
+    {
+     "name": "dbus-user.initd",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fdbus%2Fdbus-user.initd/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "fcc35c0e294af542d21457fa70305147f2ade6eca6bd65c0b5bf3373d4c765ea7121e111f22185ad543d3476d8ece65fa21cbe2ed916e81b5218a43bfad54eb1"
+    },
+    {
+     "name": "dbus-user.confd",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fdbus%2Fdbus-user.confd/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "24099d0aed96681d90e6b2e9cc48f3b4bb2af10ce23af9bf1810e28a51fd7ad513b50bf378835ecb18889d5b22e43e613bf7689cf894c1bae97e27a4aff2130d"
+    },
+    {
+     "name": "README.alpine",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fdbus%2FREADME.alpine/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "b2f271c18cbed0798d8a6f2570c6fe257ac0c718196d6ab092e812b92ec513e486fbfcaee16a95b4d896003e1d16388610459ad070c596c65aed9442c59cc01c"
+    }
+   ]
+  },
+  {
+   "origin": "flac",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/flac/APKBUILD-3.24-stable",
+   "packages": [
+    "libflac-1.4.3-r2"
+   ],
+   "license": "BSD-3-Clause AND GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "flac-1.4.3.tar.xz",
+     "url": "https://downloads.xiph.org/releases/flac/flac-1.4.3.tar.xz",
+     "role": "source",
+     "sha512": "3cf095720bd590a588be8ccbe187d22e7a1c60ab85b1d510ce5e8a22ab0a51827b9acfeaad59bbd645a17d1f200f559255a640101b0330709a164306c0e9709e"
+    }
+   ]
+  },
+  {
+   "origin": "freetype",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/freetype/APKBUILD-3.24-stable",
+   "packages": [
+    "freetype-2.14.3-r0"
+   ],
+   "license": "FTL OR GPL-2.0-or-later",
+   "elective_alternative": true,
+   "files": [
+    {
+     "name": "freetype-2.14.3.tar.xz",
+     "url": "https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.xz",
+     "role": "source",
+     "sha512": "43de86ea70b4b47f6efaae67f3440f65a24ffac29dc6d11203a9764e4f1a749ce1ba7645acd23525220b3ba12ddad8687b962b9f1254e2c0a86070854e85d5a0"
+    },
+    {
+     "name": "ft2demos-2.14.3.tar.xz",
+     "url": "https://download.savannah.gnu.org/releases/freetype/ft2demos-2.14.3.tar.xz",
+     "role": "source",
+     "sha512": "e59c1266010330a8cbfd25dec096a72ce7539b64f9c057de062a281261b3ad658240f58e75b53d7a880d7ad5e020206316a6e9e82b03dec2e4d999f3f56cb39a"
+    },
+    {
+     "name": "pcf-family-names.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Ffreetype%2Fpcf-family-names.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "78ad6b1de388d3986fd5a51a7076b0a9d782733e85f400fc8c070b40e5e48130a562a67a7a9b251169b74ae052f571ea8e6b0f9435c271520d93dd72c1845d59"
+    },
+    {
+     "name": "subpixel.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Ffreetype%2Fsubpixel.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "55fb06dbc7cc950129a99d9fd5480397b3e0720f32ab65fb3893768ed40e2de27be2cfd52ec6da490f79c79b4ddfecd0b7efcd32da4a95f2666a6b67a3cd9a31"
+    },
+    {
+     "name": "table-validation-modules.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Ffreetype%2Ftable-validation-modules.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "580fe59acddfd41966e387bdb6a88336b8bc119cc3d60d8689be20c96fb0dd07c5138ea31f6cb9c854f497ecb41c3adc49eb3ec16a34b2e010e8294851770763"
+    }
+   ]
+  },
+  {
+   "origin": "fribidi",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/fribidi/APKBUILD-3.24-stable",
+   "packages": [
+    "fribidi-1.0.16-r3"
+   ],
+   "license": "LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "fribidi-1.0.16.tar.xz",
+     "url": "https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz",
+     "role": "source",
+     "sha512": "e3a56f36155f6813e3609473639fc533de742309f561c463012dc90b412a1ac7694b765d92669b2cbfaee973ca0e92fa5e926e68a1a078921f26ef17d82ab651"
+    }
+   ]
+  },
+  {
+   "origin": "gcc",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/gcc/APKBUILD-3.24-stable",
+   "packages": [
+    "libgcc-15.2.0-r5",
+    "libgfortran-15.2.0-r5",
+    "libgomp-15.2.0-r5",
+    "libstdc++-15.2.0-r5"
+   ],
+   "license": "GPL-2.0-or-later AND LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "gcc-15.2.0.tar.xz",
+     "url": "https://gcc.gnu.org/pub/gcc/releases/gcc-15.2.0/gcc-15.2.0.tar.xz",
+     "role": "source",
+     "sha512": "89047a2e07bd9da265b507b516ed3635adb17491c7f4f67cf090f0bd5b3fc7f2ee6e4cc4008beef7ca884b6b71dffe2bb652b21f01a702e17b468cca2d10b2de"
+    },
+    {
+     "name": "0001-posix_memalign.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0001-posix_memalign.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "fd5cebc5deb1d588583424acbc1b5a6d8d6f5b1bfa9f4bdbc082cfd406723f423d87011ee30e04ed18128a7ed8021cbfc9262becff5419125dc1afb6f407defa"
+    },
+    {
+     "name": "0002-gcc-poison-system-directories.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0002-gcc-poison-system-directories.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "6634004cb9feea9ee0d063d6b6984d7db3b10c692b6139bb99169a4f2d74f0e10b5ca0ab31ce346ffef34b8eb9c3f536aa4d94bce1b27f8e0b8a9fc5cc4b7057"
+    },
+    {
+     "name": "0003-specs-turn-on-Wl-z-now-by-default.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0003-specs-turn-on-Wl-z-now-by-default.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "37e089791dbcbad73af866b662cda611dc0970d93e28251c7a9aa898db3b96446654e8b778d7866eb8550ba7f4a57cf22e8514d562bfed0c66613e65550d9c85"
+    },
+    {
+     "name": "0004-Turn-on-D_FORTIFY_SOURCE-2-by-default-for-C-C-ObjC-O.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0004-Turn-on-D_FORTIFY_SOURCE-2-by-default-for-C-C-ObjC-O.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "d4d5bfeb20a9fac968f37497d86d7eff4a9ac863e015dadbffae24c08236f5efde69b615d95191e2546672ce2d4b30d3627528c64a83fc64b715e8fa6fd4c372"
+    },
+    {
+     "name": "0005-On-linux-targets-pass-as-needed-by-default-to-the-li.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0005-On-linux-targets-pass-as-needed-by-default-to-the-li.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "4806687c806154dd3d5423ea9ef1203db344dfb8fd21f3eb3543d9f05f4dc01aacc4f012f45db8e890eeddc7b1c75ec06a6b29e29a1ef7b9ec6f853d1854cfd0"
+    },
+    {
+     "name": "0006-Enable-Wformat-and-Wformat-security-by-default.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0006-Enable-Wformat-and-Wformat-security-by-default.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "6b225df0dd76339b06d5efbe07edd6648391a7b9415a219041189c35c084ceffe8fb96b2660d60d62099e7afdfeb8e053622a2b6660d2e8a13adb924f4bc8c8a"
+    },
+    {
+     "name": "0007-Enable-Wtrampolines-by-default.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0007-Enable-Wtrampolines-by-default.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "e419b7f20a74384bfb1ac792e3625f9bfe69f8031c2c0beb23f4015df9d48a6c6f107d89bea3c20fa56309b022637863c13e90c1565d027eb47c08154389b7a0"
+    },
+    {
+     "name": "0008-gcc-disable-SSP-on-ffreestanding-nostdlib-and-nodefa.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0008-gcc-disable-SSP-on-ffreestanding-nostdlib-and-nodefa.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "e6307eec09196900bcd2c0154a62d6694576b4da48a1cf901750b97b4603cd694c4daee2476c33bce09f10bee92a72749face835eb18fbf2c2a50aa1dd251572"
+    },
+    {
+     "name": "0009-gcc-params-set-default-ssp-buffer-size-to-4.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0009-gcc-params-set-default-ssp-buffer-size-to-4.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "969797f99602c119e1632f0c5be02a566be5fb4c7e59affefb5eb6084a06b97120d99d5ee63fef0dab6c0278c7cecf1d8caa53521cc5b6622de2aaa7deabf86e"
+    },
+    {
+     "name": "0010-Ensure-that-msgfmt-doesn-t-encounter-problems-during.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0010-Ensure-that-msgfmt-doesn-t-encounter-problems-during.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "c15f062790367c9e786a4933deec33931438680176ec752b172c2a0504463a23d588ead4350d32e474603750ceb130ba0ccadfcde601bcf8e2eabca5af8322d0"
+    },
+    {
+     "name": "0011-Don-t-declare-asprintf-if-defined-as-a-macro.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0011-Don-t-declare-asprintf-if-defined-as-a-macro.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "03a1012f1022cd68cf08440428e7d6cbf65ea2184e4a088a55976f34af627d80f42f15f713841ec9cbfc4afa39117d4fc384c3f27a4f9ad0ff3947bd45b71c4a"
+    },
+    {
+     "name": "0012-libiberty-copy-PIC-objects-during-build-process.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0012-libiberty-copy-PIC-objects-during-build-process.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "8f098de9fcf4bbece0923dc4a2acfc67cf751c1d5c007535c5d88b8637a4482c1a42d5721a2760127498e327f6983bbc865a592a8e0db9ef7efc0e36b6d4102f"
+    },
+    {
+     "name": "0013-libgcc_s.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0013-libgcc_s.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "bbe2b561b5288ca724af37353e17b413df8bf247bce724391e75373aee5cdcdb85e6489d51622c11f4041ed8f317278cf687aee14dfc8756398f03f1a796feb9"
+    },
+    {
+     "name": "0014-nopie.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0014-nopie.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "ae34ca2bc5a53ed1c832651e3f6425ca29b5873f1e112b45613277fb9611693be41986d5879593f09149777e3e57d04ba17b142c43eaa990375d31e4e0b4adde"
+    },
+    {
+     "name": "0015-ada-fix-shared-linking.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0015-ada-fix-shared-linking.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "2c91a1eadf7236efff42eb53037862a342807596e37c6cc3c270d25c2d89078bf8db68bb2e93e57a8ad39b3af825e33db72e2f48a6311951fff53776933bc48c"
+    },
+    {
+     "name": "0016-build-fix-CXXFLAGS_FOR_BUILD-passing.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0016-build-fix-CXXFLAGS_FOR_BUILD-passing.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "1366d696a952ed35e5e56ab5bd1eba67e58a8ce752c0ef7e7fe4ad3eef44f25ce6016342d11add9548f9e719dc9ee0772064dda68784257a1a3234ae5957f3fb"
+    },
+    {
+     "name": "0017-add-fortify-headers-paths.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0017-add-fortify-headers-paths.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "af739373285e89a4ab0000042b537ff7197b0b366019b56991008c43f3d2b76709d472841cda40e9fb61e6f0dacc0fe8c6b888abb31f393ec1a87acc1c0585b3"
+    },
+    {
+     "name": "0018-Alpine-musl-package-provides-libssp_nonshared.a.-We-.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0018-Alpine-musl-package-provides-libssp_nonshared.a.-We-.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "c18f3eef4d7d6fcbfa64570edb71157a62dad1f3d7276f10fe3424e49caa33f57a0a5952f03189199472802a2dd966e4832789685a94911fe9a86bb1fd6c1d50"
+    },
+    {
+     "name": "0019-DP-Use-push-state-pop-state-for-gold-as-well-when-li.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0019-DP-Use-push-state-pop-state-for-gold-as-well-when-li.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "341d39a40ffd896db152863c717798c6885bdde44c9ac645c5d099c2364cbd8f6f526f97cc98302c420682cb5d6d88bbe28d838c7141456f2ba5581f3edfd64f"
+    },
+    {
+     "name": "0020-aarch64-disable-multilib-support.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0020-aarch64-disable-multilib-support.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "e603652f341909820789a2cec173b8e547ee607b040863f1745b998b8a69d51cb412a4ac55d2c9e3c5192cc298f6288f9dd48fa06fe53ba8f6b1cabbe61c997a"
+    },
+    {
+     "name": "0021-s390x-disable-multilib-support.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0021-s390x-disable-multilib-support.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "26819f3c3a5844c96cee89fc9766a4f8153e7bb22f6296c6c9fd6a13d45648e3f6c7059397ad7e5be66f55addc21054614b38f480b52a7c9a967cf389735644a"
+    },
+    {
+     "name": "0022-ppc64-le-disable-multilib-support.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0022-ppc64-le-disable-multilib-support.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "8e6e6ed84c8cb39ecc35ad0986a91168fedbae2426c8ec1c83dec85a293777e0ec29eac13130193b1bdc2d98b6ffa180abf574dad70740d4720b4bfdab992ab8"
+    },
+    {
+     "name": "0023-x86_64-disable-multilib-support.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0023-x86_64-disable-multilib-support.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "264eaa54a76ec5a12294d91ad2f995eddac9210a569ba85aef27176cb015354aa427840bb22f1e3ba2f7761f6f85cc98ddb3b00584b295c6a10a9770c59a2607"
+    },
+    {
+     "name": "0024-riscv-disable-multilib-support.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0024-riscv-disable-multilib-support.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "47a1a407298b6c259d7faff774f26e4843c9d3764362d74230e7d3f77c46ea8bb51211e09a66bb51c04a9f276ea5b07570fb52312fdb1d354c72a0343bc40c57"
+    },
+    {
+     "name": "0025-always-build-libgcc_eh.a.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0025-always-build-libgcc_eh.a.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "b86fcf40e75861bdffb00069d3a0c9cec3fe8042d49d6ce2beae48ffeadccc576b8ab36e5a85421db5cffeb080a75f3a66dbcbb825d7f4462d40ec621964efe3"
+    },
+    {
+     "name": "0026-ada-libgnarl-remove-use-of-glibc-specific-pthread_rw.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0026-ada-libgnarl-remove-use-of-glibc-specific-pthread_rw.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "1425543ce064bfd8e33d7e6e07f45cc16d94f156adcfe190c842722652d5ea0c9ba60f6a3e1b444bb0e5bc906ec4f9ca54720b306f274b441600b79bff47dc57"
+    },
+    {
+     "name": "0027-ada-libgnarl-use-posix_openpt-instead-of-glibc-speci.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0027-ada-libgnarl-use-posix_openpt-instead-of-glibc-speci.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "b8851d0e7fc66201e323007f7c1d702ea8a0d0405aa5945621128ebfb93afd967ec8b3ab6fd4ea779ec10dca2a32e1797f7a2622124ccf8ace2a7596f66ff0bf"
+    },
+    {
+     "name": "0028-ada-libgnarl-adaint-fix-sched.h-inclusion-for-musl.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0028-ada-libgnarl-adaint-fix-sched.h-inclusion-for-musl.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "12b09a171d61406a2bfa10bb25398cee8c92676b12506afe7aace7028e94cbf8d7df25f62ff7af07e8ed471c6edd3ab7811fa51dfaf3a221a6b367858b1f032c"
+    },
+    {
+     "name": "0029-configure-Add-enable-autolink-libatomic-use-in-LINK_.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0029-configure-Add-enable-autolink-libatomic-use-in-LINK_.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "15bed06ee74a36e9f21f4b29d7bce9c4188769abb6391560e13ea6b165da51f5ae908e141de7510d3d7eec6b998d0fc53de1042fdb7bd056efa703d230a683b4"
+    },
+    {
+     "name": "0030-configure-fix-detection-of-atomic-builtins-in-libato.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0030-configure-fix-detection-of-atomic-builtins-in-libato.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "4c5501256669fd33527a5394eaa4b84451ee341a943dd24a179b661d3c53ef70e87ed5d5f3e76c6c3f9cb79cb5d120ea40101278a7b9d04a55d9405e4cbf9796"
+    },
+    {
+     "name": "0031-libstdc-do-not-throw-exceptions-for-non-C-locales-on.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0031-libstdc-do-not-throw-exceptions-for-non-C-locales-on.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "eecc77e2a9cf956fd752693ad7f8ff8253a7bb557e00564bb488bbc1deac895e63104cc1182a0bdd700e440763f4a72e29876f560e13e4f5e6de2a1d9438c2f6"
+    },
+    {
+     "name": "0032-gdc-unconditionally-link-libgphobos-against-libucont.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0032-gdc-unconditionally-link-libgphobos-against-libucont.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "2b09f90d9cb417170060c8ce198bd4aa2e4ef163286c8f24f6e6c5a673ae80f5a883b078b1a5dd5fa71bc1502e08c886687072694da039eb82baa1ea1948ac2c"
+    },
+    {
+     "name": "0033-druntime-link-against-libucontext-on-all-platforms.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0033-druntime-link-against-libucontext-on-all-platforms.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "99c74242b6d79e6a814f1199b9fb0b56c6a43eb93e5d1a79b674cea750bb025363cdd1505d05cd2195a43c918831fa586c427556ee5bc826aa79cd82e7ee1c24"
+    },
+    {
+     "name": "0034-libgnat-time_t-is-always-64-bit-on-musl-libc.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0034-libgnat-time_t-is-always-64-bit-on-musl-libc.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "4f8f7876bf8647cda47cbd2b145ff31efe2a7ac21c012c4134174f93482aad1fbab2592c66aacc3b05fccd1a694ff97511b794139db4aac719e243c114373240"
+    },
+    {
+     "name": "0035-libphobos-do-not-use-LFS64-symbols.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0035-libphobos-do-not-use-LFS64-symbols.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "0069da1d8cb9adb9bab081a34fec680a9ebb1236e606a2497e4565e99bef434518a0f06474a9a1fdfa70811ed3da5d35ca95d267268328f2764bf41c50e924de"
+    },
+    {
+     "name": "0036-libgo-fix-lfs64-use.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0036-libgo-fix-lfs64-use.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "1cbe85b63ef13bdf2804bfd3173998a6e86752d8ffc09d4cc75a9ba80b98aec5a04efa732bce97a2f50a90c84b92c442ca8f6639841fe7d6618f928ea65916a6"
+    },
+    {
+     "name": "0037-loongarch-disable-multilib-support.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0037-loongarch-disable-multilib-support.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "98fcd5b893a1646edab961a5d00246151c47b449f8eca99c51f4026ffdb53f60b5b9f6426437c0a6411342da10db8983e20337a29cd46ed22b70e0478573ea30"
+    },
+    {
+     "name": "0038-static-PIE-ensure-static-reaches-the-linker.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0038-static-PIE-ensure-static-reaches-the-linker.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "1ad48e39dab351b7bb3e17d9b4b8b78e7de7c736e212638c9d6874b1dde0360dcfc85586c39f515fbd2a6d9910fedc4f0c6ad7ff652b10a5c288c47173671ec7"
+    },
+    {
+     "name": "0039-except-Don-t-use-the-cached-value-of-the-gcc_except_.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0039-except-Don-t-use-the-cached-value-of-the-gcc_except_.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "9f4c3fa0d17cfcd72626bdbaf51992ff3018f878d673ab19b9056047ee2630b581e5a5a4d4857444f08ba9bcdb0fc94f90dcda6180816e39690d1652843f0d8a"
+    },
+    {
+     "name": "0040-ada-libgnat-use-stub-symbolic-module-name-functions.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0040-ada-libgnat-use-stub-symbolic-module-name-functions.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "d166475e340c91bbb24cf257240aab37129b04f2609e5ce323b530ab83853a4c34c525e0072c15732717f1681db07e6b3b0a4d268720c31f460435ccf4c99b7f"
+    },
+    {
+     "name": "0041-ada-libgnat-recognize-linux-musleabi-and-linux-muslg.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0041-ada-libgnat-recognize-linux-musleabi-and-linux-muslg.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "c717764ef52c0226a23cbf434654cdefa6cbf38ec625648575d9143c5513b16d8914c25015db743033b8a46ac5b2c33ab75e1b67076128d67bb1319e5a83dd85"
+    },
+    {
+     "name": "0042-libsanitizer-struct_sock_fprog_sz.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0042-libsanitizer-struct_sock_fprog_sz.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "5dd452a80c496a587a8826b04a4917045e4028631606e85cabd8e87e0460642d188a2156c4e0cf37a5d88e66ebd08a08393d48a6065045178c69eaba2edd063e"
+    },
+    {
+     "name": "0001-tree-object-size.cc-Fix-assert-constant-offset-in-ch.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0001-tree-object-size.cc-Fix-assert-constant-offset-in-ch.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "c3b64b05332bd4dd7fad3fff3cacd4f9de0512943f1548c6f1205fab1a74c83622024f30471805f57d625198cc32f647b32172914528fd5605d0bf61cb0c3ff1"
+    },
+    {
+     "name": "0001-LoongArch-Only-allow-valid-binary-op-when-optimize-c.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgcc%2F0001-LoongArch-Only-allow-valid-binary-op-when-optimize-c.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "e91873055550eba051d9297bec5c6acd27abb9ee6ce8911cdd04b5faf37d77b6b2a7607ec588d2863f13f14b48af9398cb4ac42443d8567bfa5037dc6bd50404"
+    }
+   ]
+  },
+  {
+   "origin": "gdbm",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/gdbm/APKBUILD-3.24-stable",
+   "packages": [
+    "gdbm-1.26-r0"
+   ],
+   "license": "GPL-3.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "gdbm-1.26.tar.gz",
+     "url": "https://ftp.gnu.org/gnu/gdbm/gdbm-1.26.tar.gz",
+     "role": "source",
+     "sha512": "44aafe254f0950a8f5215d8f1337674f07b19f2a375f6eb19a7e39690028c80c3774b705c2b76b470ae74042b21f2ca77d02f6f57aa2ee50296db801220a3352"
+    }
+   ]
+  },
+  {
+   "origin": "gettext",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/gettext/APKBUILD-3.24-stable",
+   "packages": [
+    "libintl-1.0-r0"
+   ],
+   "license": "LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "gettext-1.0.tar.xz",
+     "url": "https://ftp.gnu.org/gnu/gettext/gettext-1.0.tar.xz",
+     "role": "source",
+     "sha512": "fa657faf5685dae7121a9b0293d3308a3910a72b90943a7a493b88cf88e95f29c5758e1573320169fe9beac6f101ef76f4165a279a7f3294155d7a773e2fa09f"
+    },
+    {
+     "name": "cwd.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgettext%2Fcwd.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "31796534e40c1569b08cf48e25375ca1d0f439df8aa0d24283769d52a290e28522760128f11f5bd04217605974ae1fdee9557ec189ed32b11b2a45b4af3b0f4a"
+    },
+    {
+     "name": "skip-tests-musl.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgettext%2Fskip-tests-musl.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "a16963f804ce4abe8480da211228f7b24a0715d6ef3ff7d5e5c58a1387d6c4260ee237864081b05b164f082ef199a592494ce691dd0c96c61978e4c451707c7a"
+    },
+    {
+     "name": "skip-meaningless-pthread-rwlock-test.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgettext%2Fskip-meaningless-pthread-rwlock-test.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "e426f3a3bc39193e0dbf8d51e0019e672ddcab07b277281a1912fd0ec6a3fea5eb59bc4daeed465e152c567b05d6c3b457e4bc415a8d36dd768725fb72daf817"
+    },
+    {
+     "name": "skip-unicode-16-tests.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgettext%2Fskip-unicode-16-tests.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "54a7b3fcb82bfb2859e58032c31833dde23f2583551f430582a930e39b1b766cda4d339994f0de282b681a40c1965e77a2a1ad031ab3df2877c7c591fa780096"
+    }
+   ]
+  },
+  {
+   "origin": "glib",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/glib/APKBUILD-3.24-stable",
+   "packages": [
+    "glib-2.88.1-r1"
+   ],
+   "license": "LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "glib-2.88.1.tar.xz",
+     "url": "https://download.gnome.org/sources/glib/2.88/glib-2.88.1.tar.xz",
+     "role": "source",
+     "sha512": "74e6d6086081e5dfb5b7fd3b74f59171033be0c340ff2dd798fea9cb42e5f680e13b2ac3dde8dd423bceb9c6556103005f9542aeda166e9a3b89da8bacecca23"
+    },
+    {
+     "name": "gobject-introspection-1.86.0.tar.xz",
+     "url": "https://download.gnome.org/sources/gobject-introspection/1.86/gobject-introspection-1.86.0.tar.xz",
+     "role": "source",
+     "sha512": "a9d2edbe1cea710e10ef1ea8059a45cf5689bace43b5d2a6861809e863a6de7114b4763db8df3916ad6202c9967f48f7997acd0810a86e5e88dea7e0be88b585"
+    },
+    {
+     "name": "tests-machine-id.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fglib%2Ftests-machine-id.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "4f561bfede4a559b314195aa4b7b5923a52c62063e6dd33b4933ad53b29c32ef789d69b9f7b17d8d701323006366e6b7acbb083a68674c1c535c185d35cc5d1f"
+    },
+    {
+     "name": "flaky-tests.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fglib%2Fflaky-tests.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "268cf6f089274f29285242f1e29bf5650e85f9fcb5744df884deb139493cc25792ad78487113732665f1c5393c94b2f76f97093a1a003e3caaf65c07960a1bf9"
+    },
+    {
+     "name": "projectsdir.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fglib%2Fprojectsdir.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "0b8a9ebfe0cff747781ab0e0c367d8517b5058465e097ed5700ccb2e9bd61dc22f9cd63e730a9e366f59deddc6f9b50df764b2e8422128ce472837d0ac55a665"
+    }
+   ]
+  },
+  {
+   "origin": "glslang",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/glslang/APKBUILD-3.24-stable",
+   "packages": [
+    "glslang-libs-1.4.341.0-r0"
+   ],
+   "license": "BSD-3-Clause AND BSD-2-Clause AND MIT AND Apache-2.0 AND GPL-3.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "glslang-1.4.341.0.tar.gz",
+     "url": "https://github.com/KhronosGroup/glslang/archive/refs/tags/vulkan-sdk-1.4.341.0.tar.gz",
+     "role": "source",
+     "sha512": "f243830836f0ba6f13d6e2ccb48cee3c41f8478e0315b190f3a8e607d3723e7e687102126131a7ecc6eed5899b9de1b69c76f6f795f0f13703931e5041c47906"
+    }
+   ]
+  },
+  {
+   "origin": "graphite2",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/graphite2/APKBUILD-3.24-stable",
+   "packages": [
+    "graphite2-1.3.14-r6"
+   ],
+   "license": "LGPL-2.1-or-later OR MPL-1.1",
+   "elective_alternative": true,
+   "files": [
+    {
+     "name": "graphite2-1.3.14.tar.gz",
+     "url": "https://github.com/silnrsi/graphite/archive/1.3.14.tar.gz",
+     "role": "source",
+     "sha512": "49d127964d3f5c9403c7aecbfb5b18f32f25fe4919a81c49e0534e7123fe845423e16b0b8c8baaae21162b1150ab3e0f1c22c344e07d4364b6b8473c40a0822c"
+    },
+    {
+     "name": "cmake.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgraphite2%2Fcmake.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "729fb5ce0b012dca27cda10ec2b8cdf90029394915072f3a11ee4a3ec1b62aa5d810ca118a428419ac88d0dd316b07de557601d1ce079d3f96bfff4be271addb"
+    },
+    {
+     "name": "featuremaptest-gcc15-cstdint.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fgraphite2%2Ffeaturemaptest-gcc15-cstdint.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "d9cd957de9e8682d7c2da5afc012a27f80d3213fc4aaa5d8bf7564b6e3e86b14d1b98eca821cc3e6880a5cabeb65a222dd0c8558a5d75e1aedcc71ea267ac9b4"
+    }
+   ]
+  },
+  {
+   "origin": "hwdata",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/hwdata/APKBUILD-3.24-stable",
+   "packages": [
+    "hwdata-pci-0.408-r0"
+   ],
+   "license": "GPL-2.0-or-later OR XFree86-1.1",
+   "elective_alternative": true,
+   "files": [
+    {
+     "name": "hwdata-0.408.tar.gz",
+     "url": "https://github.com/vcrhonek/hwdata/archive/refs/tags/v0.408.tar.gz",
+     "role": "source",
+     "sha512": "d7fa2eb91f84a093e3f0476ff251658174c06bb369c85ba8671ae6986fde4bd3f7421f94254bfa443847ec7353ad99b02eb821ed568783470f23410264b6bb93"
+    }
+   ]
+  },
+  {
+   "origin": "lame",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/lame/APKBUILD-3.24-stable",
+   "packages": [
+    "lame-libs-3.100-r5"
+   ],
+   "license": "LGPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "lame-3.100.tar.gz",
+     "url": "https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz",
+     "role": "source",
+     "sha512": "0844b9eadb4aacf8000444621451277de365041cc1d97b7f7a589da0b7a23899310afd4e4d81114b9912aa97832621d20588034715573d417b2923948c08634b"
+    },
+    {
+     "name": "id3tagfix.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Flame%2Fid3tagfix.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "2b47995715c526c74e782ac34778b7075fad1fa16b5299e73b2c62cdf6bfa64ba0862d18e949565aff49c613d2468794dc6e336836ed4ebdb2e6ef67be8af5b0"
+    },
+    {
+     "name": "lame.pc.in",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Flame%2Flame.pc.in/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "ace7813debdb2cd8b08c26e99db50776180b05105832db96ad0bb314dc3e1eadccfd14de3adab7b1a37b6df7d521b5216ed7d9c3c11d5bae388197debca58f0f"
+    }
+   ]
+  },
+  {
+   "origin": "libsndfile",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/libsndfile/APKBUILD-3.24-stable",
+   "packages": [
+    "libsndfile-1.2.2-r2"
+   ],
+   "license": "LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "libsndfile-1.2.2.tar.xz",
+     "url": "https://github.com/libsndfile/libsndfile/releases/download/1.2.2/libsndfile-1.2.2.tar.xz",
+     "role": "source",
+     "sha512": "a6e3ea3ac5d91befaa99f6a31a3fac44e7b7c11f1de4698167317a461d5a19a2651d47486a920b34400f18367b4f6173bf0c1c9ba80eb682cece1b5beee352a0"
+    },
+    {
+     "name": "CVE-2024-50612.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Flibsndfile%2FCVE-2024-50612.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "ea1c0ec736845d7c27e35bfd79610e9f4ffb094841078c66c6610f826fee7b435f02a4ed02fec1a950360369a789410b1986181eb3bf3264cf041d2c8b963928"
+    },
+    {
+     "name": "skip-lossy-comp-test-ogg-opus.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Flibsndfile%2Fskip-lossy-comp-test-ogg-opus.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "f69e9d1b25cc02db87c09b71f462a208c573f95ab3d3ceff9390175e1fac778203f77be23aa14ebefaa57dad423ce77dadbb3c266de690273f8cceaea6cd1447"
+    }
+   ]
+  },
+  {
+   "origin": "libtool",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/libtool/APKBUILD-3.24-stable",
+   "packages": [
+    "libltdl-2.6.0-r1"
+   ],
+   "license": "LGPL-2.0-or-later AND GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "libtool-2.6.0.tar.gz",
+     "url": "https://alpha.gnu.org/gnu/libtool/libtool-2.6.0.tar.gz",
+     "role": "source",
+     "sha512": "172b6416b8fedeadbd4e6cb7052e9eda68c70a2e77bda55f3af9a950b761fa0fa0cc2943b32f1213010004f629be90f1047371480e59d2682e0d31010f03a196"
+    },
+    {
+     "name": "no-xz.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Flibtool%2Fno-xz.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "d959624c03333f63bc6671822358cd0b9de071c4cab3f54b42c2b44b052cb4194ad5a4c5dae93eff2bbe60ad0f024acdea32d68839b4fd4da74a6d74d65f7dd6"
+    }
+   ]
+  },
+  {
+   "origin": "lz4",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/lz4/APKBUILD-3.24-stable",
+   "packages": [
+    "lz4-libs-1.10.0-r1"
+   ],
+   "license": "BSD-2-Clause AND GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "lz4-1.10.0.tar.gz",
+     "url": "https://github.com/lz4/lz4/archive/v1.10.0.tar.gz",
+     "role": "source",
+     "sha512": "8c4ceb217e6dc8e7e0beba99adc736aca8963867bcf9f970d621978ba11ce92855912f8b66138037a1d2ae171e8e17beb7be99281fea840106aa60373c455b28"
+    }
+   ]
+  },
+  {
+   "origin": "mpg123",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/mpg123/APKBUILD-3.24-stable",
+   "packages": [
+    "mpg123-libs-1.33.5-r0"
+   ],
+   "license": "LGPL-2.1-only",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "mpg123-1.33.5.tar.bz2",
+     "url": "https://www.mpg123.org/download/mpg123-1.33.5.tar.bz2",
+     "role": "source",
+     "sha512": "ab5d9c26e9f1c73b98449b738fa55e818bcde713683a84ac282e3c2adef85e4ffa46bdc33ddf736b536a5ddb3f24ca731664cdc465d431e267b5656e959b61d0"
+    }
+   ]
+  },
+  {
+   "origin": "musl",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/musl/APKBUILD-3.24-stable",
+   "packages": [
+    "musl-1.2.6-r2",
+    "musl-utils-1.2.6-r2"
+   ],
+   "license": "MIT; MIT AND BSD-2-Clause AND GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "musl-1.2.6.tar.gz",
+     "url": "https://musl.libc.org/releases/musl-1.2.6.tar.gz",
+     "role": "source",
+     "sha512": "1adad96eddb3a2eb0cacb3e363b0046568925fcdd75cf8b0503f2139df1f693d64730779ca0ce8131b7624ab2d37f4247bb1d3393c523de6e30d2b1d7732555c"
+    },
+    {
+     "name": "handle-aux-at_base.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fmusl%2Fhandle-aux-at_base.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "a76f79b801497ad994746cf82bb6eaf86f9e1ae646e6819fbae8532a7f4eee53a96ac1d4e789ec8f66aea2a68027b0597f7a579b3369e01258da8accfce41370"
+    },
+    {
+     "name": "0001-add-stub-for-pthread_mutexattr_setprioceiling.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fmusl%2F0001-add-stub-for-pthread_mutexattr_setprioceiling.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "83ec0f774dbb5d4f4d4b917d149ea0ef609d028d18ae7624e90fedda6e3174c91ade93751bfd376adfa2848155110fc4dd02b6790363b98e5395c4787e8731e8"
+    },
+    {
+     "name": "fix-loongarch64-zero-len-extcontext.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fmusl%2Ffix-loongarch64-zero-len-extcontext.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "6eae45aa82db69bc96386aedf3d1bfe83dfa0a7b4b824326c1c7e1bab31100d635ed0e8930c26a1694697fad59167a42e2b5f3a2ac51b07e36d85f047e268cff"
+    },
+    {
+     "name": "CVE-2026-6042.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fmusl%2FCVE-2026-6042.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "f7849abeab0e4eab992a80464afa07b9c8aae5cee76040523b9dbc0931435f28ea8f5792b8a4a0cd6d608ac2f37e3225e89afcb3171a0a6df44450ed57cee83b"
+    },
+    {
+     "name": "CVE-2026-40200.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fmusl%2FCVE-2026-40200.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "a64ab7688d1a85e560b5687783df482d2467a79a74400da5a1601382847d6b4e6a79b7529a8dc80c46ddda8dc2a812f2261557fc8ee98dc3bdf7322761bd6d9c"
+    },
+    {
+     "name": "ldconfig",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fmusl%2Fldconfig/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "29da5e89358103846a42987c2a5ff26ec131e29a6a7a714cd0e2941baf1f1e5cd9b1ee66f488c8e222135031bf2de507d7d05b037ab65c30482147dba63d2e52"
+    },
+    {
+     "name": "__stack_chk_fail_local.c",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fmusl%2F__stack_chk_fail_local.c/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "062bb49fa54839010acd4af113e20f7263dde1c8a2ca359b5fb2661ef9ed9d84a0f7c3bc10c25dcfa10bb3c5a4874588dff636ac43d5dbb3d748d75400756d0b"
+    },
+    {
+     "name": "getconf.c",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fmusl%2Fgetconf.c/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "0d80f37b34a35e3d14b012257c50862dfeb9d2c81139ea2dfa101d981d093b009b9fa450ba27a708ac59377a48626971dfc58e20a3799084a65777a0c32cbc7d"
+    },
+    {
+     "name": "getent.c",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fmusl%2Fgetent.c/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "246e029350d4295147fe311108dcfb991ef130271b856040c1fb6a9955414f263d2a51f978b8ae91f52ff49705e8e4572b8f0e6939801fa854e3f095a67d3d64"
+    },
+    {
+     "name": "iconv.c",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fmusl%2Ficonv.c/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "9d42d66fb1facce2b85dad919be5be819ee290bd26ca2db00982b2f8e055a0196290a008711cbe2b18ec9eee8d2270e3b3a4692c5a1b807013baa5c2b70a2bbf"
+    }
+   ]
+  },
+  {
+   "origin": "numactl",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/numactl/APKBUILD-3.24-stable",
+   "packages": [
+    "numactl-2.0.19-r0"
+   ],
+   "license": "LGPL-2.1-only",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "numactl-2.0.19.tar.gz",
+     "url": "https://github.com/numactl/numactl/releases/download/v2.0.19/numactl-2.0.19.tar.gz",
+     "role": "source",
+     "sha512": "484b7001e7b4efa32784353e937857e83cf62abbfab92a51cc8573cb49104a1084ffcefd8c5fb66cd389d08eaf201568bbca800cab7a48c42fcdf4397d4d10dc"
+    }
+   ]
+  },
+  {
+   "origin": "pax-utils",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/pax-utils/APKBUILD-3.24-stable",
+   "packages": [
+    "scanelf-1.3.9-r1"
+   ],
+   "license": "GPL-2.0-only",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "pax-utils-1.3.9.tar.xz",
+     "url": "https://dev.gentoo.org/~sam/distfiles/app-misc/pax-utils/pax-utils-1.3.9.tar.xz",
+     "role": "source",
+     "sha512": "96caf7f2087bedc7949db828d966835f7d691e29ef8177dee00605c10d433d4c5b5770a3d7f2e25e3c0218f5b9a6c6967669a3dea18cf138d6f0111d2bb5288b"
+    }
+   ]
+  },
+  {
+   "origin": "readline",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/readline/APKBUILD-3.24-stable",
+   "packages": [
+    "readline-8.3.3-r1"
+   ],
+   "license": "GPL-3.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "readline-8.3.tar.gz",
+     "url": "https://ftp.gnu.org/gnu/readline/readline-8.3.tar.gz",
+     "role": "source",
+     "sha512": "513002753dcf5db9213dbbb61d51217245f6a40d33b1dd45238e8062dfa8eef0c890b87a5548e11db959e842724fb572c4d3d7fb433773762a63c30efe808344"
+    },
+    {
+     "name": "fix-ncurses-underlinking.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Freadline%2Ffix-ncurses-underlinking.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "3fa096385feee5f6c01866ef220a92ba646dcebf59c6bba701bc5a3d234df899c37c8f7954b900aa2738c70697b7444da2c9b76dc64ba33c68dec02ac2244371"
+    },
+    {
+     "name": "inputrc",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Freadline%2Finputrc/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "5dbe872e94166aaed7ca2edec5a34ef9b13b254381e252cc6d851877b461579903cbb5b5dc588eabececcf1ebe636f6cb4da406cd01b64757f8c7e7f62e9a276"
+    },
+    {
+     "name": "readline83-001.patch",
+     "url": "https://ftp.gnu.org/gnu/readline/readline-8.3-patches/readline83-001",
+     "role": "patch",
+     "sha512": "ced50af353ed527f6ec0eac5f65261f2ed208825ec72fe2acf5f0217f34f84f33dcbf01b895325f6b33664b5a426bac99506193e2ddb6eea8c79ccad37364b89"
+    },
+    {
+     "name": "readline83-002.patch",
+     "url": "https://ftp.gnu.org/gnu/readline/readline-8.3-patches/readline83-002",
+     "role": "patch",
+     "sha512": "e45ad6443bd4e271ec8e8ab883de561b6420aec362b0b7f0256086cb5a023d946df55994ed99c76ceb191e8a25e8059ae9b553ef1d546626d671b80af292f04d"
+    },
+    {
+     "name": "readline83-003.patch",
+     "url": "https://ftp.gnu.org/gnu/readline/readline-8.3-patches/readline83-003",
+     "role": "patch",
+     "sha512": "6b3ebffe994d0cd4d3466b15e3aee9a73613109283a4442f3bf10e28edcd1204df824c71356d66d01ac21014a806023a101fedf94526a19f6f590d9ffdc864cd"
+    }
+   ]
+  },
+  {
+   "origin": "tdb",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/tdb/APKBUILD-3.24-stable",
+   "packages": [
+    "tdb-libs-1.4.15-r1"
+   ],
+   "license": "LGPL-3.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "tdb-1.4.15.tar.gz",
+     "url": "https://samba.org/ftp/tdb/tdb-1.4.15.tar.gz",
+     "role": "source",
+     "sha512": "1d2aeffaa4192dbd05b6f6356e7ceed50c4c18ed7080f6ecc9b7731cd7875e9822feafe1c1b281fc369fcd01c972441b5aed4104a421f0f985925815bfa4ed09"
+    }
+   ]
+  },
+  {
+   "origin": "util-linux",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/util-linux/APKBUILD-3.24-stable",
+   "packages": [
+    "libblkid-2.42.3-r1",
+    "libmount-2.42.3-r1"
+   ],
+   "license": "LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "utmps.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Futil-linux%2Futmps.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "c1c9cd816d20582438cda75a9c0ea4e687eee124e657172729aff410f52558be19cc5d649dae07c03f7618411e5aa6c23bcebc3fdf25529517a61b6b343966ef"
+    },
+    {
+     "name": "ttydefaults.h",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Futil-linux%2Fttydefaults.h/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "876bb9041eca1b2cca1e9aac898f282db576f7860aba690a95c0ac629d7c5b2cdeccba504dda87ff55c2a10b67165985ce16ca41a0694a267507e1e0cafd46d9"
+    },
+    {
+     "name": "rfkill.confd",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Futil-linux%2Frfkill.confd/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "401d2ccbdbfb0ebd573ac616c1077e2c2b79ff03e9221007759d8ac25eb522c401f705abbf7daac183d5e8017982b8ec5dd0a5ebad39507c5bb0a9f31f04ee97"
+    },
+    {
+     "name": "rfkill.initd",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Futil-linux%2Frfkill.initd/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "b0e11226c611fd52d54f599a40d23c4f748d5bd6971732dba2d25581aedaf5d2c62bcb49515d175569ff9aa1cf49a3dff25d1a5d4dcd89428c7020fc7ea3a581"
+    },
+    {
+     "name": "su-l.pamd",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Futil-linux%2Fsu-l.pamd/raw?ref=3.24-stable",
+     "role": "auxiliary",
+     "sha512": "0c8e764308ac1d084ebb4246eb97203de983bc0170066c958a56b412d9fd2f98da7f78f059e59512542c56a2639d6b2da35eff6469a48ebce6b2c406e94a96a7"
+    },
+    {
+     "name": "fix-login.c.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Futil-linux%2Ffix-login.c.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "bc05278acbe585bfc00c9ee8b898d7765273c2dec68be1d86cd93a9e939b9c41941d56420552f7197d4b785761d97f83c22128fa8de5bb14e6170d79e7f0ff10"
+    },
+    {
+     "name": "fix-nsenter.c.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Futil-linux%2Ffix-nsenter.c.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "c0b66fb44512f10e15ede9f20dec9156234c957543f9761137e1ee307cf8238da475fb445affa5f12084ae2bcf47d4e58360b41d6b298043a03f6e8fe272d897"
+    },
+    {
+     "name": "PATCH-test_enosys-Handle-musl-libc-error-strings.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Futil-linux%2FPATCH-test_enosys-Handle-musl-libc-error-strings.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "9a08cbd209fd7699d7494a1b786ba3a7f2f08dd02ef4d3655a0acec7b8e5252dc3b78074c8183f237620428a7f0c3eae0c4cbe763b5d7740ea05cabf3b8470d4"
+    },
+    {
+     "name": "0001-libblkid-minix-don-t-detect-erofs-images-as-minix.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Futil-linux%2F0001-libblkid-minix-don-t-detect-erofs-images-as-minix.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "d45a279149e41a63fc55c8867ad3244ecd9cd6c18d217e9a87bb31e6172e29b338a8f5f302022cc6b741401cbdb25145a504ff654011dd17c66e5bb330ef19a7"
+    },
+    {
+     "name": "libmount-include.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Futil-linux%2Flibmount-include.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "c9fe03222466201ac0c91576db2fce79570e55fa985f166960a332e064603cacea640f2d55f20a310db3d72048baf9375147af67067f49f88d9a1c340388ef99"
+    },
+    {
+     "name": "CVE-2026-78408.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Futil-linux%2FCVE-2026-78408.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "d714aadf1b685fbd78d81bd446e871be0f1da78a0ae635b5e823ea632073dfbf3ab3eb30d71ad821342d46ff499fef56881bfc4ecaab3b786746aa9f06cf80f2"
+    },
+    {
+     "name": "util-linux-2.42.3.tar.xz",
+     "url": "https://www.kernel.org/pub/linux/utils/util-linux/v2.42/util-linux-2.42.3.tar.xz",
+     "role": "source",
+     "sha512": "2a307943d4fbb34ac02131e10ff7260f181dd706b21e68a891d25d6eb30476a612bcc19b674bb2256283c9c716146e0d79909f37324efc9aa9d45a44e0d58988"
+    }
+   ],
+   "unresolved_source_entries": [
+    "https://www.kernel.org/pub/linux/utils/util-linux/v$_v/util-linux-$pkgver.tar.xz"
+   ]
+  },
+  {
+   "origin": "x265",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/x265/APKBUILD-3.24-stable",
+   "packages": [
+    "x265-libs-4.1-r0"
+   ],
+   "license": "GPL-2.0-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "x265_4.1.tar.gz",
+     "url": "https://bitbucket.org/multicoreware/x265_git/downloads/x265_4.1.tar.gz",
+     "role": "source",
+     "sha512": "5af5b958ff507f96a52813a6b72847c9fbc555bf95af287ae7f011055338266fb647dfea3b7789730c7f5c746f7e6cb7d9395ba10cbe43eb5034d3ed99730c3f"
+    },
+    {
+     "name": "ambient-viewing-environment-sei.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fx265%2Fambient-viewing-environment-sei.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "39677126f22d8da7f4c4792c315c5435d60d0ec747b3505399561e8372526fe9281ad75d60302df071c7edcc84b2edbb95e6a11b62a07d484486f8974e3402eb"
+    },
+    {
+     "name": "cmake4.patch",
+     "url": "https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Faports/repository/files/main%2Fx265%2Fcmake4.patch/raw?ref=3.24-stable",
+     "role": "patch",
+     "sha512": "ebcc0fb95566ad3bc5e3d02a19d5705fc9c1d760bfea9587b1840197700661dac0b121167e55e364771f69e71a5bd5425281fa0453a73cf2adc19bab042bae3e"
+    }
+   ]
+  },
+  {
+   "origin": "xz",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/xz/APKBUILD-3.24-stable",
+   "packages": [
+    "xz-libs-5.8.4-r0"
+   ],
+   "license": "GPL-2.0-or-later AND 0BSD AND Public-Domain AND LGPL-2.1-or-later",
+   "elective_alternative": false,
+   "files": [
+    {
+     "name": "xz-5.8.4.tar.gz",
+     "url": "https://github.com/tukaani-project/xz/archive/refs/tags/v5.8.4/xz-5.8.4.tar.gz",
+     "role": "source",
+     "sha512": "6a0e9c3b05f9c20255c5e35c06fdcd44b9e201f4ed566d1dec052b6cfda6cdfb42f73ffd258eaad2d8b7737c66b78ae353aebd44502e24a3d89d8765d698dcae"
+    }
+   ]
+  },
+  {
+   "origin": "zstd",
+   "ecosystem": "alpine",
+   "repo": "main",
+   "apkbuild": "third_party/licenses/alpine/main/zstd/APKBUILD-3.24-stable",
+   "packages": [
+    "zstd-libs-1.5.7-r2"
+   ],
+   "license": "BSD-3-Clause OR GPL-2.0-or-later",
+   "elective_alternative": true,
+   "files": [
+    {
+     "name": "zstd-1.5.7.tar.gz",
+     "url": "https://github.com/facebook/zstd/archive/v1.5.7.tar.gz",
+     "role": "source",
+     "sha512": "26e441267305f6e58080460f96ab98645219a90d290a533410b1b0b1d2f870721c95f8384e342ee647c5e968385a5b7e30c2d04340c37f59b3e6d86762c3260c"
+    }
+   ]
+  },
+  {
+   "origin": "auditok",
+   "ecosystem": "pypi",
+   "packages": [
+    "auditok-0.1.5"
+   ],
+   "license": "GPL-3.0-only",
+   "elective_alternative": false,
+   "license_dir": "third_party/licenses/python/auditok@0.1.5",
+   "files": [
+    {
+     "name": "auditok-0.1.5.tar.gz",
+     "url": "https://files.pythonhosted.org/packages/7a/10/36727094aeb828ad4d9bc70e9c5bb422b1abf64d2b5fe8ad305ce337522b/auditok-0.1.5.tar.gz",
+     "role": "source",
+     "sha256": "1cdb30f552cfed7120b3c1365faa7bca00cce3b0305b13188e9b62a649c58a0e"
+    }
+   ]
+  },
+  {
+   "origin": "faust-cchardet",
+   "ecosystem": "pypi",
+   "packages": [
+    "faust-cchardet-3.2.0"
+   ],
+   "license": "MPL-1.1 OR GPL-2.0-or-later OR LGPL-2.1-or-later",
+   "elective_alternative": true,
+   "license_dir": "third_party/licenses/python/faust-cchardet@3.2.0",
+   "files": [
+    {
+     "name": "faust_cchardet-3.2.0.tar.gz",
+     "url": "https://files.pythonhosted.org/packages/ce/1a/eacb35ca87e6133ee269eb60324f732e9a2933d4a4308fe2400e28eb2651/faust_cchardet-3.2.0.tar.gz",
+     "role": "source",
+     "sha256": "ffae2d6fccd414adf542931602b7b28239d6d85a22f493e54df02d6bbc7d3dcd"
+    }
+   ]
+  }
+ ]
+}

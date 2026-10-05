@@ -39,16 +39,19 @@ func newWriter(dir string) (*writer, error) {
 
 func (w *writer) close() error { return w.root.Close() }
 
-// copyFrom writes src atomically below the output root and records non-empty media.
+// Atomic replacement keeps interrupted extraction safe to retry.
 func (w *writer) copyFrom(ctx context.Context, name string, src io.Reader, size int64) error {
 	rel, ok := cleanRel(name)
 	if !ok {
 		return errUnsafeEntry
 	}
-	if !isMedia(rel) {
+	if !isPayload(rel) {
 		return nil
 	}
 	limit := int64(maxFileBytes)
+	if !isMedia(rel) {
+		limit = 256 << 20
+	}
 	if room := int64(maxTotalBytes - w.total); room < limit {
 		limit = room
 	}

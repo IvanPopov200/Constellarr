@@ -1067,6 +1067,10 @@ func TestTVRenameTransactionFailureRestoresDisk(t *testing.T) {
 		t.Fatalf("imported files = %+v", original.Files)
 	}
 	oldPath := original.Files[0].Path
+	subtitle := strings.TrimSuffix(oldPath, ".mkv") + ".bg.srt"
+	if err := os.WriteFile(filepath.Join(env.rootPath, subtitle), []byte("episode subtitle"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := env.service.SetConfig(ctx, tv.Config{
 		RootFolders:    []movies.RootFolder{{ID: "tv", Path: env.rootPath}},
 		FolderTemplate: "{title} ({year})/Season {season}",
@@ -1095,6 +1099,9 @@ func TestTVRenameTransactionFailureRestoresDisk(t *testing.T) {
 	}
 	if got := env.readFile(t, oldPath); got != "rename-source" {
 		t.Fatalf("restored content = %q", got)
+	}
+	if got := env.readFile(t, subtitle); got != "episode subtitle" {
+		t.Fatalf("restored subtitle = %q", got)
 	}
 	after := env.episode(t, series.ID, 1, 1)
 	if len(after.Files) != 1 || after.Files[0].Path != oldPath {

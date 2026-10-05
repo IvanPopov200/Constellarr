@@ -23,6 +23,11 @@ const (
 type segmentTask struct {
 	file      int
 	messageID string
+	number    int
+}
+
+func (task segmentTask) matches(s segment) bool {
+	return task.number <= 0 || s.Total == 0 || s.Part == int64(task.number)
 }
 
 type segmentResult struct {
@@ -178,11 +183,11 @@ func worker(ctx context.Context, clients []*nntppool.Client, partsDir string, ca
 		if ctx.Err() != nil {
 			return
 		}
-		if s, ok := cached[task.messageID]; ok {
+		if s, ok := cached[task.messageID]; ok && task.matches(s) {
 			results <- segmentResult{task: task, seg: s}
 			continue
 		}
-		s, err, hard := fetchSegment(ctx, clients, task.messageID)
+		s, err, hard := fetchSegment(ctx, clients, task)
 		if err != nil {
 			results <- segmentResult{task: task, err: err, hard: hard}
 			continue
@@ -196,7 +201,7 @@ func worker(ctx context.Context, clients []*nntppool.Client, partsDir string, ca
 }
 
 // fetchSegment tries each configured host with a real BODY before concluding the article is missing.
-func fetchSegment(ctx context.Context, clients []*nntppool.Client, messageID string) (segment, error, bool) {
+func fetchSegment(ctx context.Context, clients []*nntppool.Client, task segmentTask) (segment, error, bool) {
 	actx, cancel := context.WithTimeout(ctx, segmentTimeout)
 	defer cancel()
 	var hardErr, damagedErr, lastErr error
@@ -204,7 +209,7 @@ func fetchSegment(ctx context.Context, clients []*nntppool.Client, messageID str
 		if actx.Err() != nil {
 			return segment{}, actx.Err(), true
 		}
-		s, err := fetchFromHost(actx, client, messageID)
+		s, err := fetchFromHost(actx, client, task)
 		if err == nil {
 			return s, nil, false
 		}
@@ -227,10 +232,13 @@ func fetchSegment(ctx context.Context, clients []*nntppool.Client, messageID str
 	return segment{}, lastErr, false
 }
 
-func fetchFromHost(ctx context.Context, client *nntppool.Client, messageID string) (segment, error) {
+func fetchFromHost(ctx context.Context, client *nntppool.Client, task segmentTask) (segment, error) {
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		s, err := fetchOnce(ctx, client, messageID)
+		s, err := fetchOnce(ctx, client, task.messageID)
+		if err == nil && !task.matches(s) {
+			err = fmt.Errorf("%w: expected part %d, received part %d", errBadArticle, task.number, s.Part)
+		}
 		if err == nil {
 			return s, nil
 		}

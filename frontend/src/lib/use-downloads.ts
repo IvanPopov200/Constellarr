@@ -4,13 +4,14 @@ import { api, errorMessage, isActiveJob, type Job, type Release } from '@/lib/ap
 const activeIntervalMs = 1500
 const idleIntervalMs = 5000
 
-export function useDownloads() {
+export function useDownloads(enabled = true) {
   const [jobs, setJobs] = useState<Job[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
   const jobsRef = useRef<Job[] | null>(null)
 
   useEffect(() => {
+    if (!enabled) return
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
     let stopped = false
@@ -42,7 +43,7 @@ export function useDownloads() {
       controller.abort()
       clearTimeout(timer)
     }
-  }, [version])
+  }, [version, enabled])
 
   const refresh = useCallback(() => setVersion((current) => current + 1), [])
 

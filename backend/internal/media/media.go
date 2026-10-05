@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -59,7 +60,7 @@ func Process(ctx context.Context, inputDir, outputDir string, missingSegments in
 	if err != nil {
 		return nil, err
 	}
-	if len(files) == 0 {
+	if !slices.ContainsFunc(files, func(f File) bool { return isMedia(f.Name) }) {
 		return nil, errors.New("no playable media found in the download")
 	}
 	return files, nil
@@ -90,8 +91,30 @@ var mediaExtensions = map[string]bool{
 	".mpg":  true,
 	".ts":   true,
 	".wmv":  true,
+	".flac": true,
+	".mp3":  true,
+	".m4a":  true,
+	".alac": true,
+	".aac":  true,
+	".ogg":  true,
+	".opus": true,
+	".wav":  true,
+	".aiff": true,
+	".ape":  true,
+	".wv":   true,
 }
 
 func isMedia(name string) bool {
 	return mediaExtensions[strings.ToLower(path.Ext(name))]
+}
+
+func isPayload(name string) bool {
+	if isMedia(name) {
+		return true
+	}
+	switch strings.ToLower(path.Ext(name)) {
+	case ".srt", ".vtt", ".ass", ".ssa", ".sub", ".idx", ".sup", ".lrc", ".cue":
+		return true
+	}
+	return false
 }

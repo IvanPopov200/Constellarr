@@ -34,7 +34,12 @@ export type SettingsUpdate = {
   usenet: Omit<Settings['usenet'], 'passwordConfigured'> & { password?: string }
 }
 
-export type Release = { id: string; title: string; size: number; published: string }
+export type Release = {
+  id: string; title: string; size: number; published: string
+  protocol?: 'usenet' | 'torrent'
+  source?: string
+  seeders?: number
+}
 
 export type JobStatus =
   | 'queued'
@@ -102,6 +107,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new Event('constellarr:unauthorized'))
     const detail = (await response.json().catch(() => null)) as { error?: unknown } | null
     throw new ApiError(
       typeof detail?.error === 'string'
