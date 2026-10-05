@@ -3056,9 +3056,12 @@ function MovieDetailDialog({
                             {formatAge(release.published)}
                           </time>
                           {release.imdbId ? ` · ${release.imdbId}` : ''}
+                          {release.source ? ` · ${release.source}` : ''}
+                          {release.protocol === 'torrent' && release.seeders !== undefined ? ` · ${release.seeders} seeders` : ''}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
+                        <Badge variant="outline">{release.protocol === 'torrent' ? 'Torrent' : 'Usenet'}</Badge>
                         {decision.upgrade && <Badge variant="outline">Upgrade</Badge>}
                         <Badge
                           variant={decision.allowed ? 'outline' : 'destructive'}

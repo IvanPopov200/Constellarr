@@ -7,6 +7,8 @@ node_modules
 frontend/dist
 backend/internal/web/dist
 bin
+.venv
+backend/constellarr
 data
 **/data
 coverage

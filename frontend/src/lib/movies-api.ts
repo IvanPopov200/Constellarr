@@ -127,6 +127,9 @@ export type MovieRelease = {
   published: string
   imdbId?: string
   decision: ReleaseDecision
+  protocol?: 'usenet' | 'torrent'
+  source?: string
+  seeders?: number
 }
 
 export type Watchlist = {

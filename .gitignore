@@ -8,6 +8,8 @@ frontend/*.tsbuildinfo
 backend/internal/web/dist/*
 !backend/internal/web/dist/.gitkeep
 bin/
+backend/constellarr
+.venv/
 data/
 coverage/
 *.log
