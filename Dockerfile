@@ -25,6 +25,7 @@ RUN apk add --no-cache ca-certificates libstdc++ par2cmdline=1.1.1-r0 ffmpeg pos
 COPY --from=backend /constellarr /usr/local/bin/constellarr
 COPY THIRD_PARTY_NOTICES.md /usr/share/constellarr/THIRD_PARTY_NOTICES.md
 COPY third_party/licenses /usr/share/constellarr/third_party/licenses
+COPY third_party/source-manifest.json third_party/collect_sources.py /usr/share/constellarr/third_party/
 USER constellarr
 ENV HTTP_ADDR=:8080
 ENV PATH="/opt/subtitle-tools/bin:${PATH}"
