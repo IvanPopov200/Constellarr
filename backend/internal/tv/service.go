@@ -235,6 +235,9 @@ func decorateEpisode(profile quality.Profile, series Series, episode Episode, ro
 		case "queued", "downloading", "":
 			episode.Status = "downloading"
 			episode.Error = ""
+		case "paused", "cancelled":
+			episode.Status = acquisition.Status
+			episode.Error = ""
 		case "importing":
 			episode.Status = "importing"
 			episode.Error = ""
@@ -270,7 +273,7 @@ func decorateEpisode(profile quality.Profile, series Series, episode Episode, ro
 func tvSummarize(series Series, episodes []Episode, profile quality.Profile) Series {
 	series.Total = len(episodes)
 	series.Downloaded, series.Wanted = 0, 0
-	downloading, importing, failed := false, false, false
+	downloading, importing, failed, paused, cancelled := false, false, false, false, false
 	cutoffUnmet := false
 	monitored := 0
 	failure := ""
@@ -287,6 +290,10 @@ func tvSummarize(series Series, episodes []Episode, profile quality.Profile) Ser
 		switch episode.Status {
 		case "downloading":
 			downloading = true
+		case "paused":
+			paused = true
+		case "cancelled":
+			cancelled = true
 		case "importing":
 			importing = true
 		case "failed", "import-failed":
@@ -302,6 +309,10 @@ func tvSummarize(series Series, episodes []Episode, profile quality.Profile) Ser
 		series.Status = "downloading"
 	case importing:
 		series.Status = "importing"
+	case paused:
+		series.Status = "paused"
+	case cancelled:
+		series.Status = "cancelled"
 	case failed:
 		series.Status = "failed"
 		if series.Error == "" {
@@ -326,7 +337,7 @@ func tvEpisodeWanted(series Series, profile quality.Profile, episode Episode) bo
 		return false
 	}
 	switch episode.Status {
-	case "downloading", "importing":
+	case "downloading", "paused", "cancelled", "importing":
 		return false
 	}
 	if tvFutureDate(episode.AirDate) {
@@ -1412,6 +1423,8 @@ func (s *Service) Grab(ctx context.Context, seriesID string, input GrabInput) (d
 			switch acquisition.Status {
 			case "superseded", "imported":
 				continue
+			case "cancelled":
+				abandoned = append(abandoned, acquisition)
 			case "failed":
 				if same && !input.Override {
 					return fmt.Errorf("%w: this release failed before; retry it with override", ErrConflict)
@@ -1448,8 +1461,8 @@ func (s *Service) Grab(ctx context.Context, seriesID string, input GrabInput) (d
 		if err != nil {
 			return fmt.Errorf("tv: %w", err)
 		}
-		if job.Status == "failed" {
-			if !input.Override {
+		if job.Status == "failed" || job.Status == "cancelled" {
+			if job.Status == "failed" && !input.Override {
 				return fmt.Errorf("%w: the download failed before; retry it with override", ErrConflict)
 			}
 			job, err = s.Downloads.Retry(ctx, job.ID)
@@ -1631,7 +1644,7 @@ func tvAcquisitionReason(acquisitions []Acquisition, releaseID string, episodeID
 			return "release was already downloaded; its import is retrying"
 		case "imported":
 			return "release is already imported"
-		case "superseded":
+		case "superseded", "cancelled":
 			continue
 		default:
 			return "release is already downloading"
@@ -1639,7 +1652,7 @@ func tvAcquisitionReason(acquisitions []Acquisition, releaseID string, episodeID
 	}
 	for _, acquisition := range acquisitions {
 		switch acquisition.Status {
-		case "queued", "downloading", "importing", "import-failed", "":
+		case "queued", "downloading", "paused", "importing", "import-failed", "":
 		default:
 			continue
 		}

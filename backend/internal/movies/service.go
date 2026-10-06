@@ -134,6 +134,8 @@ func (s *Service) applyState(ctx context.Context, cfg Config, profile quality.Pr
 		switch {
 		case err == nil && job.Status == "completed":
 			movie.Status = "importing"
+		case err == nil && (job.Status == "paused" || job.Status == "cancelled"):
+			movie.Status = job.Status
 		case err == nil && job.Status == "failed":
 			movie.Status = "failed"
 			movie.Error = truncate(firstNonEmpty(latest.Error, job.Error, "download failed"), maxTextRunes)
@@ -675,7 +677,7 @@ func duplicateReason(acquisitions []Acquisition, releaseID string) string {
 			return "release was already downloaded; its import is retrying"
 		case "imported":
 			return "release is already imported"
-		case "superseded":
+		case "superseded", "cancelled":
 			// An abandoned release can be grabbed again on purpose.
 			continue
 		default:
@@ -688,7 +690,7 @@ func duplicateReason(acquisitions []Acquisition, releaseID string) string {
 func pendingAcquisition(acquisitions []Acquisition) *Acquisition {
 	for i := range acquisitions {
 		switch acquisitions[i].Status {
-		case "queued", "downloading", "importing", "import-failed", "":
+		case "queued", "downloading", "paused", "importing", "import-failed", "":
 			return &acquisitions[i]
 		}
 	}
@@ -805,7 +807,7 @@ func (s *Service) Grab(ctx context.Context, id, releaseID string, override bool)
 				continue
 			}
 			switch acquisition.Status {
-			case "queued", "downloading", "importing", "":
+			case "queued", "downloading", "paused", "importing", "":
 				return fmt.Errorf("%w: another release for this movie is already being processed", ErrConflict)
 			case "import-failed":
 				if !override {
@@ -819,7 +821,7 @@ func (s *Service) Grab(ctx context.Context, id, releaseID string, override bool)
 				continue
 			}
 			switch acquisition.Status {
-			case "superseded":
+			case "superseded", "cancelled":
 				continue
 			case "failed":
 				if override {
@@ -848,8 +850,8 @@ func (s *Service) Grab(ctx context.Context, id, releaseID string, override bool)
 		if err != nil {
 			return err
 		}
-		if job.Status == "failed" {
-			if !override {
+		if job.Status == "failed" || job.Status == "cancelled" {
+			if job.Status == "failed" && !override {
 				return fmt.Errorf("%w: the download failed before; retry it with override", ErrConflict)
 			}
 			job, err = s.Downloads.Retry(ctx, job.ID)

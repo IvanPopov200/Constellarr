@@ -43,3 +43,50 @@ func TestManualMovieDoesNotAuthorizeAutomaticDownload(t *testing.T) {
 		t.Fatalf("explicit release selection = %+v, %v", job, err)
 	}
 }
+
+func TestPausedAndCancelledMovieDownloadsStayStopped(t *testing.T) {
+	ctx := context.Background()
+	indexer := indexerServer(t, map[string][]releaseFixture{
+		"": {{title: "Controlled Film 2005 1080p BluRay", guid: "controlled-release", size: 2 << 30}},
+	})
+	env := newTestEnv(t, indexer.URL)
+	movie := env.manualMovie(t, "Controlled Film", 2005, true)
+	job, err := env.service.Grab(ctx, movie.ID, "controlled-release", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.manager.Pause(ctx, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if movie := statusOf(t, env, movie.ID); movie.Status != "paused" {
+		t.Fatalf("movie after pause = %q", movie.Status)
+	}
+	result, err := env.service.Sync(ctx, true)
+	if err != nil || result.Searched != 0 || result.Queued != 0 {
+		t.Fatalf("automation restarted a paused download: %+v, %v", result, err)
+	}
+	if _, err := env.manager.Resume(ctx, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if movie := statusOf(t, env, movie.ID); movie.Status != "downloading" {
+		t.Fatalf("movie after resume = %q", movie.Status)
+	}
+	if _, err := env.manager.Cancel(ctx, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if movie := statusOf(t, env, movie.ID); movie.Status != "cancelled" {
+		t.Fatalf("movie after cancellation = %q", movie.Status)
+	}
+	result, err = env.service.Sync(ctx, true)
+	if err != nil || result.Searched != 0 || result.Queued != 0 {
+		t.Fatalf("automation restarted a cancelled download: %+v, %v", result, err)
+	}
+	releases, err := env.service.Search(ctx, movie.ID)
+	if err != nil || len(releases) != 1 || !releases[0].Decision.Allowed {
+		t.Fatalf("cancelled release cannot be selected again: %+v, %v", releases, err)
+	}
+	retried, err := env.service.Grab(ctx, movie.ID, releases[0].ID, false)
+	if err != nil || retried.ID != job.ID || retried.Status != "queued" {
+		t.Fatalf("explicitly retrying a cancelled release = %+v, %v", retried, err)
+	}
+}

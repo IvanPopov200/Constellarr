@@ -76,8 +76,34 @@ func (f *fakeTorrentSource) Get(_ context.Context, id string) (downloads.Job, er
 	return job, nil
 }
 
-func (f *fakeTorrentSource) Retry(ctx context.Context, id string) (downloads.Job, error) {
-	return f.Get(ctx, id)
+// Retry mirrors the real adapter: failed or cancelled work is requeued through Resume.
+func (f *fakeTorrentSource) Retry(_ context.Context, id string) (downloads.Job, error) {
+	return f.setStatus(id, "downloading")
+}
+
+func (f *fakeTorrentSource) Pause(_ context.Context, id string) (downloads.Job, error) {
+	return f.setStatus(id, "paused")
+}
+
+func (f *fakeTorrentSource) Resume(_ context.Context, id string) (downloads.Job, error) {
+	return f.setStatus(id, "downloading")
+}
+
+// Cancel keeps the job and its data, matching the download manager's contract.
+func (f *fakeTorrentSource) Cancel(_ context.Context, id string) (downloads.Job, error) {
+	return f.setStatus(id, "cancelled")
+}
+
+func (f *fakeTorrentSource) setStatus(id, status string) (downloads.Job, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	job, ok := f.jobs[id]
+	if !ok {
+		return downloads.Job{}, downloads.ErrNotFound
+	}
+	job.Status = status
+	f.jobs[id] = job
+	return job, nil
 }
 
 func (f *fakeTorrentSource) OutputDirectory(id string) (string, error) {

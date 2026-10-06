@@ -233,6 +233,7 @@ var routeRules = []routeRule{
 	}},
 	{permission: PermDownloadsRead, methods: getOnly, patterns: []string{
 		"/api/v1/downloads",
+		"/api/v1/downloads/policy",
 		"/api/v1/downloads/{id}/file",
 		"/api/v1/releases",
 		"/api/v1/torrents",
@@ -243,11 +244,17 @@ var routeRules = []routeRule{
 	}},
 	{permission: PermDownloadsWrite, methods: writeOnly, patterns: []string{
 		"/api/v1/downloads",
+		"/api/v1/downloads/pause",
+		"/api/v1/downloads/resume",
+		"/api/v1/downloads/{id}/pause",
+		"/api/v1/downloads/{id}/resume",
+		"/api/v1/downloads/{id}/cancel",
 		"/api/v1/downloads/{id}/retry",
 		"/api/v1/torrents",
 		"/api/v1/torrents/{id}",
 		"/api/v1/torrents/{id}/limits",
 		"/api/v1/torrents/{id}/pause",
+		"/api/v1/torrents/{id}/cancel",
 		"/api/v1/torrents/{id}/recheck",
 		"/api/v1/torrents/{id}/resume",
 	}},
@@ -305,6 +312,7 @@ var routeRules = []routeRule{
 		"/api/v1/subtitles/providers",
 	}},
 	{permission: PermSettingsWrite, methods: writeOnly, patterns: []string{
+		"/api/v1/downloads/policy",
 		"/api/v1/settings",
 		"/api/v1/sources/test",
 		"/api/v1/movie-config",
