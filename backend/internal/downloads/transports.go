@@ -15,6 +15,9 @@ type TorrentSource interface {
 	Add(context.Context, string, string) (Job, error)
 	Get(context.Context, string) (Job, error)
 	Retry(context.Context, string) (Job, error)
+	Pause(context.Context, string) (Job, error)
+	Resume(context.Context, string) (Job, error)
+	Cancel(context.Context, string) (Job, error)
 	OutputDirectory(string) (string, error)
 }
 

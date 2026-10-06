@@ -4,8 +4,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DialogShell, EmptyState, ErrorNote, LoadingNote, Notice, Section } from '@/components/tv-ui'
 import { errorMessage } from '@/lib/api'
+import { accessPermissions } from '@/lib/auth-api'
+import { useAuth } from '@/lib/auth-context'
 import { formatAge, formatBytes } from '@/lib/format'
-import { strings } from '@/components/tv-shared'
+import { queueHref, queueLabel, strings } from '@/components/tv-shared'
 import { tvApi, type Target, type TvRelease } from '@/lib/tv-api'
 import { cn } from 'cn'
 
@@ -31,45 +33,42 @@ export function ReleaseDialog({
   onGrabbed?: (seriesId: string) => void
 }) {
   const [releases, setReleases] = useState<TvRelease[] | null>(null)
-  const [searching, setSearching] = useState(true)
+  const [searching, setSearching] = useState(false)
   const [grabbing, setGrabbing] = useState('')
   const [confirmId, setConfirmId] = useState('')
   const [error, setError] = useState('')
+  const [queued, setQueued] = useState<{ title: string; protocol: string } | null>(null)
   const [notice, setNotice] = useState('')
   const controller = useRef<AbortController | null>(null)
+  const { can } = useAuth()
+  // The queue pages need downloads.read; without it the link would only redirect to the overview.
+  const canReadQueue = can(accessPermissions.downloadsRead)
 
-  const runSearch = (signal: AbortSignal) => {
-    setError('')
-    setNotice('')
-    tvApi
-      .search(seriesId, target, signal)
-      .then((found) => {
-        if (!signal.aborted) setReleases(found)
-      })
-      .catch((cause) => {
-        if (!signal.aborted) setError(errorMessage(cause))
-      })
-      .finally(() => {
-        if (!signal.aborted) setSearching(false)
-      })
-  }
+  useEffect(() => () => controller.current?.abort(), [])
 
-  const retry = () => {
+  // Opening the dialog never queries indexers; only an explicit search does.
+  const search = () => {
     controller.current?.abort()
     const request = new AbortController()
     controller.current = request
     setSearching(true)
-    runSearch(request.signal)
+    setReleases(null)
+    setError('')
+    setNotice('')
+    setQueued(null)
+    setConfirmId('')
+    tvApi
+      .search(seriesId, target, request.signal)
+      .then((found) => {
+        if (!request.signal.aborted) setReleases(found)
+      })
+      .catch((cause) => {
+        if (!request.signal.aborted) setError(errorMessage(cause))
+      })
+      .finally(() => {
+        if (!request.signal.aborted) setSearching(false)
+      })
   }
-
-  useEffect(() => {
-    const request = new AbortController()
-    controller.current = request
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- results are applied after the request settles
-    runSearch(request.signal)
-    return () => request.abort()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one search per opened target
-  }, [seriesId, target.season, target.episode])
 
   const grab = async (release: TvRelease) => {
     // The backend decision is the only source of overrides; rejected releases need an extra confirmation.
@@ -77,10 +76,12 @@ export function ReleaseDialog({
     setGrabbing(release.id)
     setError('')
     setNotice('')
+    setQueued(null)
     try {
-      const job = await tvApi.grab(seriesId, { ...target, releaseId: release.id, override })
+      await tvApi.grab(seriesId, { ...target, releaseId: release.id, override })
       setConfirmId('')
-      setNotice(`Download queued as job ${job.id.slice(0, 8)}. Track it in Usenet.`)
+      setNotice(`Download queued: ${release.title}.`)
+      setQueued({ title: release.title, protocol: release.protocol ?? '' })
       onGrabbed?.(seriesId)
     } catch (cause) {
       setError(errorMessage(cause))
@@ -100,18 +101,30 @@ export function ReleaseDialog({
         <Section
           title={targetLabel(target)}
           action={
-            <Button size="sm" variant="outline" disabled={searching} onClick={retry}>
+            <Button
+              size="sm"
+              variant={releases === null ? 'default' : 'outline'}
+              disabled={searching}
+              aria-label={`Search releases for ${seriesTitle || 'series'} ${targetLabel(target)}`}
+              onClick={search}
+            >
               {searching ? (
                 <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
               ) : (
                 <SearchIcon data-icon="inline-start" />
               )}
-              {searching ? 'Searching…' : 'Search again'}
+              {searching ? 'Searching…' : releases === null ? 'Search indexers' : 'Search again'}
             </Button>
           }
         >
-          {error && <ErrorNote onRetry={retry}>{error}</ErrorNote>}
+          {error && <ErrorNote onRetry={search}>{error}</ErrorNote>}
           {searching && releases === null && !error && <LoadingNote>Searching indexers…</LoadingNote>}
+          {!searching && releases === null && !error && (
+            <EmptyState>
+              Nothing is searched until you press Search indexers. Results appear here with size, age, and the
+              profile decision, and nothing downloads until you choose a release.
+            </EmptyState>
+          )}
           {releases !== null && releases.length === 0 && !searching && (
             <EmptyState>No releases matched this target. Try again later or search a different season.</EmptyState>
           )}
@@ -138,7 +151,7 @@ export function ReleaseDialog({
                       <div className="min-w-0">
                         <p className="text-sm font-medium break-words">{release.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {formatBytes(release.size)} ·{' '}
+                          <span className="tabular-nums">{formatBytes(release.size)}</span> ·{' '}
                           <time dateTime={release.published} title={new Date(release.published).toLocaleString()}>
                             {formatAge(release.published)}
                           </time>
@@ -186,6 +199,7 @@ export function ReleaseDialog({
                           size="sm"
                           variant="outline"
                           disabled={grabbing === release.id}
+                          aria-label={`Confirm downloading rejected release ${release.title}`}
                           onClick={() => void grab(release)}
                         >
                           {grabbing === release.id ? (
@@ -205,6 +219,11 @@ export function ReleaseDialog({
                           size="sm"
                           variant={decision.allowed ? 'default' : 'outline'}
                           disabled={grabbing === release.id}
+                          aria-label={
+                            decision.allowed
+                              ? `Download release ${release.title}`
+                              : `Download rejected release ${release.title} anyway`
+                          }
                           onClick={() => (decision.allowed ? void grab(release) : setConfirmId(release.id))}
                         >
                           {grabbing === release.id ? (
@@ -212,7 +231,7 @@ export function ReleaseDialog({
                           ) : (
                             <DownloadIcon data-icon="inline-start" />
                           )}
-                          {decision.allowed ? 'Download' : 'Override & download'}
+                          {decision.allowed ? 'Download' : 'Download anyway'}
                         </Button>
                       </div>
                     )}
@@ -222,7 +241,23 @@ export function ReleaseDialog({
             </ul>
           )}
         </Section>
-        {notice && <Notice>{notice}</Notice>}
+        {notice && (
+          <Notice>
+            {notice}
+            {canReadQueue && (
+              <>
+                {' '}
+                <a
+                  href={queueHref(queued?.protocol)}
+                  className="underline underline-offset-4"
+                  aria-label={`View the queued download in ${queueLabel(queued?.protocol)}`}
+                >
+                  View download
+                </a>
+              </>
+            )}
+          </Notice>
+        )}
       </div>
     </DialogShell>
   )

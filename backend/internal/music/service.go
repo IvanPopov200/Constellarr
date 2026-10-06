@@ -499,7 +499,13 @@ func (s *Service) decorateAlbum(cfg Config, album *Album, acquisitions []Acquisi
 	switch {
 	case pending != nil:
 		album.Status = "downloading"
+		if pending.Status == "paused" {
+			album.Status = "paused"
+		}
 		album.Error = pending.Error
+	case len(acquisitions) > 0 && acquisitions[0].Status == "cancelled":
+		album.Status = "cancelled"
+		album.Error = ""
 	case failed != nil && len(present) == 0:
 		album.Status = "failed"
 		album.Error = failed.Error
@@ -528,7 +534,7 @@ func presentTrackMissing(track *Track, files []File) bool {
 func pendingAcquisition(acquisitions []Acquisition) *Acquisition {
 	for index := range acquisitions {
 		switch acquisitions[index].Status {
-		case "queued", "downloading", "importing", "":
+		case "queued", "downloading", "paused", "importing", "":
 			return &acquisitions[index]
 		}
 	}
@@ -548,10 +554,15 @@ func failedAcquisition(acquisitions []Acquisition) *Acquisition {
 
 func artistStatus(artist Artist) string {
 	anyWanted, anyPending, anyAvailable, anyFailed := false, false, false, false
+	anyPaused, anyCancelled := false, false
 	for _, album := range artist.Albums {
 		switch album.Status {
 		case "downloading":
 			anyPending = true
+		case "paused":
+			anyPaused = true
+		case "cancelled":
+			anyCancelled = true
 		case "failed":
 			anyFailed = true
 		case "wanted", "cutoff-unmet":
@@ -565,6 +576,10 @@ func artistStatus(artist Artist) string {
 	switch {
 	case anyPending:
 		return "downloading"
+	case anyPaused:
+		return "paused"
+	case anyCancelled:
+		return "cancelled"
 	case anyWanted:
 		return "wanted"
 	case anyFailed && !anyAvailable:
@@ -1183,7 +1198,7 @@ func duplicateReason(acquisitions []Acquisition, releaseID string) string {
 			return "the release previously failed"
 		case "imported":
 			return "the release is already imported"
-		case "superseded":
+		case "superseded", "cancelled":
 			continue
 		default:
 			return "the release is already downloading"
@@ -1242,13 +1257,13 @@ func (s *Service) Grab(ctx context.Context, albumID, releaseID string, override 
 		}
 		for _, acquisition := range acquisitions {
 			if acquisition.ReleaseID == releaseID {
-				if acquisition.Status == "failed" && override {
+				if acquisition.Status == "cancelled" || (acquisition.Status == "failed" && override) {
 					continue
 				}
 				return fmt.Errorf("%w: this release is already being processed", ErrConflict)
 			}
 			switch acquisition.Status {
-			case "queued", "downloading", "importing", "":
+			case "queued", "downloading", "paused", "importing", "":
 				return fmt.Errorf("%w: another release for this album is already being processed", ErrConflict)
 			}
 		}
@@ -1266,8 +1281,8 @@ func (s *Service) Grab(ctx context.Context, albumID, releaseID string, override 
 		if err != nil {
 			return err
 		}
-		if job.Status == "failed" {
-			if !override {
+		if job.Status == "failed" || job.Status == "cancelled" {
+			if job.Status == "failed" && !override {
 				return fmt.Errorf("%w: the download failed before; retry it with override", ErrConflict)
 			}
 			job, err = s.Downloads.Retry(ctx, job.ID)

@@ -29,8 +29,11 @@ func dbError(op string, cause error) error {
 	return fmt.Errorf("downloads: %s: %w", op, errDatabase)
 }
 
-const jobColumns = `id, release_id, title, protocol, status, bytes_done, bytes_total, segments_done, ` +
+const jobColumns = `id, release_id, title, protocol, status, pause_reason, bytes_done, bytes_total, segments_done, ` +
 	`segments_total, missing_segments, error, files, created_at, updated_at`
+
+// activeStatuses are the states a running worker may write through; anything else owns the row.
+const activeStatuses = `('downloading', 'verifying', 'repairing', 'extracting')`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -42,7 +45,7 @@ func scanJob(row rowScanner, extra ...any) (Job, error) {
 		rawJSON []byte
 	)
 	dest := []any{
-		&job.ID, &job.ReleaseID, &job.Title, &job.Protocol, &job.Status, &job.BytesDone, &job.BytesTotal,
+		&job.ID, &job.ReleaseID, &job.Title, &job.Protocol, &job.Status, &job.PauseReason, &job.BytesDone, &job.BytesTotal,
 		&job.SegmentsDone, &job.SegmentsTotal, &job.MissingSegments, &job.Error, &rawJSON,
 		&job.CreatedAt, &job.UpdatedAt,
 	}
@@ -119,6 +122,10 @@ func (m *Manager) insertJob(ctx context.Context, q querier, id, releaseID, title
 }
 
 func (m *Manager) claimNext(ctx context.Context, q querier) (Job, []byte, error) {
+	// A paused policy holds the whole queue; the caller polls again once it lifts.
+	if !m.policy.Allowed() {
+		return Job{}, nil, ErrNotFound
+	}
 	tx, err := q.Begin(ctx)
 	if err != nil {
 		return Job{}, nil, dbError("claim download", err)
@@ -157,22 +164,32 @@ func (m *Manager) requeueInterrupted(ctx context.Context, q querier) error {
 	return nil
 }
 
+// saveProgress only writes while a worker owns the job, so a paused or cancelled row keeps its state.
 func (m *Manager) saveProgress(ctx context.Context, q querier, id string, progress usenet.Progress) error {
-	_, err := q.Exec(ctx,
+	tag, err := q.Exec(ctx,
 		`UPDATE downloads SET bytes_done = $2, bytes_total = $3, segments_done = $4,
-		 segments_total = $5, missing_segments = $6, updated_at = now() WHERE id = $1`,
+		 segments_total = $5, missing_segments = $6, updated_at = now()
+		 WHERE id = $1 AND status IN `+activeStatuses,
 		id, progress.DownloadedBytes, progress.TotalBytes, progress.CompletedSegments,
 		progress.TotalSegments, progress.MissingSegments)
 	if err != nil {
 		return dbError("save download progress", err)
 	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
+	}
 	return nil
 }
 
 func (m *Manager) setStatus(ctx context.Context, q querier, id, status string) error {
-	_, err := q.Exec(ctx, `UPDATE downloads SET status = $2, updated_at = now() WHERE id = $1`, id, status)
+	tag, err := q.Exec(ctx,
+		`UPDATE downloads SET status = $2, updated_at = now() WHERE id = $1 AND status IN `+activeStatuses,
+		id, status)
 	if err != nil {
 		return dbError("update download", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
 	}
 	return nil
 }
@@ -182,30 +199,38 @@ func (m *Manager) complete(ctx context.Context, q querier, id string, files []Ou
 	if err != nil {
 		return errors.New("downloads: output files could not be encoded")
 	}
-	_, err = q.Exec(ctx,
-		`UPDATE downloads SET status = $2, error = '', files = $3::jsonb, updated_at = now() WHERE id = $1`,
+	tag, err := q.Exec(ctx,
+		`UPDATE downloads SET status = $2, error = '', pause_reason = '', files = $3::jsonb, updated_at = now()
+		 WHERE id = $1 AND status IN `+activeStatuses,
 		id, statusCompleted, string(encoded))
 	if err != nil {
 		return dbError("complete download", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
 	}
 	return nil
 }
 
 func (m *Manager) failJob(ctx context.Context, q querier, id, message string) error {
-	_, err := q.Exec(ctx,
-		`UPDATE downloads SET status = $2, error = $3, updated_at = now() WHERE id = $1`,
+	tag, err := q.Exec(ctx,
+		`UPDATE downloads SET status = $2, error = $3, updated_at = now()
+		 WHERE id = $1 AND status IN `+activeStatuses,
 		id, statusFailed, message)
 	if err != nil {
 		return dbError("fail download", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
 	}
 	return nil
 }
 
 func (m *Manager) requeueJob(ctx context.Context, q querier, id string) (Job, error) {
 	job, err := scanJob(q.QueryRow(ctx,
-		`UPDATE downloads SET status = $2, error = '', updated_at = now()
-		 WHERE id = $1 AND status = $3 RETURNING `+jobColumns,
-		id, statusQueued, statusFailed))
+		`UPDATE downloads SET status = $2, error = '', pause_reason = '', updated_at = now()
+		 WHERE id = $1 AND status IN ('failed', 'cancelled') RETURNING `+jobColumns,
+		id, statusQueued))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Job{}, ErrConflict
 	}
@@ -213,4 +238,87 @@ func (m *Manager) requeueJob(ctx context.Context, q querier, id string) (Job, er
 		return Job{}, dbError("retry download", err)
 	}
 	return job, nil
+}
+
+// pauseJob pauses queued work and running work; a worker's guarded writes cannot undo it.
+func (m *Manager) pauseJob(ctx context.Context, q querier, id string) (Job, error) {
+	job, err := scanJob(q.QueryRow(ctx,
+		`UPDATE downloads SET status = $2, pause_reason = $3, error = '', updated_at = now()
+		 WHERE id = $1 AND status IN ('queued', 'downloading', 'verifying', 'repairing', 'extracting')
+		 RETURNING `+jobColumns,
+		id, statusPaused, pauseReasonManual))
+	if errors.Is(err, pgx.ErrNoRows) {
+		current, loadErr := m.jobByID(ctx, q, id)
+		if loadErr != nil {
+			return Job{}, loadErr
+		}
+		if current.Status == statusPaused {
+			return current, nil
+		}
+		return Job{}, ErrConflict
+	}
+	if err != nil {
+		return Job{}, dbError("pause download", err)
+	}
+	return job, nil
+}
+
+// resumeJob requeues paused work; running work is already where the user wants it.
+func (m *Manager) resumeJob(ctx context.Context, q querier, id string) (Job, error) {
+	job, err := scanJob(q.QueryRow(ctx,
+		`UPDATE downloads SET status = $2, pause_reason = '', error = '', updated_at = now()
+		 WHERE id = $1 AND status = $3 RETURNING `+jobColumns,
+		id, statusQueued, statusPaused))
+	if errors.Is(err, pgx.ErrNoRows) {
+		current, loadErr := m.jobByID(ctx, q, id)
+		if loadErr != nil {
+			return Job{}, loadErr
+		}
+		switch current.Status {
+		case statusQueued, statusDownloading, "verifying", "repairing", "extracting":
+			return current, nil
+		}
+		return Job{}, ErrConflict
+	}
+	if err != nil {
+		return Job{}, dbError("resume download", err)
+	}
+	return job, nil
+}
+
+// cancelJob stops a job without touching its files, cache, or history.
+func (m *Manager) cancelJob(ctx context.Context, q querier, id string) (Job, error) {
+	job, err := scanJob(q.QueryRow(ctx,
+		`UPDATE downloads SET status = $2, pause_reason = '', error = '', updated_at = now()
+		 WHERE id = $1 AND status IN ('queued', 'paused', 'downloading', 'verifying', 'repairing', 'extracting')
+		 RETURNING `+jobColumns,
+		id, statusCancelled))
+	if errors.Is(err, pgx.ErrNoRows) {
+		current, loadErr := m.jobByID(ctx, q, id)
+		if loadErr != nil {
+			return Job{}, loadErr
+		}
+		if current.Status == statusCancelled {
+			return current, nil
+		}
+		return Job{}, ErrConflict
+	}
+	if err != nil {
+		return Job{}, dbError("cancel download", err)
+	}
+	return job, nil
+}
+
+// requeueHeld returns a job stopped by the global policy to the queue with its progress intact.
+func (m *Manager) requeueHeld(ctx context.Context, q querier, id string) error {
+	tag, err := q.Exec(ctx,
+		`UPDATE downloads SET status = $2, updated_at = now() WHERE id = $1 AND status IN `+activeStatuses,
+		id, statusQueued)
+	if err != nil {
+		return dbError("requeue download", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
+	}
+	return nil
 }

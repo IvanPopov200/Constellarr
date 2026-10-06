@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   CalendarPlusIcon,
+  CaptionsIcon,
   CheckIcon,
   ChevronDownIcon,
   CircleAlertIcon,
@@ -38,6 +39,8 @@ import {
   airDateValue,
   availableFiles,
   bestFile,
+  episodeCode,
+  episodeSubtitleHref,
   formatDate,
   formatDateTime,
   isAired,
@@ -68,11 +71,34 @@ function EpisodeFileLink({ seriesId, episode }: { seriesId: string; episode: Epi
       <a
         href={tvApi.fileUrl(seriesId, file.path)}
         download
-        aria-label={`Download ${episode.title || `episode ${episode.number}`} file`}
+        aria-label={`Download ${episodeCode(episode)} ${episode.title || 'episode'} file`}
         title={file.path}
       >
         <FileDownIcon data-icon="inline-start" />
         File
+      </a>
+    </Button>
+  )
+}
+
+// Subtitles need an imported file; aired episodes without one show the reason as text instead of a dead action.
+function EpisodeSubtitleLink({ episode, canReadSubtitles }: { episode: Episode; canReadSubtitles: boolean }) {
+  const file = bestFile(episode)
+  if (!canReadSubtitles) return null
+  if (!file && !isAired(episode)) return null
+  const context = `${episodeCode(episode)} ${episode.title || 'episode'}`.trim()
+  if (!file) {
+    return <span className="text-xs text-muted-foreground">Subtitles need an episode file</span>
+  }
+  return (
+    <Button asChild size="xs" variant="outline">
+      <a
+        href={episodeSubtitleHref(episode.id)}
+        aria-label={`Subtitles for ${context}`}
+        title={`Open subtitles for ${context}`}
+      >
+        <CaptionsIcon data-icon="inline-start" />
+        Subtitles
       </a>
     </Button>
   )
@@ -85,6 +111,7 @@ export function SeriesDetailDialog({
   roots,
   canWrite,
   canReadSettings,
+  canReadSubtitles,
   onClose,
   onSave,
   onReload,
@@ -98,6 +125,7 @@ export function SeriesDetailDialog({
   roots: RootFolder[]
   canWrite: boolean
   canReadSettings: boolean
+  canReadSubtitles: boolean
   onClose: () => void
   onSave: (series: Series) => Promise<Series>
   onReload: () => void
@@ -252,7 +280,11 @@ export function SeriesDetailDialog({
     try {
       await tvApi.monitor(series.id, { episodeIds: [episode.id], monitored })
       onReload()
-      setNotice(`${monitored ? 'Monitoring' : 'Unmonitored'} ${seasonLabel(episode.season)} episode ${episode.number}.`)
+      setNotice(
+        monitored
+          ? `Downloading ${episodeCode(episode)} automatically when a release matches.`
+          : `Stopped automatic downloads for ${episodeCode(episode)}.`,
+      )
     } catch (cause) {
       setError(errorMessage(cause))
     } finally {
@@ -272,9 +304,9 @@ export function SeriesDetailDialog({
       await tvApi.monitor(series.id, scope === null ? { monitored } : { season: scope, monitored })
       onReload()
       setNotice(
-        `${monitored ? 'Monitoring' : 'Unmonitored'} ${
+        `${monitored ? 'Downloading' : 'Stopped downloading'} ${
           scope === null ? 'every episode' : scope === 0 ? 'specials' : `season ${scope}`
-        }.`,
+        } automatically.`,
       )
     } catch (cause) {
       setError(errorMessage(cause))
@@ -340,13 +372,17 @@ export function SeriesDetailDialog({
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-heading text-lg font-semibold">{metadata.title || 'Untitled'}</h2>
               <SeriesStatusBadge series={series} />
-              {!series.monitored && series.status !== 'unmonitored' && <Badge variant="outline">Unmonitored</Badge>}
             </div>
             <p className="text-sm text-muted-foreground">
               {metadata.year > 0 ? metadata.year : 'Year unknown'}
               {metadata.totalSeasons && metadata.totalSeasons > 0 ? ` · ${metadata.totalSeasons} seasons` : ''}
               {metadata.imdbId ? ` · ${metadata.imdbId}` : ''}
               {` · Added ${formatDate(Date.parse(series.addedAt) || null)}`}
+            </p>
+            <p className={series.monitored ? 'text-xs text-muted-foreground' : 'text-xs text-amber-300'}>
+              {series.monitored
+                ? `Downloading automatically · ${monitorModeLabel(series.monitorMode || 'all')}`
+                : 'Automatic downloads are off: nothing is searched or downloaded until you choose a release.'}
             </p>
             {rating && (
               <p className="text-sm">
@@ -374,12 +410,15 @@ export function SeriesDetailDialog({
           </div>
         </div>
 
-        <dl className="grid gap-2 sm:grid-cols-2">
-          <MetaRow label="Monitor mode">{monitorModeLabel(series.monitorMode || 'all')}</MetaRow>
-          <MetaRow label="Tags">{tagsOf(series).join(', ') || 'None'}</MetaRow>
-          <MetaRow label="Cast">{strings(metadata.cast).join(', ') || 'Unknown'}</MetaRow>
-          <MetaRow label="Languages">{strings(metadata.languages).join(', ') || 'Unknown'}</MetaRow>
-        </dl>
+        <details className="rounded-lg border border-border p-3">
+          <summary className="cursor-pointer text-sm font-medium">Cast, languages, and other details</summary>
+          <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+            <MetaRow label="Monitor mode">{monitorModeLabel(series.monitorMode || 'all')}</MetaRow>
+            <MetaRow label="Tags">{tagsOf(series).join(', ') || 'None'}</MetaRow>
+            <MetaRow label="Cast">{strings(metadata.cast).join(', ') || 'Unknown'}</MetaRow>
+            <MetaRow label="Languages">{strings(metadata.languages).join(', ') || 'Unknown'}</MetaRow>
+          </dl>
+        </details>
 
         <Section
           title="Episodes"
@@ -390,6 +429,7 @@ export function SeriesDetailDialog({
                   size="sm"
                   variant="outline"
                   disabled={monitorBusy !== ''}
+                  aria-label="Download every episode of this series automatically"
                   onClick={() => void monitorScope(null, true, 'all')}
                 >
                   {monitorBusy === 'all' ? (
@@ -397,7 +437,7 @@ export function SeriesDetailDialog({
                   ) : (
                     <CheckIcon data-icon="inline-start" />
                   )}
-                  Monitor all
+                  Download everything automatically
                 </Button>
               )}
               {canWrite && (
@@ -405,9 +445,10 @@ export function SeriesDetailDialog({
                   size="sm"
                   variant="ghost"
                   disabled={monitorBusy !== ''}
+                  aria-label="Stop downloading every episode of this series automatically"
                   onClick={() => void monitorScope(null, false, 'none')}
                 >
-                  Unmonitor all
+                  Stop automatic downloads
                 </Button>
               )}
               {seasons.length > 1 && (
@@ -461,13 +502,14 @@ export function SeriesDetailDialog({
                           <Button
                             size="xs"
                             variant="outline"
+                            aria-label={`Search releases for ${seasonLabel(season)}`}
                             onClick={(event) => {
                               event.preventDefault()
                               setReleaseTarget({ season, episode: 0 })
                             }}
                           >
                             <SearchIcon data-icon="inline-start" />
-                            Season pack
+                            Search season
                           </Button>
                         )}
                         {canWrite && (
@@ -475,6 +517,17 @@ export function SeriesDetailDialog({
                             size="xs"
                             variant="ghost"
                             disabled={monitorBusy !== ''}
+                            aria-pressed={allMonitored}
+                            aria-label={
+                              allMonitored
+                                ? `Stop downloading ${seasonLabel(season)} automatically`
+                                : `Download ${seasonLabel(season)} automatically`
+                            }
+                            title={
+                              allMonitored
+                                ? `Stop searching and downloading ${seasonLabel(season)} automatically.`
+                                : `Search indexers and download ${seasonLabel(season)} automatically.`
+                            }
                             onClick={(event) => {
                               event.preventDefault()
                               void monitorScope(season, !allMonitored, `season-${season}`)
@@ -482,10 +535,8 @@ export function SeriesDetailDialog({
                           >
                             {monitorBusy === `season-${season}` ? (
                               <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-                            ) : allMonitored ? (
-                              'Unmonitor'
                             ) : (
-                              'Monitor'
+                              'Automatic downloads'
                             )}
                           </Button>
                         )}
@@ -506,7 +557,7 @@ export function SeriesDetailDialog({
                               checked={episode.monitored}
                               disabled={pending || !canWrite}
                               onChange={(event) => void toggleEpisode(episode, event.target.checked)}
-                              aria-label={`Monitor ${seasonLabel(episode.season)} episode ${episode.number}`}
+                              aria-label={`Download ${episodeCode(episode)} automatically when a release matches`}
                             />
                             <span className="w-10 shrink-0 text-xs text-muted-foreground tabular-nums">
                               E{String(episode.number).padStart(2, '0')}
@@ -522,8 +573,10 @@ export function SeriesDetailDialog({
                                 {episodeRating && <span>{episodeRating} IMDb</span>}
                                 <span>
                                   {file
-                                    ? `${file.quality || 'Unknown quality'} · ${formatBytes(file.size)}`
-                                    : 'No file'}
+                                    ? `Downloaded · ${file.quality || 'quality unknown'} · ${formatBytes(file.size)}`
+                                    : aired
+                                      ? 'Awaiting video'
+                                      : 'Not aired yet'}
                                 </span>
                                 {episode.lastSearchAt && <span>Last search {formatAge(episode.lastSearchAt)}</span>}
                               </p>
@@ -532,14 +585,16 @@ export function SeriesDetailDialog({
                             {episode.status && (!file || episode.status === 'cutoff-unmet') && <StatusBadge status={episode.status} />}
                             {activeStatuses.has(episode.status) && file && <StatusBadge status={episode.status} />}
                             <EpisodeFileLink seriesId={series.id} episode={episode} />
+                            <EpisodeSubtitleLink episode={episode} canReadSubtitles={canReadSubtitles} />
                             {canWrite && (
                               <Button
                                 size="xs"
                                 variant="outline"
+                                aria-label={`Search releases for ${episodeCode(episode)} ${episode.title || 'episode'}`}
                                 onClick={() => setReleaseTarget({ season: episode.season, episode: episode.number })}
                               >
                                 <SearchIcon data-icon="inline-start" />
-                                Search
+                                Search releases
                               </Button>
                             )}
                           </li>
@@ -553,7 +608,12 @@ export function SeriesDetailDialog({
           )}
           {canWrite && (
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setReleaseTarget({ season: -1, episode: 0 })}>
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label={`Search releases for the whole ${metadata.title || 'series'}`}
+                onClick={() => setReleaseTarget({ season: -1, episode: 0 })}
+              >
                 <SearchIcon data-icon="inline-start" />
                 Search whole series
               </Button>
@@ -564,17 +624,24 @@ export function SeriesDetailDialog({
         {canWrite && (
           <Section
             title="Manual episode"
-          action={
-            <Button size="sm" variant="ghost" onClick={() => setManualOpen((current) => !current)}>
-              {manualOpen ? 'Hide' : 'Add episode'}
-            </Button>
-          }
-        >
-          {manualOpen ? (
-            <div className="space-y-3 rounded-lg border border-border p-3">
-              <p className="text-xs text-muted-foreground">
-                Use this for specials or offline series. Season 0 is the specials season.
-              </p>
+            action={
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-expanded={manualOpen}
+                aria-controls="tv-manual-episode"
+                onClick={() => setManualOpen((current) => !current)}
+              >
+                {manualOpen ? 'Hide' : 'Add episode'}
+              </Button>
+            }
+          >
+            {manualOpen ? (
+              <div id="tv-manual-episode" className="space-y-3 rounded-lg border border-border p-3">
+                <p className="text-xs text-muted-foreground">
+                  Use this for specials or offline series, then search releases for the episode like any other. Season
+                  0 is the specials season.
+                </p>
               <div className="grid gap-3 sm:grid-cols-4">
                 <div className="space-y-2">
                   <label htmlFor="tv-manual-season" className="text-sm font-medium">
@@ -642,7 +709,7 @@ export function SeriesDetailDialog({
         )}
 
         <Section
-          title="Monitoring and organization"
+          title="Downloads and organization"
           action={
             canWrite ? (
               <span className="text-xs text-muted-foreground" role="status">
@@ -656,14 +723,14 @@ export function SeriesDetailDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <Checkbox
               id="tv-detail-monitored"
-              label="Monitored"
-              description="Search for releases and upgrades automatically."
+              label="Download automatically"
+              description="Constellarr searches indexers and downloads releases for this series. Off keeps missing episodes in Wanted until you choose a release."
               checked={form.monitored}
               onChange={(monitored) => setForm({ ...form, monitored })}
             />
             <div className="space-y-2">
               <label htmlFor="tv-detail-mode" className="text-sm font-medium">
-                Monitor mode
+                Episodes to download
               </label>
               <Select
                 id="tv-detail-mode"
@@ -679,81 +746,91 @@ export function SeriesDetailDialog({
                 ))}
               </Select>
             </div>
-            {canReadSettings && (
-              <div className="space-y-2">
-                <label htmlFor="tv-detail-profile" className="text-sm font-medium">
-                  Quality profile
-                </label>
-                <Select
-                  id="tv-detail-profile"
-                  className="w-full"
-                  value={form.profileId}
-                  onChange={(event) => setForm({ ...form, profileId: event.target.value })}
-                >
-                  <option value="">Default</option>
-                  {profiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            )}
-            {canReadSettings && (
-              <div className="space-y-2">
-                <label htmlFor="tv-detail-root" className="text-sm font-medium">
-                  Root folder
-                </label>
-                <Select
-                  id="tv-detail-root"
-                  className="w-full"
-                  value={form.rootId}
-                  onChange={(event) => setForm({ ...form, rootId: event.target.value })}
-                >
-                  <option value="">Default</option>
-                  {roots.map((root) => (
-                    <option key={root.id || root.path} value={root.id}>
-                      {root.path}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            )}
-            <div className="space-y-2 sm:col-span-2">
-              <label htmlFor="tv-detail-tags" className="text-sm font-medium">
-                Tags
-              </label>
-              <Input
-                id="tv-detail-tags"
-                value={form.tags}
-                placeholder="kids, anime"
-                onChange={(event) => setForm({ ...form, tags: event.target.value })}
-              />
-            </div>
           </div>
-          {!canReadSettings ? (
-            <p className="flex items-center gap-2 text-xs text-muted-foreground">
-              <CircleAlertIcon className="size-4 shrink-0" />
-              The current root folder and quality profile stay as configured on the server.
-            </p>
-          ) : (
-            (profiles.length === 0 || roots.length === 0) && (
-              <p className="flex items-center gap-2 text-xs text-amber-300">
+          <p className={form.monitored ? 'text-xs text-muted-foreground' : 'text-xs text-amber-300'} role="status">
+            {form.monitored
+              ? 'Missing episodes in this selection are searched automatically.'
+              : 'Nothing is searched or downloaded while automatic downloads are off.'}
+          </p>
+          <details className="rounded-lg border border-border p-3">
+            <summary className="cursor-pointer text-sm font-medium">Quality profile, root folder, and tags</summary>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              {canReadSettings && (
+                <div className="space-y-2">
+                  <label htmlFor="tv-detail-profile" className="text-sm font-medium">
+                    Quality profile
+                  </label>
+                  <Select
+                    id="tv-detail-profile"
+                    className="w-full"
+                    value={form.profileId}
+                    onChange={(event) => setForm({ ...form, profileId: event.target.value })}
+                  >
+                    <option value="">Default</option>
+                    {profiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              {canReadSettings && (
+                <div className="space-y-2">
+                  <label htmlFor="tv-detail-root" className="text-sm font-medium">
+                    Root folder
+                  </label>
+                  <Select
+                    id="tv-detail-root"
+                    className="w-full"
+                    value={form.rootId}
+                    onChange={(event) => setForm({ ...form, rootId: event.target.value })}
+                  >
+                    <option value="">Default</option>
+                    {roots.map((root) => (
+                      <option key={root.id || root.path} value={root.id}>
+                        {root.path}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-2 sm:col-span-2">
+                <label htmlFor="tv-detail-tags" className="text-sm font-medium">
+                  Tags
+                </label>
+                <Input
+                  id="tv-detail-tags"
+                  value={form.tags}
+                  placeholder="kids, anime"
+                  onChange={(event) => setForm({ ...form, tags: event.target.value })}
+                />
+              </div>
+            </div>
+            {!canReadSettings ? (
+              <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
                 <CircleAlertIcon className="size-4 shrink-0" />
-                {roots.length === 0 ? (
-                  <>
-                    Add a TV root folder in{' '}
-                    <a href="#storage" className="underline underline-offset-4">
-                      Storage & Paths
-                    </a>
-                    .
-                  </>
-                ) : (
-                  'Create a shared quality profile in Movies → Profiles.'
-                )}
+                The current root folder and quality profile stay as configured on the server.
               </p>
-            )
-          )}
+            ) : (
+              (profiles.length === 0 || roots.length === 0) && (
+                <p className="mt-3 flex items-center gap-2 text-xs text-amber-300">
+                  <CircleAlertIcon className="size-4 shrink-0" />
+                  {roots.length === 0 ? (
+                    <>
+                      Add a TV root folder in{' '}
+                      <a href="#storage" className="underline underline-offset-4">
+                        Storage & Paths
+                      </a>
+                      .
+                    </>
+                  ) : (
+                    'Create a shared quality profile in Movies → Profiles.'
+                  )}
+                </p>
+              )
+            )}
+          </details>
           <div className="flex justify-end">
             <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>
               {saving ? (
@@ -767,21 +844,15 @@ export function SeriesDetailDialog({
             </>
           ) : (
             <dl className="grid gap-2 sm:grid-cols-2">
-              <MetaRow label="Monitoring">{form.monitored ? 'Monitored' : 'Unmonitored'}</MetaRow>
-              <MetaRow label="Monitor mode">{monitorModeLabel(series.monitorMode || 'all')}</MetaRow>
+              <MetaRow label="Automatic downloads">{form.monitored ? 'On' : 'Off'}</MetaRow>
+              <MetaRow label="Episodes to download">{monitorModeLabel(series.monitorMode || 'all')}</MetaRow>
               <MetaRow label="Quality profile">
-                {canReadSettings
-                  ? profiles.find((profile) => profile.id === series.profileId)?.name || series.profileId || 'Default'
-                  : series.profileId
-                    ? 'Configured profile'
-                    : 'Default'}
+                {profiles.find((profile) => profile.id === series.profileId)?.name ||
+                  (series.profileId ? 'Configured profile' : 'Default')}
               </MetaRow>
               <MetaRow label="Root folder">
-                {canReadSettings
-                  ? roots.find((root) => root.id === series.rootId)?.path || series.rootId || 'Default'
-                  : series.rootId
-                    ? 'Configured root folder'
-                    : 'Default'}
+                {roots.find((root) => root.id === series.rootId)?.path ||
+                  (series.rootId ? 'Configured root folder' : 'Default')}
               </MetaRow>
               <MetaRow label="Tags">{tagsOf(series).join(', ') || 'None'}</MetaRow>
               <p className="text-xs text-muted-foreground sm:col-span-2">
@@ -828,7 +899,13 @@ export function SeriesDetailDialog({
                 <Button size="sm" variant="outline" onClick={() => setConfirmRemove(false)}>
                   Cancel
                 </Button>
-                <Button size="sm" variant="destructive" disabled={removing} onClick={() => void remove()}>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={removing}
+                  aria-label={`Remove ${metadata.title || 'series'} from the catalog`}
+                  onClick={() => void remove()}
+                >
                   {removing ? (
                     <LoaderCircleIcon className="animate-spin motion-reduce:animate-none" />
                   ) : (
@@ -842,6 +919,7 @@ export function SeriesDetailDialog({
                 size="sm"
                 variant="outline"
                 className="text-destructive"
+                aria-expanded={confirmRemove}
                 onClick={() => setConfirmRemove(true)}
               >
                 <Trash2Icon data-icon="inline-start" />
@@ -852,22 +930,35 @@ export function SeriesDetailDialog({
 
           {renameResult && (
             <div className="space-y-2 rounded-lg border border-border p-3">
-              <p className="text-sm font-medium">{renameResult.applied ? 'Renamed files' : 'Rename preview'}</p>
+              <p className="text-sm font-medium">
+                {renameResult.applied ? 'Renamed files' : 'Rename preview, nothing changed yet'}
+              </p>
               {renameResult.files.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No files to rename.</p>
               ) : (
-                <ul className="space-y-1 text-xs">
-                  {renameResult.files.map((file, index) => (
-                    <li key={`${file.from}-${index}`} className="break-all">
-                      <span className="text-muted-foreground">{file.from}</span>
-                      {' → '}
-                      <span>{file.to}</span>
-                    </li>
-                  ))}
-                </ul>
+                <details>
+                  <summary className="cursor-pointer text-xs text-muted-foreground">
+                    {renameResult.files.length} file path{renameResult.files.length === 1 ? '' : 's'}
+                  </summary>
+                  <ul className="mt-2 space-y-1 text-xs">
+                    {renameResult.files.map((file, index) => (
+                      <li key={`${file.from}-${index}`} className="break-all">
+                        <span className="text-muted-foreground">{file.from}</span>
+                        {' → '}
+                        <span>{file.to}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
               )}
               {!renameResult.applied && renameResult.files.length > 0 && (
-                <Button size="sm" variant="outline" disabled={renaming !== null} onClick={() => void runRename(false)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={renaming !== null}
+                  aria-label={`Rename ${renameResult.files.length} series files on disk`}
+                  onClick={() => void runRename(false)}
+                >
                   {renaming === 'apply' ? (
                     <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
                   ) : (
@@ -881,35 +972,40 @@ export function SeriesDetailDialog({
           </Section>
         )}
 
-        <Section title="History">
-          {historyError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {historyError}
-            </p>
-          ) : history === null ? (
-            <LoadingNote>Loading history…</LoadingNote>
-          ) : history.length === 0 ? (
-            <EmptyState>No history for this series yet.</EmptyState>
-          ) : (
-            <ul className="flex flex-col divide-y divide-border">
-              {history.map((entry) => (
-                <li key={entry.id} className="flex flex-wrap items-start gap-2 py-2 first:pt-0 last:pb-0">
-                  <Badge variant="outline" className="capitalize">
-                    {entry.type || 'event'}
-                  </Badge>
-                  <span className="min-w-0 flex-1 text-sm break-words">{entry.message}</span>
-                  <time
-                    dateTime={entry.createdAt}
-                    title={formatDateTime(entry.createdAt)}
-                    className="text-xs text-muted-foreground"
-                  >
-                    {formatAge(entry.createdAt)}
-                  </time>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+        <details className="rounded-lg border border-border p-3">
+          <summary className="cursor-pointer text-sm font-medium">
+            History{history !== null && history.length > 0 ? ` (${history.length})` : ''}
+          </summary>
+          <div className="mt-3">
+            {historyError ? (
+              <p role="alert" className="text-sm text-destructive">
+                {historyError}
+              </p>
+            ) : history === null ? (
+              <LoadingNote>Loading history…</LoadingNote>
+            ) : history.length === 0 ? (
+              <EmptyState>No history for this series yet.</EmptyState>
+            ) : (
+              <ul className="flex flex-col divide-y divide-border">
+                {history.map((entry) => (
+                  <li key={entry.id} className="flex flex-wrap items-start gap-2 py-2 first:pt-0 last:pb-0">
+                    <Badge variant="outline" className="capitalize">
+                      {entry.type || 'event'}
+                    </Badge>
+                    <span className="min-w-0 flex-1 text-sm break-words">{entry.message}</span>
+                    <time
+                      dateTime={entry.createdAt}
+                      title={formatDateTime(entry.createdAt)}
+                      className="text-xs text-muted-foreground"
+                    >
+                      {formatAge(entry.createdAt)}
+                    </time>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </details>
 
         {error && <ErrorNote>{error}</ErrorNote>}
         {notice && <Notice>{notice}</Notice>}

@@ -31,6 +31,24 @@ const (
 	fixtureOtherRelease = "77777777-7777-4777-8777-777777777777"
 )
 
+func TestMusicRequestReflectsDownloadControls(t *testing.T) {
+	for _, status := range []string{"paused", "cancelled"} {
+		album := music.Album{ID: "album", Status: status}
+		item := itemFromAlbum(album)
+		if item.Status != status || item.Available {
+			t.Fatalf("missing album with %s download: %+v", status, item)
+		}
+		album.Files = []music.File{{Path: "track.flac"}}
+		if item = itemFromAlbum(album); !item.Available {
+			t.Fatalf("%s upgrade hid an available album", status)
+		}
+		album.Files[0].Missing = true
+		if item = itemFromAlbum(album); item.Available {
+			t.Fatalf("%s upgrade reported a missing file as available", status)
+		}
+	}
+}
+
 // brainzFixture serves the MusicBrainz JSON contract the music module expects.
 type brainzFixture struct {
 	*httptest.Server

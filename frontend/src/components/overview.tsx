@@ -60,11 +60,17 @@ export function Overview({
   jobs,
   error,
   onRetry,
+  onPause,
+  onResume,
+  onCancel,
   onRefresh,
 }: {
   jobs: Job[] | null
   error: string | null
   onRetry: (job: Job) => Promise<void>
+  onPause: (job: Job) => Promise<void>
+  onResume: (job: Job) => Promise<void>
+  onCancel: (job: Job) => Promise<void>
   onRefresh: () => void
 }) {
   const { can } = useAuth()
@@ -176,9 +182,12 @@ export function Overview({
               jobs={jobs}
               error={error}
               onRetry={onRetry}
+              onPause={onPause}
+              onResume={onResume}
+              onCancel={onCancel}
               onRefresh={onRefresh}
               title="Recent downloads"
-              description="Latest queue activity, with retry and completed file links."
+              description="Pause, resume, or cancel a download."
               limit={5}
               emptyAction={{ label: 'Search releases', href: '#movies' }}
             />

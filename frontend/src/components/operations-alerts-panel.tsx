@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import { Activity, BellRing, CircleCheck, LoaderCircle, Save, Send, TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -53,6 +53,14 @@ const ruleCopy: Record<string, { title: string; description: string }> = {
 
 function ruleTitle(name: string) {
   return ruleCopy[name]?.title ?? name.replace(/_/g, ' ')
+}
+
+function InfoNote({ children }: { children: ReactNode }) {
+  return (
+    <p role="status" className="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+      {children}
+    </p>
+  )
 }
 
 const emptyWebhook: WebhookUpdate = {
@@ -188,12 +196,12 @@ export function AlertsPanel() {
       {error && <ErrorNote>{error}</ErrorNote>}
       {notice && <Notice>{notice}</Notice>}
       {!canReadSettings && (
-        <Notice>
+        <InfoNote>
           Alert rules and notifications need the settings permission. Active alerts and history stay visible here.
-        </Notice>
+        </InfoNote>
       )}
       {canReadSettings && !canWriteSettings && (
-        <Notice>Alert settings are shown read-only. Changing them needs the settings write permission.</Notice>
+        <InfoNote>Alert settings are shown read-only. Changing them needs the settings write permission.</InfoNote>
       )}
 
       <Card className="shadow-none">
@@ -225,7 +233,9 @@ export function AlertsPanel() {
       </Card>
 
       {editable && (
-        <fieldset disabled={readOnly} className="space-y-5">
+        <details className="rounded-xl border border-border p-4">
+          <summary className="cursor-pointer text-sm font-medium">Alert rules & notifications</summary>
+        <fieldset disabled={readOnly} className="mt-4 space-y-5">
           <Card className="shadow-none">
         <CardHeader className="border-b border-border">
           <CardTitle className="flex items-center gap-2">
@@ -408,6 +418,7 @@ export function AlertsPanel() {
         </CardContent>
       </Card>
         </fieldset>
+        </details>
       )}
 
       <Card className="shadow-none">

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { LoaderCircle, Plus } from 'lucide-react'
+import { Check, LoaderCircle, Plus } from 'lucide-react'
 import { Field, FormError } from '@/components/auth-gate'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -117,6 +117,7 @@ export function UsersRoles() {
   const [roles, setRoles] = useState<Role[] | null>(null)
   const [catalog, setCatalog] = useState<string[]>([])
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [attempt, setAttempt] = useState(0)
   const [editing, setEditing] = useState<Role | null>(null)
   const [creating, setCreating] = useState(false)
@@ -143,23 +144,39 @@ export function UsersRoles() {
     setRoles(list => (created ? [...(list ?? []), updated] : list?.map(role => (role.id === updated.id ? updated : role)) ?? null))
     setEditing(null)
     setCreating(false)
+    setNotice(created ? `Role ${updated.name} created.` : `Role ${updated.name} updated.`)
   }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">Built-in roles are managed by Constellarr. Create custom roles for other access levels.</p>
-        <Button size="sm" onClick={() => setCreating(true)} disabled={catalog.length === 0}>
+        <Button
+          size="sm"
+          onClick={() => {
+            setNotice('')
+            setCreating(true)
+          }}
+          disabled={catalog.length === 0}
+        >
           <Plus aria-hidden="true" />
           Create role
         </Button>
       </div>
+
+      {notice && (
+        <p role="status" className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-500">
+          <Check className="size-4" aria-hidden="true" />
+          {notice}
+        </p>
+      )}
 
       {error && (
         <LoadError
           message={error}
           onRetry={() => {
             setError('')
+            setNotice('')
             setAttempt(value => value + 1)
           }}
         />
@@ -182,7 +199,15 @@ export function UsersRoles() {
               </div>
               {!role.builtin && (
                 <div className="flex items-center gap-1.5">
-                  <Button variant="outline" size="sm" onClick={() => setEditing(role)} disabled={catalog.length === 0}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setNotice('')
+                      setEditing(role)
+                    }}
+                    disabled={catalog.length === 0}
+                  >
                     Edit
                   </Button>
                   <Confirm
@@ -197,6 +222,7 @@ export function UsersRoles() {
                     onConfirm={async () => {
                       await authApi.deleteRole(role.id)
                       setRoles(list => list?.filter(item => item.id !== role.id) ?? null)
+                      setNotice(`Role ${role.name} deleted.`)
                     }}
                   />
                 </div>

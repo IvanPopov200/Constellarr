@@ -49,7 +49,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		}
 		admin.Close()
 	})
-	for _, name := range []string{"011_torrents.sql", "015_torrent_processing.sql"} {
+	for _, name := range []string{"011_torrents.sql", "015_torrent_processing.sql", "018_torrent_cancel.sql"} {
 		body, err := os.ReadFile(filepath.Join("..", "downloads", "migrations", name))
 		if err != nil {
 			t.Fatalf("cannot read %s: %v", name, err)

@@ -35,12 +35,15 @@ type SettingsUpdate struct {
 	FallbackHosts  []string
 }
 
-// Config returns a snapshot of the active settings with an independent fallback list.
+// Attach the runtime limiter only to snapshots so it cannot be persisted as a setting.
 func (m *Manager) Config() Config {
 	m.configMu.RLock()
-	defer m.configMu.RUnlock()
 	cfg := m.cfg
-	cfg.Usenet.FallbackHosts = append([]string{}, m.cfg.Usenet.FallbackHosts...)
+	m.configMu.RUnlock()
+	cfg.Usenet.FallbackHosts = append([]string{}, cfg.Usenet.FallbackHosts...)
+	if m.policy != nil {
+		cfg.Usenet.Limiter = m.policy.Limiter()
+	}
 	return cfg
 }
 

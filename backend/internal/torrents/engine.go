@@ -39,10 +39,13 @@ type jobRun struct {
 	client    *torrent.Client
 	private   bool
 	paused    bool
+	cancelled bool
 	completed bool
 	saved     bool
 	seedingAt time.Time
 	seedBase  int64
+
+	metadataDeadline time.Time
 
 	lastProgress   time.Time
 	lastHashed     int64
@@ -65,6 +68,19 @@ func (r *jobRun) torrent() *torrent.Torrent {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.tor
+}
+
+// refreshMetadataDeadline restarts the metadata wait so a paused run never ages out.
+func (r *jobRun) refreshMetadataDeadline(now time.Time) {
+	r.mu.Lock()
+	r.metadataDeadline = now.Add(metadataTimeout)
+	r.mu.Unlock()
+}
+
+func (r *jobRun) metadataExpired(now time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return now.After(r.metadataDeadline)
 }
 
 func (s *Service) newClientConfig(private bool, port int) *torrent.ClientConfig {
@@ -110,6 +126,9 @@ func (s *Service) clientFor(private bool) (*torrent.Client, error) {
 		return nil, errors.New("torrents: the BitTorrent client could not start")
 	}
 	*target = client
+	if s.clientErr {
+		s.engineErr, s.clientErr = "", false
+	}
 	return client, nil
 }
 
@@ -149,7 +168,13 @@ func (s *Service) closeClients() {
 
 func (s *Service) setEngineError(message string) {
 	s.engineMu.Lock()
-	s.engineErr = message
+	s.engineErr, s.clientErr = message, false
+	s.engineMu.Unlock()
+}
+
+func (s *Service) setClientError(message string) {
+	s.engineMu.Lock()
+	s.engineErr, s.clientErr = message, true
 	s.engineMu.Unlock()
 }
 
@@ -170,7 +195,10 @@ func (s *Service) livePort() int {
 
 // applyRuntimeSettings applies transfer limits immediately; port and discovery changes need a restart.
 func (s *Service) applyRuntimeSettings(next Settings) {
-	s.downloadLimiter.SetLimit(limitFor(next.DownloadLimitKBps))
+	// The shared policy owns the download limiter.
+	if !s.sharedLimiter {
+		s.downloadLimiter.SetLimit(limitFor(next.DownloadLimitKBps))
+	}
 	s.uploadLimiter.SetLimit(limitFor(next.UploadLimitKBps))
 }
 
@@ -211,9 +239,10 @@ func (s *Service) startRun(ctx context.Context, job storedJob) {
 	if len(job.metainfo) == 0 {
 		initialPrivate = initialPrivate || magnetHasTrackers(job.magnet)
 	}
+	started := time.Now()
 	run := &jobRun{
 		job: job, dir: dir, private: initialPrivate, store: newPieceStore(s.pool, job.ID, job.PiecesTotal, job.bits),
-		seedBase: job.SeedingElapsed, lastHashChange: time.Now(),
+		seedBase: job.SeedingElapsed, lastHashChange: started, metadataDeadline: started.Add(metadataTimeout),
 	}
 	spec, err := s.torrentSpec(run)
 	if err != nil {
@@ -239,12 +268,35 @@ func (s *Service) startRun(ctx context.Context, job storedJob) {
 	s.runsMu.Lock()
 	s.runs[job.ID] = run
 	s.runsMu.Unlock()
-	// A pause may have arrived while the torrent was being attached.
+	// A pause, cancel or policy hold may have arrived while the torrent was being attached.
 	run.paused = s.pausedByIntent(job.ID)
-	if fresh, err := s.jobByID(ctx, s.pool, job.ID); err == nil && fresh.Status == statusPaused {
-		run.paused = true
+	run.cancelled = s.cancelledByIntent(job.ID)
+	if fresh, err := s.jobByID(ctx, s.pool, job.ID); err == nil {
+		switch fresh.Status {
+		case statusPaused:
+			run.paused = true
+		case statusCancelled:
+			run.cancelled = true
+		}
+	}
+	if run.paused {
 		run.tor.DisallowDataDownload()
 		run.tor.DisallowDataUpload()
+	}
+	if run.cancelled {
+		s.dropRun(run)
+		if s.cancelledByIntent(job.ID) {
+			s.persistCancelled(ctx, job.ID)
+		}
+		return
+	}
+	// A hold that started during the attach must not fetch metadata or data.
+	if !run.paused && !s.policyAllowed() && !(infoKnown && tor.Complete().Bool()) {
+		s.dropRun(run)
+		if err := s.setQueuedState(ctx, s.pool, job.ID, s.holdReason()); err != nil {
+			s.setEngineError(err.Error())
+		}
+		return
 	}
 	status := statusDownloading
 	switch {
@@ -304,6 +356,15 @@ func directoryHasData(dir string) bool {
 
 func (s *Service) failRun(ctx context.Context, id, message string) {
 	if err := s.markFailed(ctx, s.pool, id, message); err != nil {
+		s.setEngineError(err.Error())
+	}
+}
+
+// persistCancelled records a cancel that arrived while the torrent was attaching.
+func (s *Service) persistCancelled(ctx context.Context, id string) {
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), persistTimeout)
+	defer cancel()
+	if err := s.setStatus(writeCtx, s.pool, id, statusCancelled, ""); err != nil {
 		s.setEngineError(err.Error())
 	}
 }
@@ -407,12 +468,16 @@ func (s *Service) moveRun(run *jobRun) error {
 
 func (s *Service) tick(ctx context.Context) {
 	if err := s.ensureClients(); err != nil {
-		s.setEngineError(err.Error())
+		s.setClientError(err.Error())
 		return
 	}
-	if err := s.startQueued(ctx); err != nil {
-		s.setEngineError(err.Error())
-		return
+	held := !s.policyAllowed()
+	s.syncQueuedHoldReason(ctx, held)
+	if !held {
+		if err := s.startQueued(ctx); err != nil {
+			s.setEngineError(err.Error())
+			return
+		}
 	}
 	for _, run := range s.runList() {
 		s.advance(ctx, run)
@@ -420,9 +485,27 @@ func (s *Service) tick(ctx context.Context) {
 	s.scheduleProcessing(ctx)
 }
 
+// syncQueuedHoldReason keeps policy holds visible on waiting jobs; the statements only touch changed rows.
+func (s *Service) syncQueuedHoldReason(ctx context.Context, held bool) {
+	if s.policy == nil {
+		return
+	}
+	var err error
+	if held {
+		_, err = s.pool.Exec(ctx, `UPDATE torrent_jobs SET error = $1, updated_at = now()
+			WHERE status = $2 AND error NOT LIKE $3`, s.holdReason(), statusQueued, policyHoldPrefix+"%")
+	} else {
+		_, err = s.pool.Exec(ctx, `UPDATE torrent_jobs SET error = '', updated_at = now()
+			WHERE status = $1 AND error LIKE $2`, statusQueued, policyHoldPrefix+"%")
+	}
+	if err != nil {
+		s.setEngineError(storeError("update queued jobs", err).Error())
+	}
+}
+
 func (s *Service) startQueued(ctx context.Context) error {
 	settings := s.Settings()
-	active := len(s.runList())
+	active := s.activeRunCount()
 	if active >= settings.MaxActiveJobs {
 		return nil
 	}
@@ -447,18 +530,45 @@ func (s *Service) startQueued(ctx context.Context) error {
 	return nil
 }
 
+// activeRunCount counts transferring runs so paused and cancelled jobs cannot block queue capacity.
+func (s *Service) activeRunCount() int {
+	active := 0
+	for _, run := range s.runList() {
+		run.mu.Lock()
+		busy := !run.paused && !run.cancelled
+		run.mu.Unlock()
+		if busy {
+			active++
+		}
+	}
+	return active
+}
+
 func (s *Service) advance(ctx context.Context, run *jobRun) {
 	stats := run.tor.Stats()
 	bytesDone := run.tor.BytesCompleted()
 	uploaded := count(stats.BytesWrittenData)
 	updateRates(run, bytesDone, uploaded)
 	run.mu.Lock()
-	paused, completed, saved := run.paused, run.completed, run.saved
-	stored := run.job
+	paused, completed, saved, cancelled := run.paused, run.completed, run.saved, run.cancelled
 	run.mu.Unlock()
-
+	if cancelled {
+		return
+	}
+	if paused {
+		// A manual pause still waits for metadata but never transfers data.
+		run.tor.DisallowDataDownload()
+		run.tor.DisallowDataUpload()
+		run.refreshMetadataDeadline(time.Now())
+		return
+	}
+	held := !s.policyAllowed()
+	if held && !runExemptFromHold(run) {
+		s.holdRun(run)
+		return
+	}
 	if run.tor.Info() == nil {
-		if time.Since(stored.AddedAt) > metadataTimeout {
+		if run.metadataExpired(time.Now()) {
 			s.failRun(ctx, run.job.ID, "no peers supplied the torrent metadata")
 			s.dropRun(run)
 		}
@@ -481,10 +591,6 @@ func (s *Service) advance(ctx context.Context, run *jobRun) {
 	switch {
 	case completed:
 		return
-	case paused:
-		run.tor.DisallowDataDownload()
-		run.tor.DisallowDataUpload()
-		return
 	case run.tor.Complete().Bool():
 		run.mu.Lock()
 		ratioLimit, timeLimit := run.job.SeedRatioLimit, run.job.SeedTimeLimitMinutes
@@ -492,6 +598,9 @@ func (s *Service) advance(ctx context.Context, run *jobRun) {
 		if err := s.finishDownload(ctx, run, time.Now(), uploaded, ratioLimit, timeLimit); err != nil {
 			s.setEngineError(err.Error())
 		}
+	case held:
+		// Complete seeding keeps uploading under the existing cap while the policy holds downloads.
+		run.tor.DisallowDataDownload()
 	default:
 		run.tor.AllowDataDownload()
 	}
@@ -505,6 +614,31 @@ func (s *Service) advance(ctx context.Context, run *jobRun) {
 	}
 	run.flushFailures = 0
 	s.settleStatus(ctx, run)
+}
+
+// holdRun detaches a transfer stopped by the shared policy and keeps it queued for an automatic restart.
+func (s *Service) holdRun(run *jobRun) {
+	s.persistRunNow(run)
+	s.dropRun(run)
+	ctx, cancel := context.WithTimeout(context.Background(), persistTimeout)
+	defer cancel()
+	if err := s.setQueuedState(ctx, s.pool, run.job.ID, s.holdReason()); err != nil {
+		s.setEngineError(err.Error())
+	}
+}
+
+func (s *Service) persistRunNow(run *jobRun) {
+	tor := run.torrent()
+	if tor == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), persistTimeout)
+	defer cancel()
+	piecesDone, bits := run.store.completed()
+	uploaded := count(tor.Stats().BytesWrittenData)
+	if err := s.saveProgress(ctx, s.pool, run.job.ID, tor.BytesCompleted(), uploaded, piecesDone, bits); err != nil {
+		s.setEngineError(safeRunError(err))
+	}
 }
 
 // finishDownload moves a completed transfer into seeding or completes it under the seed policy.
@@ -582,26 +716,31 @@ func (s *Service) persistProgress(ctx context.Context, run *jobRun, bytesDone, u
 	return s.saveProgress(ctx, s.pool, run.job.ID, bytesDone, uploaded, piecesDone, bits)
 }
 
-// setEngineStatus records an engine-driven transition; a concurrent pause always wins.
+// setEngineStatus records an engine-driven transition; a concurrent pause or cancel always wins.
 func (s *Service) setEngineStatus(ctx context.Context, run *jobRun, status, message string) {
 	run.mu.Lock()
-	if run.paused && status != statusPaused {
+	if run.cancelled || (run.paused && status != statusPaused) {
 		run.mu.Unlock()
 		return
 	}
 	run.job.Status, run.job.Error, run.job.UpdatedAt = status, message, time.Now()
 	run.mu.Unlock()
-	if err := s.setEngineStatusRow(ctx, s.pool, run.job.ID, status, message); err != nil {
+	if err := s.setStatusWhen(ctx, s.pool, run.job.ID, status, message, statusPaused, statusCancelled); err != nil {
 		s.setEngineError(err.Error())
 	}
 }
 
+// setRunStatus records a user-driven transition; a cancellation always wins.
 func (s *Service) setRunStatus(ctx context.Context, run *jobRun, status, message string) {
 	run.mu.Lock()
+	if run.cancelled {
+		run.mu.Unlock()
+		return
+	}
 	run.job.Status, run.job.Error = status, message
 	run.job.UpdatedAt = time.Now()
 	run.mu.Unlock()
-	if err := s.setStatus(ctx, s.pool, run.job.ID, status, message); err != nil {
+	if err := s.setStatusWhen(ctx, s.pool, run.job.ID, status, message, statusCancelled); err != nil {
 		s.setEngineError(err.Error())
 	}
 }

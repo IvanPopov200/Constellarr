@@ -47,7 +47,7 @@ export function CalendarMonth({ month, entries, selectedDay, onSelectDay, today 
       </div>
       <div className="grid grid-cols-7">
         {cells.map((day, index) => {
-          if (day === null) return <div key={`empty-${index}`} className="min-h-24 border-r border-b border-border/50 last:border-r-0" />
+          if (day === null) return <div key={`empty-${index}`} className="min-h-16 border-r border-b border-border/50 last:border-r-0 sm:min-h-24" />
           const key = dayKey(year, monthIndex, day)
           const dayEntries = byDay.get(key) ?? []
           const selected = key === selectedDay
@@ -59,7 +59,7 @@ export function CalendarMonth({ month, entries, selectedDay, onSelectDay, today 
               aria-label={`${new Date(year, monthIndex, day).toLocaleDateString(undefined, { dateStyle: 'full' })}, ${dayEntries.length} releases`}
               aria-pressed={selected}
               className={cn(
-                'min-h-24 space-y-1 border-r border-b border-border/50 p-1.5 text-left align-top transition-colors last:border-r-0 hover:bg-muted/40',
+                'min-h-16 space-y-1 border-r border-b border-border/50 p-1.5 text-left align-top transition-colors last:border-r-0 hover:bg-muted/40 sm:min-h-24',
                 selected && 'bg-primary/10 ring-1 ring-primary/40 ring-inset',
               )}
             >

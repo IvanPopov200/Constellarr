@@ -223,6 +223,10 @@ func TestTorrentAPI(t *testing.T) {
 	if status, body = apiRequest(t, client, http.MethodGet, server.URL+"/api/v1/torrents/"+added.ID+"/file?name=../tiny.bin", nil); status != http.StatusNotFound {
 		t.Fatalf("traversal download must fail: %d %s", status, body)
 	}
+	status, body = apiRequest(t, client, http.MethodPost, server.URL+"/api/v1/torrents/"+added.ID+"/cancel", nil)
+	if status != http.StatusOK || !strings.Contains(body, `"status":"cancelled"`) {
+		t.Fatalf("cancel: %d %s", status, body)
+	}
 
 	status, body = apiRequest(t, client, http.MethodDelete, server.URL+"/api/v1/torrents/"+added.ID+"?files=false", nil)
 	if status != http.StatusOK || !strings.Contains(body, `"filesRemoved":false`) {

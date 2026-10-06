@@ -219,6 +219,10 @@ func (s *Service) movieDelivery(ctx context.Context, request Request) (Delivery,
 	case "downloading":
 		delivery.Phase = PhaseDownloading
 		delivery.JobID, delivery.Progress = s.movieProgress(ctx, movie.ID)
+	case "paused":
+		delivery.Phase, delivery.Message = "paused", "Download paused"
+	case "cancelled":
+		delivery.Phase, delivery.Message = "cancelled", "Download cancelled; choose a release to try again"
 	case "importing":
 		delivery.Phase = PhaseImporting
 	case "failed", "import-failed":
@@ -286,6 +290,10 @@ func (s *Service) tvDelivery(ctx context.Context, request Request) (Delivery, bo
 	switch series.Status {
 	case "downloading":
 		delivery.Phase = PhaseDownloading
+	case "paused":
+		delivery.Phase, delivery.Message = "paused", "Download paused"
+	case "cancelled":
+		delivery.Phase, delivery.Message = "cancelled", "Download cancelled; choose a release to try again"
 	case "importing":
 		delivery.Phase = PhaseImporting
 	case "failed", "import-failed":
@@ -312,6 +320,10 @@ func (s *Service) musicDelivery(ctx context.Context, request Request) (Delivery,
 	switch strings.ToLower(strings.TrimSpace(item.Status)) {
 	case "downloading":
 		delivery.Phase = PhaseDownloading
+	case "paused":
+		delivery.Phase, delivery.Message = "paused", "Download paused"
+	case "cancelled":
+		delivery.Phase, delivery.Message = "cancelled", "Download cancelled; choose a release to try again"
 	case "importing":
 		delivery.Phase = PhaseImporting
 	case "failed":

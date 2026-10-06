@@ -1,19 +1,39 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   BanIcon,
+  CaptionsIcon,
   DownloadIcon,
   FileDownIcon,
   LanguagesIcon,
   LoaderCircleIcon,
   PlayIcon,
   RefreshCwIcon,
-  ScanSearchIcon,
   SaveIcon,
+  ScanSearchIcon,
+  TimerIcon,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { DialogShell, EmptyNote, ErrorNote, Field, Notice, Section, Select, Toggle, VariantBadges } from '@/components/subtitles-ui'
+import {
+  ActionNote,
+  DialogShell,
+  Disclosure,
+  EmptyNote,
+  ErrorNote,
+  Field,
+  Section,
+  Select,
+  TabButtons,
+  Toggle,
+  VariantBadges,
+  languageName,
+  languageOptions,
+  sourceLabel,
+  variantText,
+  videoMeta,
+  videoTitle,
+} from '@/components/subtitles-ui'
 import { errorMessage } from '@/lib/api'
 import { formatBytes } from '@/lib/format'
 import {
@@ -25,36 +45,90 @@ import {
   type SubtitleOutput,
   type SubtitleProfile,
   type SubtitleResult,
+  type SubtitleSidecar,
   type SubtitleStream,
 } from '@/lib/subtitles-api'
 
 type Target = { kind: string; id: string; mode: 'detail' | 'search' } | null
+type Task = 'subtitles' | 'find' | 'timing' | 'translate' | 'extract'
+type Feedback = { scope: string; tone: 'success' | 'error' | 'warning'; message: string }
+
+const tasks: { value: Task; label: string; icon: typeof CaptionsIcon }[] = [
+  { value: 'subtitles', label: 'Subtitles', icon: CaptionsIcon },
+  { value: 'find', label: 'Find subtitles', icon: ScanSearchIcon },
+  { value: 'timing', label: 'Adjust timing', icon: TimerIcon },
+  { value: 'translate', label: 'Translate', icon: LanguagesIcon },
+  { value: 'extract', label: 'Extract from video', icon: FileDownIcon },
+]
+
+const activeJobStatuses = new Set(['queued', 'running'])
+
+const maxJobPolls = 200 // fallback bound; longer jobs stay visible and are followed on the Activity tab.
+
+const syncModes: { value: 'offset' | 'fps' | 'audio' | 'reference'; label: string }[] = [
+  { value: 'offset', label: 'Shift by a fixed offset' },
+  { value: 'fps', label: 'Convert frame rate' },
+  { value: 'audio', label: 'Match to the audio' },
+  { value: 'reference', label: 'Match to another subtitle' },
+]
 
 function summarise(text: string, lines = 12) {
   const parts = text.split('\n')
   return parts.slice(0, lines).join('\n') + (parts.length > lines ? '\n…' : '')
 }
 
+function sidecarLabel(sidecar: SubtitleSidecar) {
+  return `${variantText(sidecar)} · ${sidecar.format.toUpperCase()}`
+}
+
+function subtitleStreamLabel(stream: SubtitleStream) {
+  return `${variantText(stream)} · track ${stream.index}`
+}
+
+function audioStreamLabel(stream: SubtitleStream) {
+  return `${languageName(stream.language)}${stream.channels ? ` · ${stream.channels} channels` : ''} · track ${stream.index}`
+}
+
+function JobProgress({ job, canWrite, onCancel }: { job: SubtitleJob; canWrite: boolean; onCancel: () => void }) {
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+      <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
+      <span className="min-w-0 break-words">{job.detail || job.error || `${job.progress}%`}</span>
+      {activeJobStatuses.has(job.status) && canWrite && (
+        <Button size="xs" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      )}
+    </div>
+  )
+}
+
 export function SubtitleDetailDialog({
   target,
   profiles,
   canWrite,
+  canSettingsRead,
+  providerReady,
   onClose,
   onChanged,
 }: {
   target: Target
   profiles: SubtitleProfile[]
   canWrite: boolean
+  canSettingsRead: boolean
+  providerReady?: boolean
   onClose: () => void
   onChanged: () => void
 }) {
+  const [task, setTask] = useState<Task>('subtitles')
   const [detail, setDetail] = useState<SubtitleDetail | null>(null)
   const [streams, setStreams] = useState<SubtitleStream[]>([])
   const [streamsError, setStreamsError] = useState('')
+  const [streamsLoading, setStreamsLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [job, setJob] = useState<SubtitleJob | null>(null)
+  const [feedback, setFeedback] = useState<Feedback | null>(null)
+  const [job, setJob] = useState<{ job: SubtitleJob; task: Task } | null>(null)
   const [results, setResults] = useState<SubtitleResult[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
   const [searching, setSearching] = useState(false)
@@ -73,15 +147,17 @@ export function SubtitleDetailDialog({
   const [minScore, setMinScore] = useState('')
   const [noFixFramerate, setNoFixFramerate] = useState(false)
   const [goldenSection, setGoldenSection] = useState(false)
-  const [syncPreview, setSyncPreview] = useState(false)
+  const [syncPreview, setSyncPreview] = useState(true)
 
   const [translatePath, setTranslatePath] = useState('')
-  const [translateLanguage, setTranslateLanguage] = useState('de')
+  const [translateLanguage, setTranslateLanguage] = useState('')
   const [extractStream, setExtractStream] = useState('-1')
   const [extractLanguage, setExtractLanguage] = useState('')
-  const [extractPreview, setExtractPreview] = useState(false)
+  const [extractPreview, setExtractPreview] = useState(true)
 
   const cancelled = useRef(false)
+  const activeTarget = useRef('')
+  const outputsRef = useRef(0)
   useEffect(() => {
     cancelled.current = false
     return () => {
@@ -90,28 +166,38 @@ export function SubtitleDetailDialog({
   }, [])
 
   const reload = useCallback(async () => {
-    if (!target) return
-    setDetail(await subtitlesApi.detail(target.kind, target.id))
+    if (!target) return undefined
+    const next = await subtitlesApi.detail(target.kind, target.id)
+    setDetail(next)
+    outputsRef.current = next.outputs.length
+    return next
   }, [target])
 
   const load = useCallback(
-    async (active: { kind: string; id: string }, signal?: AbortSignal) => {
+    async (active: { kind: string; id: string; mode: 'detail' | 'search' }, signal?: AbortSignal) => {
+      setTask(active.mode === 'search' ? 'find' : 'subtitles')
       try {
         setLoading(true)
-        setNotice('')
+        setFeedback(null)
         setJob(null)
         setResults([])
         setWarnings([])
         setPreviewID('')
+        setSyncPreview(true)
+        setExtractPreview(true)
         const loaded = await subtitlesApi.detail(active.kind, active.id, signal)
         if (signal?.aborted) return
         setDetail(loaded)
+        outputsRef.current = loaded.outputs.length
         setProfileID(loaded.profileId)
         setMonitored(loaded.monitored)
-        const first = loaded.sidecars[0]?.path ?? ''
-        setSyncPath(first)
-        setTranslatePath(first)
-        setReferencePath(loaded.sidecars.find((item) => item.path !== first)?.path ?? '')
+        const first = loaded.sidecars[0]
+        setSyncPath(first?.path ?? '')
+        setTranslatePath(first?.path ?? '')
+        setReferencePath(loaded.sidecars.find((item) => item.path !== first?.path)?.path ?? '')
+        setTranslateLanguage(
+          (loaded.wanted ?? []).map((row) => row.language).find((code) => code && code !== first?.language) ?? '',
+        )
         setError('')
       } catch (cause) {
         if (!signal?.aborted) setError(errorMessage(cause))
@@ -119,6 +205,7 @@ export function SubtitleDetailDialog({
         if (!signal?.aborted) setLoading(false)
       }
       try {
+        setStreamsLoading(true)
         const list = await subtitlesApi.streams(active.kind, active.id, signal)
         if (!signal?.aborted) {
           setStreams(list)
@@ -126,12 +213,16 @@ export function SubtitleDetailDialog({
         }
       } catch (cause) {
         if (!signal?.aborted) setStreamsError(errorMessage(cause))
+      } finally {
+        if (!signal?.aborted) setStreamsLoading(false)
       }
     },
     [],
   )
 
   useEffect(() => {
+    // A closed dialog or another video stops the previous job poll from reporting into this one.
+    activeTarget.current = target ? `${target.kind}:${target.id}` : ''
     if (!target) return
     const controller = new AbortController()
     // eslint-disable-next-line react-hooks/set-state-in-effect -- state is set only after the fetch settles
@@ -139,26 +230,72 @@ export function SubtitleDetailDialog({
     return () => controller.abort()
   }, [target, load])
 
-  // waitJob follows a queued job until it reaches a terminal state.
+  const noteFor = (scope: string) =>
+    feedback?.scope === scope ? <ActionNote tone={feedback.tone}>{feedback.message}</ActionNote> : null
+
+  const video = detail?.video
+  const sidecars = detail?.sidecars ?? []
+  const wantedRows = detail?.wanted ?? []
+  const missingRows = wantedRows.filter((row) => row.status === 'wanted')
+  const outputs = detail?.outputs ?? []
+  const subtitleStreams = streams.filter((stream) => stream.type === 'subtitle')
+  const audioStreams = streams.filter((stream) => stream.type === 'audio')
+
+  // waitJob follows a queued job until it finishes, the dialog closes, or another video is opened.
   const waitJob = useCallback(
-    async (created: SubtitleJob, label: string) => {
-      setJob(created)
-      for (let attempt = 0; attempt < 200 && !cancelled.current; attempt++) {
+    async (created: SubtitleJob, label: string, scope: Task) => {
+      const startedFor = activeTarget.current
+      setJob({ job: created, task: scope })
+      let failure = ''
+      let outcome = 'done'
+      let finished = false
+      for (let attempt = 0; attempt < maxJobPolls && !cancelled.current; attempt++) {
         await new Promise((resolve) => window.setTimeout(resolve, 1200))
+        if (startedFor !== activeTarget.current) return
         try {
           const current = await subtitlesApi.job(created.id)
-          setJob(current)
-          if (current.status !== 'queued' && current.status !== 'running') {
-            if (current.status === 'done') setNotice(`${label}: ${current.detail || 'done'}`)
-            else setError(`${label} failed: ${current.error || current.detail || current.status}`)
-            break
+          if (startedFor !== activeTarget.current) return
+          setJob({ job: current, task: scope })
+          if (current.status === 'queued' || current.status === 'running') continue
+          finished = true
+          if (current.status === 'cancelled') outcome = 'cancelled'
+          else if (current.status !== 'done') {
+            outcome = 'failed'
+            failure = current.error || current.detail || current.status
           }
+          break
         } catch (cause) {
-          setError(errorMessage(cause))
+          if (startedFor !== activeTarget.current) return
+          finished = true
+          outcome = 'failed'
+          failure = errorMessage(cause)
           break
         }
       }
-      await reload().catch(() => undefined)
+      if (cancelled.current || startedFor !== activeTarget.current) return
+      const before = outputsRef.current
+      const next = await reload().catch(() => undefined)
+      if (cancelled.current || startedFor !== activeTarget.current) return
+      if (!finished) {
+        // Keep the last job state visible and point at the page that keeps following it.
+        setFeedback({ scope, tone: 'warning', message: `${label} is still running. Follow it under Subtitles → Activity.` })
+        onChanged()
+        return
+      }
+      setJob(null)
+      if (outcome === 'failed') {
+        setFeedback({ scope, tone: 'error', message: `${label} failed: ${failure}` })
+      } else if (outcome === 'cancelled') {
+        setFeedback({ scope, tone: 'success', message: `${label} cancelled.` })
+      } else if (next && next.outputs.length > before) {
+        setFeedback({
+          scope,
+          tone: 'success',
+          message: `${label} finished. The result is waiting for review under Subtitles — preview it and save it when it looks right.`,
+        })
+      } else {
+        setFeedback({ scope, tone: 'success', message: `${label} finished. Nothing is waiting for review.` })
+      }
       onChanged()
     },
     [onChanged, reload],
@@ -167,18 +304,16 @@ export function SubtitleDetailDialog({
   const runSearch = async () => {
     if (!target || !detail) return
     setSearching(true)
-    setError('')
+    setFeedback(null)
     setWarnings([])
     try {
-      const languages = (detail.wanted ?? [])
-        .filter((row) => row.status === 'wanted')
+      const languages = missingRows
         .map((row) => ({ code: row.language, forced: row.forced, hi: row.hi }))
       const outcome = await subtitlesApi.search(target.kind, target.id, languages)
       setResults(outcome.results)
       setWarnings(outcome.warnings)
-      if (outcome.results.length === 0) setNotice('No provider result matched the wanted languages.')
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope: 'find', tone: 'error', message: errorMessage(cause) })
     } finally {
       setSearching(false)
     }
@@ -186,7 +321,7 @@ export function SubtitleDetailDialog({
 
   const download = async (result: SubtitleResult) => {
     if (!target) return
-    setError('')
+    setFeedback(null)
     try {
       const created = await subtitlesApi.download(target.kind, target.id, {
         providerId: result.providerId,
@@ -196,15 +331,15 @@ export function SubtitleDetailDialog({
         hi: result.hi,
         fileName: result.fileName,
       })
-      await waitJob(created, `Download ${result.fileName || result.language}`)
+      await waitJob(created, 'Download', 'find')
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope: 'find', tone: 'error', message: errorMessage(cause) })
     }
   }
 
   const runSync = async () => {
     if (!target) return
-    setError('')
+    setFeedback(null)
     try {
       const created = await subtitlesApi.sync(target.kind, target.id, {
         path: syncPath,
@@ -220,467 +355,719 @@ export function SubtitleDetailDialog({
         goldenSectionSearch: goldenSection,
         preview: syncPreview,
       })
-      await waitJob(created, 'Synchronization')
+      await waitJob(created, 'Timing adjustment', 'timing')
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope: 'timing', tone: 'error', message: errorMessage(cause) })
     }
   }
 
   const runTranslate = async () => {
     if (!target) return
-    setError('')
+    setFeedback(null)
     try {
       const created = await subtitlesApi.translate(target.kind, target.id, {
         path: translatePath,
         language: translateLanguage,
       })
-      await waitJob(created, 'Translation')
+      await waitJob(created, 'Translation', 'translate')
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope: 'translate', tone: 'error', message: errorMessage(cause) })
     }
   }
 
   const runExtract = async () => {
     if (!target) return
-    setError('')
+    setFeedback(null)
     try {
       const created = await subtitlesApi.extract(target.kind, target.id, {
         streamIndex: Number(extractStream),
         language: extractLanguage,
         preview: extractPreview,
       })
-      await waitJob(created, 'Extraction')
+      await waitJob(created, 'Extraction', 'extract')
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope: 'extract', tone: 'error', message: errorMessage(cause) })
+    }
+  }
+
+  const cancelJob = async (id: string) => {
+    try {
+      await subtitlesApi.cancelJob(id)
+    } catch (cause) {
+      setFeedback({ scope: job?.task ?? 'subtitles', tone: 'error', message: errorMessage(cause) })
     }
   }
 
   const applyOutput = async (output: SubtitleOutput) => {
-    setError('')
+    const scope = `output:${output.id}`
+    setFeedback(null)
     try {
       const sidecar = await subtitlesApi.applyOutput(output.id)
-      setNotice(`Saved ${sidecar.path}`)
+      setFeedback({ scope, tone: 'success', message: `Saved as ${sidecar.path.split('/').pop()}.` })
       await reload()
       onChanged()
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope, tone: 'error', message: errorMessage(cause) })
     }
   }
 
   const discardOutput = async (output: SubtitleOutput) => {
-    setError('')
+    const scope = `output:${output.id}`
+    setFeedback(null)
     try {
       await subtitlesApi.discardOutput(output.id)
-      setNotice('Discarded the staged subtitle.')
+      setFeedback({ scope, tone: 'success', message: 'Discarded the staged subtitle.' })
       await reload()
       onChanged()
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope, tone: 'error', message: errorMessage(cause) })
     }
   }
 
   const saveAssignment = async () => {
     if (!target) return
+    setFeedback(null)
     try {
       await subtitlesApi.setAssignment(target.kind, target.id, profileID, monitored)
-      setNotice('Language profile updated.')
+      setFeedback({
+        scope: 'profile',
+        tone: 'success',
+        message: `Saved. Looking for ${profileName || 'the selected profile'} languages.`,
+      })
       await reload()
       onChanged()
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope: 'profile', tone: 'error', message: errorMessage(cause) })
     }
   }
 
-  const video = detail?.video
-  const sidecars = detail?.sidecars ?? []
-  const wanted = detail?.wanted ?? []
-  const outputs = detail?.outputs ?? []
-  const subtitleStreams = streams.filter((stream) => stream.type === 'subtitle')
-  const audioStreams = streams.filter((stream) => stream.type === 'audio')
+  const profileName = profiles.find((item) => item.id === profileID)?.name ?? ''
+  const writeReasonId = 'subtitle-dialog-write-reason'
+
+  const searchReason = !canWrite
+    ? 'Your role can review subtitles but not search for them.'
+    : missingRows.length === 0
+      ? 'This video has no missing languages to look for. Choose a language profile with at least one language first.'
+      : ''
+  const syncReason = !canWrite
+    ? 'Your role can review subtitles but not change them.'
+    : sidecars.length === 0
+      ? 'No subtitle file to adjust yet. Find or extract one first.'
+      : !syncPath
+        ? 'Choose a subtitle file first.'
+        : syncMode === 'reference' && !referencePath
+          ? 'Choose the subtitle file that already matches the video.'
+          : ''
+  const translateReason = !canWrite
+    ? 'Your role can review subtitles but not change them.'
+    : sidecars.length === 0
+      ? 'No subtitle file to translate yet. Find or extract one first.'
+      : !translatePath
+        ? 'Choose a subtitle file first.'
+        : !translateLanguage
+          ? 'Choose the language to translate into.'
+          : ''
+  const extractReason = !canWrite
+    ? 'Your role can review subtitles but not change them.'
+    : subtitleStreams.length === 0
+      ? 'This video has no embedded subtitle tracks to extract.'
+      : Number(extractStream) < 0
+        ? 'Choose an embedded track first.'
+        : ''
 
   return (
     <DialogShell
       active={target !== null}
-      title={video ? video.seriesTitle ? `${video.seriesTitle} — ${video.title}` : video.title : 'Subtitle detail'}
-      description={video ? video.path : 'Loading video…'}
+      title={video ? videoTitle(video) : 'Subtitles'}
+      description={
+        video
+          ? [
+              videoMeta(video),
+              sidecars.length === 0 ? 'no subtitle files yet' : `${sidecars.length} subtitle ${sidecars.length === 1 ? 'file' : 'files'}`,
+              outputs.length > 0 ? `${outputs.length} waiting for review` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')
+          : 'Loading video…'
+      }
       onClose={onClose}
     >
-      {loading && !detail && (
+      {loading && !detail ? (
         <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-          <LoaderCircleIcon className="size-4 animate-spin motion-reduce:animate-none" /> Loading subtitle state…
+          <LoaderCircleIcon className="size-4 animate-spin motion-reduce:animate-none" /> Loading subtitles…
         </p>
-      )}
-      {error && <ErrorNote>{error}</ErrorNote>}
-      {notice && <Notice>{notice}</Notice>}
-      {!canWrite && (
-        <p className="rounded-md border border-border px-3 py-2 text-xs text-muted-foreground">
-          Your role can review subtitle state; changes require the subtitles write permission.
-        </p>
-      )}
-      {job && (
-        <p role="status" className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
-          <span className="min-w-0 break-words">{job.detail || job.error || `${job.progress}%`}</span>
-        </p>
-      )}
-
-      <Section
-        title="Language profile"
-        action={
-          canWrite &&
-          profiles.length > 0 && (
-            <Button size="xs" variant="outline" onClick={saveAssignment}>
-              <SaveIcon data-icon="inline-start" />
-              Save
-            </Button>
-          )
-        }
-      >
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Field label="Profile">
-            <Select value={profileID} onChange={(event) => setProfileID(event.target.value)}>
-              {profiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <div className="flex items-end pb-2">
-            <Toggle label="Monitor this video" checked={monitored} onChange={setMonitored} disabled={!canWrite} />
-          </div>
-        </div>
-      </Section>
-
-      <Section
-        title={`Sidecar files (${sidecars.length})`}
-        action={
-          canWrite && (
-          <Button size="xs" variant="outline" onClick={runSearch} disabled={searching}>
-            {searching ? (
-              <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-            ) : (
-              <ScanSearchIcon data-icon="inline-start" />
-            )}
-            Search providers
-          </Button>
-          )
-        }
-      >
-        {sidecars.length === 0 ? (
-          <EmptyNote>No subtitle sidecars yet. Search a provider or extract an embedded track.</EmptyNote>
-        ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {sidecars.map((sidecar) => (
-              <li key={sidecar.path} className="flex flex-wrap items-center justify-between gap-2 p-2.5">
-                <div className="min-w-0 space-y-1">
-                  <p className="truncate text-sm font-medium">{sidecar.path.split('/').pop()}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <VariantBadges item={sidecar} />
-                    <span>{sidecar.format.toUpperCase()}</span>
-                    <span>{formatBytes(sidecar.size)}</span>
-                    <span>{sidecar.source}</span>
-                    <span>{timeLabel(sidecar.updatedAt)}</span>
-                  </div>
-                </div>
-                <div className="flex gap-1">
-                  <Button asChild size="xs" variant="ghost">
-                    <a href={subtitlesApi.fileUrl(sidecar.kind, sidecar.videoId, sidecar.path)} download>
-                      <FileDownIcon data-icon="inline-start" />
-                      File
-                    </a>
-                  </Button>
-                  {canWrite && (
-                    <>
-                      <Button size="xs" variant="ghost" onClick={() => setSyncPath(sidecar.path)}>
-                        Use for sync
-                      </Button>
-                      <Button size="xs" variant="ghost" onClick={() => setTranslatePath(sidecar.path)}>
-                        Use for translation
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        {wanted.length > 0 && (
-          <ul className="space-y-1 text-xs text-muted-foreground">
-            {wanted.map((row) => (
-              <li key={`${row.language}-${row.forced}-${row.hi}`} className="flex flex-wrap items-center gap-2">
-                <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
-                <VariantBadges item={row} />
-                {row.error && <span className="text-destructive">{row.error}</span>}
-                {row.status === 'wanted' && row.nextAttemptAt && <span>retry {timeLabel(row.nextAttemptAt)}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      {(results.length > 0 || warnings.length > 0) && (
-        <Section title={`Provider results (${results.length})`}>
-          {warnings.map((warning) => (
-            <p key={warning} className="break-words text-xs text-amber-500">
-              {warning}
+      ) : (
+        <>
+          {error && <ErrorNote onRetry={() => reload().catch((cause) => setError(errorMessage(cause)))}>{error}</ErrorNote>}
+          {!canWrite && (
+            <p id={writeReasonId} className="rounded-md border border-border px-3 py-2 text-xs text-muted-foreground">
+              You can review subtitles here. Searching, downloading, adjusting timing, translating, and extracting need
+              the subtitles write permission.
             </p>
-          ))}
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {results.map((result) => (
-              <li key={`${result.providerId}-${result.fileId}`} className="flex flex-wrap items-center justify-between gap-2 p-2.5">
-                <div className="min-w-0 space-y-1">
-                  <p className="truncate text-sm font-medium">{result.release || result.fileName || `File ${result.fileId}`}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <VariantBadges item={result} />
-                    <span>{(result.format || 'srt').toUpperCase()}</span>
-                    {result.fps > 0 && <span>{result.fps} fps</span>}
-                    <span>{result.downloads.toLocaleString()} downloads</span>
-                    <span>score {result.score}</span>
-                    <span>{result.providerName}</span>
+          )}
+
+          <TabButtons
+            label="Subtitle tasks"
+            value={task}
+            onChange={setTask}
+            items={tasks.map((item) => ({
+              value: item.value,
+              label: item.label,
+              icon: item.icon,
+              count: item.value === 'subtitles' ? sidecars.length : item.value === 'find' ? results.length : 0,
+            }))}
+          />
+
+          {task === 'subtitles' && (
+            <div className="space-y-5">
+              <p className="text-sm text-muted-foreground">
+                Subtitle files for this video, and what Constellarr is still looking for.
+              </p>
+
+              <Section title={`Subtitle files (${sidecars.length})`}>
+                {sidecars.length === 0 ? (
+                  <EmptyNote>
+                    <p>No subtitle files for this video yet.</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setTask('find')}>
+                        <ScanSearchIcon data-icon="inline-start" />
+                        Find subtitles
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setTask('extract')}>
+                        <FileDownIcon data-icon="inline-start" />
+                        Extract from video
+                      </Button>
+                    </div>
+                  </EmptyNote>
+                ) : (
+                  <ul className="divide-y divide-border rounded-lg border border-border">
+                    {sidecars.map((sidecar) => (
+                      <li key={sidecar.path} className="space-y-2 p-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="flex flex-wrap items-center gap-2 text-sm">
+                            <VariantBadges item={sidecar} />
+                            <span className="text-xs text-muted-foreground">
+                              {sidecar.format.toUpperCase()} · {formatBytes(sidecar.size)} · {sourceLabel(sidecar.source)} ·{' '}
+                              {timeLabel(sidecar.updatedAt)}
+                            </span>
+                          </span>
+                          <span className="flex flex-wrap gap-1">
+                            <Button asChild size="xs" variant="ghost">
+                              <a href={subtitlesApi.fileUrl(sidecar.kind, sidecar.videoId, sidecar.path)} download>
+                                <FileDownIcon data-icon="inline-start" />
+                                Download file
+                              </a>
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => {
+                                setSyncPath(sidecar.path)
+                                setTask('timing')
+                              }}
+                            >
+                              Adjust timing
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => {
+                                setTranslatePath(sidecar.path)
+                                setTask('translate')
+                              }}
+                            >
+                              Translate
+                            </Button>
+                          </span>
+                        </div>
+                        <Disclosure variant="inline" label="File details">
+                          <p className="break-all">{sidecar.path}</p>
+                        </Disclosure>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
+
+              <Section title={`Still looking for (${missingRows.length})`}>
+                {missingRows.length === 0 ? (
+                  <EmptyNote>Nothing is missing. Every language in the profile for this video is covered.</EmptyNote>
+                ) : (
+                  <ul className="space-y-2 rounded-lg border border-border p-3">
+                    {missingRows.map((row) => (
+                      <li key={`${row.language}-${row.forced}-${row.hi}`} className="flex flex-wrap items-center gap-2 text-sm">
+                        <VariantBadges item={row} />
+                        <span className="text-xs text-muted-foreground">
+                          {row.nextAttemptAt ? `next try ${timeLabel(row.nextAttemptAt)}` : 'waiting for the next search'}
+                          {row.attempts > 0 ? ` · ${row.attempts} ${row.attempts === 1 ? 'try' : 'tries'}` : ''}
+                        </span>
+                        {row.error && <ActionNote tone="error">{row.error}</ActionNote>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
+
+              <Section title={`Waiting for review (${outputs.length})`}>
+                {outputs.length === 0 ? (
+                  <EmptyNote>
+                    Nothing is waiting for review. Timing and extraction results land here while Review before saving is
+                    on; with it off they replace the subtitle as soon as the job finishes, and translations always wait
+                    here.
+                  </EmptyNote>
+                ) : (
+                  <ul className="divide-y divide-border rounded-lg border border-border">
+                    {outputs.map((output) => (
+                      <li key={output.id} className="space-y-2 p-2.5">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <VariantBadges item={output} />
+                            <Badge variant="outline">{output.format.toUpperCase()}</Badge>
+                            <span className="text-xs text-muted-foreground">{output.detail || 'prepared, not saved yet'}</span>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button size="xs" variant="ghost" onClick={() => setPreviewID(previewID === output.id ? '' : output.id)}>
+                              {previewID === output.id ? 'Hide' : 'Preview'}
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="secondary"
+                              onClick={() => applyOutput(output)}
+                              disabled={!canWrite}
+                              aria-describedby={canWrite ? undefined : writeReasonId}
+                            >
+                              <SaveIcon data-icon="inline-start" />
+                              Save
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="destructive"
+                              onClick={() => discardOutput(output)}
+                              disabled={!canWrite}
+                              aria-describedby={canWrite ? undefined : writeReasonId}
+                            >
+                              <BanIcon data-icon="inline-start" />
+                              Discard
+                            </Button>
+                          </div>
+                        </div>
+                        {noteFor(`output:${output.id}`)}
+                        {previewID === output.id && (
+                          <pre className="max-h-56 overflow-auto rounded-md border border-border bg-muted/40 p-2 text-xs whitespace-pre-wrap">
+                            {summarise(output.payload ?? '')}
+                          </pre>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
+
+              <Section
+                title="Language profile"
+                action={
+                  canWrite && (
+                    <Button size="xs" variant="outline" onClick={saveAssignment} disabled={!profileID}>
+                      <SaveIcon data-icon="inline-start" />
+                      Save
+                    </Button>
+                  )
+                }
+              >
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Field label="Which languages to look for">
+                    <Select
+                      value={profileID}
+                      onChange={(event) => setProfileID(event.target.value)}
+                      disabled={!canWrite || profiles.length === 0}
+                      aria-describedby={canWrite ? undefined : writeReasonId}
+                    >
+                      {profiles.length === 0 && <option value="">No profiles yet</option>}
+                      {profiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <div className="flex items-end pb-2">
+                    <Toggle
+                      label="Search for this video automatically"
+                      hint="Turn this off to leave this video alone."
+                      checked={monitored}
+                      onChange={setMonitored}
+                      disabled={!canWrite}
+                    />
                   </div>
                 </div>
-                {canWrite && (
-                  <Button size="xs" onClick={() => download(result)}>
-                    <DownloadIcon data-icon="inline-start" />
-                    Download
+                {profiles.length === 0 && canSettingsRead && (
+                  <ActionNote>No language profiles exist yet. Create one under Settings → Languages.</ActionNote>
+                )}
+                {noteFor('profile')}
+              </Section>
+
+              <Section
+                title="Recent activity"
+                action={
+                  <Button size="xs" variant="ghost" onClick={() => reload().catch((cause) => setError(errorMessage(cause)))}>
+                    <RefreshCwIcon data-icon="inline-start" />
+                    Refresh
+                  </Button>
+                }
+              >
+                {(detail?.history ?? []).length === 0 ? (
+                  <EmptyNote>Nothing has happened with subtitles for this video yet.</EmptyNote>
+                ) : (
+                  <ul className="divide-y divide-border rounded-lg border border-border">
+                    {(detail?.history ?? []).map((entry) => (
+                      <li key={entry.id} className="flex items-start gap-2 p-2.5 text-sm">
+                        <Badge variant={statusVariant(entry.action)}>{entry.action}</Badge>
+                        <span className="min-w-0 flex-1">
+                          <span className="break-words">{entry.message}</span>
+                          <span className="block text-xs text-muted-foreground">{timeLabel(entry.createdAt)}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
+            </div>
+          )}
+
+          {task === 'find' && (
+            <div className="space-y-5">
+              <p className="text-sm text-muted-foreground">
+                Search your providers for the languages this video still needs. Nothing is downloaded until you choose a
+                result.
+              </p>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Looking for:</span>
+                {missingRows.length === 0 ? (
+                  <span className="text-muted-foreground">no missing languages</span>
+                ) : (
+                  missingRows.map((row) => <VariantBadges key={`${row.language}-${row.forced}-${row.hi}`} item={row} />)
+                )}
+              </div>
+              <div className="space-y-2">
+                <Button
+                  onClick={runSearch}
+                  disabled={!canWrite || missingRows.length === 0 || searching}
+                  aria-describedby={searchReason ? 'subtitle-search-reason' : undefined}
+                >
+                  {searching ? (
+                    <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                  ) : (
+                    <ScanSearchIcon data-icon="inline-start" />
+                  )}
+                  {searching ? 'Searching…' : 'Find subtitles'}
+                </Button>
+                {searchReason && <ActionNote id="subtitle-search-reason">{searchReason}</ActionNote>}
+                {missingRows.length === 0 && canSettingsRead && (
+                  <Button size="sm" variant="outline" onClick={() => setTask('subtitles')}>
+                    Choose a language profile
                   </Button>
                 )}
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
-
-      {outputs.length > 0 && (
-        <Section title={`Awaiting review (${outputs.length})`}>
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {outputs.map((output) => (
-              <li key={output.id} className="space-y-2 p-2.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <VariantBadges item={output} />
-                    <Badge variant="outline">{output.format.toUpperCase()}</Badge>
-                    <span className="text-xs text-muted-foreground">{output.detail}</span>
-                  </div>
-                  <div className="flex gap-1">
-                    <Button size="xs" variant="ghost" onClick={() => setPreviewID(previewID === output.id ? '' : output.id)}>
-                      {previewID === output.id ? 'Hide' : 'Preview'}
-                    </Button>
-                    {canWrite && (
-                      <>
-                        <Button size="xs" variant="secondary" onClick={() => applyOutput(output)}>
-                          <SaveIcon data-icon="inline-start" />
-                          Save
-                        </Button>
-                        <Button size="xs" variant="destructive" onClick={() => discardOutput(output)}>
-                          <BanIcon data-icon="inline-start" />
-                          Discard
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {previewID === output.id && (
-                  <pre className="max-h-56 overflow-auto rounded-md border border-border bg-muted/40 p-2 text-xs whitespace-pre-wrap">
-                    {summarise(output.payload ?? '')}
-                  </pre>
+                {noteFor('find')}
+                {job?.task === 'find' && <JobProgress job={job.job} canWrite={canWrite} onCancel={() => cancelJob(job.job.id)} />}
+              </div>
+              {providerReady === false && (
+                <ActionNote tone="warning">
+                  No subtitle provider is connected yet, so a search returns nothing. Add an OpenSubtitles API key under
+                  Settings first.
+                </ActionNote>
+              )}
+              {warnings.length > 0 && (
+                <ul className="space-y-1">
+                  {warnings.map((warning) => (
+                    <li key={warning}>
+                      <ActionNote tone="warning">{warning}</ActionNote>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Section title={`Results (${results.length})`}>
+                {results.length === 0 ? (
+                  <EmptyNote>
+                    {searching
+                      ? 'Searching your providers…'
+                      : warnings.length > 0
+                        ? 'No results came back. Check the messages above and try again.'
+                        : 'No results yet. Use Find subtitles to search your providers.'}
+                  </EmptyNote>
+                ) : (
+                  <ul className="divide-y divide-border rounded-lg border border-border">
+                    {results.map((result) => (
+                      <li key={`${result.providerId}-${result.fileId}`} className="space-y-2 p-2.5">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0 space-y-1">
+                            <p className="break-words text-sm font-medium">
+                              {result.release || result.fileName || `Subtitle from ${result.providerName}`}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <VariantBadges item={result} />
+                              <span>{(result.format || 'srt').toUpperCase()}</span>
+                              {result.fps > 0 && <span>{result.fps} fps</span>}
+                              <span>{result.downloads.toLocaleString()} downloads</span>
+                              <span>{result.providerName}</span>
+                            </div>
+                          </div>
+                          <Button
+                            size="xs"
+                            onClick={() => download(result)}
+                            disabled={!canWrite}
+                            aria-describedby={canWrite ? undefined : writeReasonId}
+                          >
+                            <DownloadIcon data-icon="inline-start" />
+                            Download
+                          </Button>
+                        </div>
+                        <Disclosure variant="inline" label="File details">
+                          <p className="break-all">{result.fileName || 'no file name'}</p>
+                          <p>
+                            Match score {result.score}
+                            {result.matchedBy ? ` · matched by ${result.matchedBy}` : ''}
+                            {result.rating > 0 ? ` · rating ${result.rating}` : ''} · file {result.fileId}
+                          </p>
+                        </Disclosure>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </li>
-            ))}
-          </ul>
-        </Section>
+              </Section>
+            </div>
+          )}
+
+          {task === 'timing' && (
+            <div className="space-y-5">
+              <p className="text-sm text-muted-foreground">
+                Line a subtitle file up with this video so the text matches what you hear.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Subtitle file">
+                  <Select value={syncPath} onChange={(event) => setSyncPath(event.target.value)} disabled={sidecars.length === 0}>
+                    <option value="">{sidecars.length === 0 ? 'No subtitle files yet' : 'Choose a subtitle file…'}</option>
+                    {sidecars.map((sidecar) => (
+                      <option key={sidecar.path} value={sidecar.path}>
+                        {sidecarLabel(sidecar)}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="What to adjust" hint="Offset and frame rate are instant. Audio and another subtitle use the bundled ffsubsync helper.">
+                  <Select value={syncMode} onChange={(event) => setSyncMode(event.target.value as typeof syncMode)}>
+                    {syncModes.map((mode) => (
+                      <option key={mode.value} value={mode.value}>
+                        {mode.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {syncMode === 'offset' && (
+                  <Field label="Offset in seconds" hint="Positive starts the subtitles later, negative earlier.">
+                    <Input value={offset} onChange={(event) => setOffset(event.target.value)} inputMode="decimal" />
+                  </Field>
+                )}
+                {syncMode === 'fps' && (
+                  <>
+                    <Field label="Subtitle frame rate">
+                      <Input value={fpsFrom} onChange={(event) => setFpsFrom(event.target.value)} inputMode="decimal" />
+                    </Field>
+                    <Field label="Video frame rate">
+                      <Input value={fpsTo} onChange={(event) => setFpsTo(event.target.value)} inputMode="decimal" />
+                    </Field>
+                  </>
+                )}
+                {syncMode === 'reference' && (
+                  <Field label="Reference subtitle" hint="The file that already matches the video.">
+                    <Select value={referencePath} onChange={(event) => setReferencePath(event.target.value)} disabled={sidecars.length < 2}>
+                      <option value="">{sidecars.length < 2 ? 'Need two subtitle files' : 'Choose a reference…'}</option>
+                      {sidecars.map((sidecar) => (
+                        <option key={sidecar.path} value={sidecar.path}>
+                          {sidecarLabel(sidecar)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                )}
+                {syncMode === 'audio' && (
+                  <Field label="Audio track" hint={streamsError || 'Automatic uses the first audio track.'}>
+                    <Select value={audioStream} onChange={(event) => setAudioStream(event.target.value)}>
+                      <option value="-1">Automatic</option>
+                      {audioStreams.map((stream) => (
+                        <option key={stream.index} value={stream.index}>
+                          {audioStreamLabel(stream)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                )}
+              </div>
+              <Toggle
+                label="Review before saving"
+                hint="On: the adjusted copy waits for your approval. Off: it replaces the subtitle as soon as the job finishes."
+                checked={syncPreview}
+                onChange={setSyncPreview}
+              />
+              <div className="space-y-2">
+                <Button
+                  onClick={runSync}
+                  disabled={Boolean(syncReason)}
+                  aria-describedby={syncReason ? 'subtitle-sync-reason' : undefined}
+                >
+                  <PlayIcon data-icon="inline-start" />
+                  Adjust timing
+                </Button>
+                {syncReason && <ActionNote id="subtitle-sync-reason">{syncReason}</ActionNote>}
+                {noteFor('timing')}
+                {job?.task === 'timing' && <JobProgress job={job.job} canWrite={canWrite} onCancel={() => cancelJob(job.job.id)} />}
+              </div>
+              <Disclosure label="Advanced options">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Maximum offset in seconds" hint="Leave blank to use the configured limit.">
+                    <Input value={maxOffset} onChange={(event) => setMaxOffset(event.target.value)} inputMode="decimal" />
+                  </Field>
+                  <Field label="Minimum alignment score" hint="0 rejects only clearly wrong alignments.">
+                    <Input value={minScore} onChange={(event) => setMinScore(event.target.value)} inputMode="decimal" />
+                  </Field>
+                </div>
+                {syncMode !== 'offset' && syncMode !== 'fps' && (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Toggle
+                      label="Search frame rates step by step"
+                      hint="Slower, but handles unusual frame rate ratios."
+                      checked={goldenSection}
+                      onChange={setGoldenSection}
+                    />
+                    <Toggle
+                      label="Keep the subtitle frame rate"
+                      hint="Only looks for an offset, never changes the frame rate."
+                      checked={noFixFramerate}
+                      onChange={setNoFixFramerate}
+                    />
+                  </div>
+                )}
+              </Disclosure>
+            </div>
+          )}
+
+          {task === 'translate' && (
+            <div className="space-y-5">
+              <p className="text-sm text-muted-foreground">
+                Create a subtitle file in another language. Every line is checked and the result waits for review before it
+                is saved.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Subtitle file to translate">
+                  <Select value={translatePath} onChange={(event) => setTranslatePath(event.target.value)} disabled={sidecars.length === 0}>
+                    <option value="">{sidecars.length === 0 ? 'No subtitle files yet' : 'Choose a subtitle file…'}</option>
+                    {sidecars.map((sidecar) => (
+                      <option key={sidecar.path} value={sidecar.path}>
+                        {sidecarLabel(sidecar)}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field
+                  label="Translate into"
+                  hint={translateLanguage ? `Language code ${translateLanguage}` : 'Pick the language you want to read.'}
+                >
+                  <Select value={translateLanguage} onChange={(event) => setTranslateLanguage(event.target.value)}>
+                    <option value="">Choose a language…</option>
+                    {languageOptions([
+                      ...wantedRows.map((row) => row.language),
+                      ...sidecars.map((sidecar) => sidecar.language),
+                      translateLanguage,
+                    ]).map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="space-y-2">
+                <Button onClick={runTranslate} disabled={Boolean(translateReason)} aria-describedby={translateReason ? 'subtitle-translate-reason' : undefined}>
+                  <LanguagesIcon data-icon="inline-start" />
+                  Translate
+                </Button>
+                {translateReason && <ActionNote id="subtitle-translate-reason">{translateReason}</ActionNote>}
+                {noteFor('translate')}
+                {job?.task === 'translate' && <JobProgress job={job.job} canWrite={canWrite} onCancel={() => cancelJob(job.job.id)} />}
+              </div>
+              <ActionNote>
+                Translation uses the OpenAI-compatible service configured once under Connections. Results are staged for
+                review, so nothing is overwritten automatically.
+              </ActionNote>
+            </div>
+          )}
+
+          {task === 'extract' && (
+            <div className="space-y-5">
+              <p className="text-sm text-muted-foreground">
+                Pull out a subtitle track that is stored inside the video file itself.
+              </p>
+              {streamsLoading ? (
+                <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <LoaderCircleIcon className="size-4 animate-spin motion-reduce:animate-none" /> Reading embedded tracks…
+                </p>
+              ) : subtitleStreams.length === 0 ? (
+                <EmptyNote>
+                  {streamsError
+                    ? `Embedded tracks could not be read: ${streamsError}`
+                    : 'This video has no embedded subtitle tracks, so there is nothing to extract.'}
+                </EmptyNote>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Embedded subtitle track">
+                    <Select value={extractStream} onChange={(event) => setExtractStream(event.target.value)}>
+                      <option value="-1">Choose a track…</option>
+                      {subtitleStreams.map((stream) => (
+                        <option key={stream.index} value={stream.index}>
+                          {subtitleStreamLabel(stream)}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Language override" hint="Only needed when the track has no language tag.">
+                    <Input value={extractLanguage} onChange={(event) => setExtractLanguage(event.target.value)} placeholder="en" />
+                  </Field>
+                </div>
+              )}
+              {subtitleStreams.length > 0 && (
+                <>
+                  <Toggle
+                    label="Review before saving"
+                    hint="On: the extracted subtitles wait for your approval. Off: they are written next to the video as soon as extraction finishes."
+                    checked={extractPreview}
+                    onChange={setExtractPreview}
+                  />
+                  <div className="space-y-2">
+                    <Button onClick={runExtract} disabled={Boolean(extractReason)} aria-describedby={extractReason ? 'subtitle-extract-reason' : undefined}>
+                      <DownloadIcon data-icon="inline-start" />
+                      Extract subtitle track
+                    </Button>
+                    {extractReason && <ActionNote id="subtitle-extract-reason">{extractReason}</ActionNote>}
+                    {noteFor('extract')}
+                    {job?.task === 'extract' && <JobProgress job={job.job} canWrite={canWrite} onCancel={() => cancelJob(job.job.id)} />}
+                  </div>
+                  <Disclosure label="Track details" detail={`${streams.length} tracks in the file`}>
+                    <ul className="space-y-1">
+                      {[...subtitleStreams, ...audioStreams].map((stream) => (
+                        <li key={`${stream.type}-${stream.index}`}>
+                          #{stream.index} · {stream.type} · {stream.codec}
+                          {stream.language ? ` · ${languageName(stream.language)}` : ' · no language tag'}
+                          {stream.title ? ` · ${stream.title}` : ''}
+                          {stream.default ? ' · default' : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  </Disclosure>
+                </>
+              )}
+            </div>
+          )}
+        </>
       )}
-
-      <Section title="Synchronize">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Subtitle file">
-            <Select value={syncPath} onChange={(event) => setSyncPath(event.target.value)}>
-              <option value="">Choose a sidecar…</option>
-              {sidecars.map((sidecar) => (
-                <option key={sidecar.path} value={sidecar.path}>
-                  {sidecar.path.split('/').pop()}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Mode" hint="Offset and frame rate are instant; audio and reference use the bundled ffsubsync helper.">
-            <Select value={syncMode} onChange={(event) => setSyncMode(event.target.value as typeof syncMode)}>
-              <option value="offset">Adjust offset</option>
-              <option value="fps">Convert frame rate</option>
-              <option value="audio">Align to audio (VAD)</option>
-              <option value="reference">Align to reference subtitle</option>
-            </Select>
-          </Field>
-          {syncMode === 'offset' && (
-            <Field label="Offset (seconds)">
-              <Input value={offset} onChange={(event) => setOffset(event.target.value)} inputMode="decimal" />
-            </Field>
-          )}
-          {syncMode === 'fps' && (
-            <>
-              <Field label="Source frame rate">
-                <Input value={fpsFrom} onChange={(event) => setFpsFrom(event.target.value)} inputMode="decimal" />
-              </Field>
-              <Field label="Target frame rate">
-                <Input value={fpsTo} onChange={(event) => setFpsTo(event.target.value)} inputMode="decimal" />
-              </Field>
-            </>
-          )}
-          {syncMode === 'reference' && (
-            <Field label="Reference subtitle">
-              <Select value={referencePath} onChange={(event) => setReferencePath(event.target.value)}>
-                <option value="">Choose a reference…</option>
-                {sidecars.map((sidecar) => (
-                  <option key={sidecar.path} value={sidecar.path}>
-                    {sidecar.path.split('/').pop()}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-          {syncMode === 'audio' && (
-            <Field label="Audio track" hint={streamsError || 'Default uses the first audio track.'}>
-              <Select value={audioStream} onChange={(event) => setAudioStream(event.target.value)}>
-                <option value="-1">Automatic</option>
-                {audioStreams.map((stream) => (
-                  <option key={stream.index} value={stream.index}>
-                    {`#${stream.index} ${stream.language || 'und'} ${stream.codec}${stream.channels ? ` · ${stream.channels}ch` : ''}`}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
-          <Field label="Max offset (seconds)" hint="Leave blank to use the configured bound.">
-            <Input value={maxOffset} onChange={(event) => setMaxOffset(event.target.value)} inputMode="decimal" />
-          </Field>
-          <Field label="Minimum alignment score" hint="0 rejects only anti-correlated alignments.">
-            <Input value={minScore} onChange={(event) => setMinScore(event.target.value)} inputMode="decimal" />
-          </Field>
-        </div>
-        {syncMode !== 'offset' && syncMode !== 'fps' && (
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Toggle
-              label="Golden-section frame rate search"
-              hint="Try --gss for unusual frame rate ratios."
-              checked={goldenSection}
-              onChange={setGoldenSection}
-            />
-            <Toggle
-              label="Do not guess frame rate"
-              hint="Keep the subtitle frame rate fixed while finding the offset."
-              checked={noFixFramerate}
-              onChange={setNoFixFramerate}
-            />
-          </div>
-        )}
-        <Toggle
-          label="Review before saving"
-          hint="Stage the synchronized subtitle instead of replacing the current file."
-          checked={syncPreview}
-          onChange={setSyncPreview}
-        />
-        {canWrite && (
-          <Button size="sm" onClick={runSync} disabled={!syncPath}>
-            <PlayIcon data-icon="inline-start" />
-            Run synchronization
-          </Button>
-        )}
-      </Section>
-
-      <Section title="Translate with AI">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Source subtitle">
-            <Select value={translatePath} onChange={(event) => setTranslatePath(event.target.value)}>
-              <option value="">Choose a sidecar…</option>
-              {sidecars.map((sidecar) => (
-                <option key={sidecar.path} value={sidecar.path}>
-                  {sidecar.path.split('/').pop()}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Target language" hint="ISO 639 code, for example de or pt-BR.">
-            <Input value={translateLanguage} onChange={(event) => setTranslateLanguage(event.target.value)} />
-          </Field>
-          <div className="flex items-end">
-            {canWrite && (
-              <Button size="sm" onClick={runTranslate} disabled={!translatePath || !translateLanguage}>
-                <LanguagesIcon data-icon="inline-start" />
-                Translate
-              </Button>
-            )}
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Translations are validated cue by cue and staged for review before a language sidecar is written.
-        </p>
-      </Section>
-
-      <Section title="Embedded tracks">
-        {streamsError && <p className="break-words text-xs text-amber-500">{streamsError}</p>}
-        <div className="grid gap-3 sm:grid-cols-4">
-          <Field label="Subtitle stream" hint="Forced and hearing-impaired flags come from the stream tags.">
-            <Select value={extractStream} onChange={(event) => setExtractStream(event.target.value)}>
-              <option value="-1">Choose a track…</option>
-              {subtitleStreams.map((stream) => (
-                <option key={stream.index} value={stream.index}>
-                  {`#${stream.index} ${stream.language || 'und'} ${stream.codec}${stream.forced ? ' forced' : ''}${stream.hi ? ' SDH' : ''}`}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Language override" hint="Required when the track has no language tag.">
-            <Input value={extractLanguage} onChange={(event) => setExtractLanguage(event.target.value)} placeholder="en" />
-          </Field>
-          <div className="flex items-end pb-2">
-            <Toggle label="Review first" checked={extractPreview} onChange={setExtractPreview} />
-          </div>
-          <div className="flex items-end">
-            {canWrite && (
-              <Button size="sm" onClick={runExtract} disabled={Number(extractStream) < 0}>
-                <DownloadIcon data-icon="inline-start" />
-                Extract track
-              </Button>
-            )}
-          </div>
-        </div>
-        {audioStreams.length > 0 && (
-          <ul className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            {audioStreams.map((stream) => (
-              <li key={stream.index}>
-                audio #{stream.index} {stream.language || 'und'} {stream.codec}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section
-        title="History"
-        action={
-          <Button size="xs" variant="ghost" onClick={() => reload().catch((cause) => setError(errorMessage(cause)))}>
-            <RefreshCwIcon data-icon="inline-start" />
-            Refresh
-          </Button>
-        }
-      >
-        {(detail?.history ?? []).length === 0 ? (
-          <EmptyNote>No recorded subtitle activity for this video.</EmptyNote>
-        ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {(detail?.history ?? []).map((entry) => (
-              <li key={entry.id} className="flex items-start gap-2 p-2.5 text-sm">
-                <Badge variant={statusVariant(entry.action)}>{entry.action}</Badge>
-                <span className="min-w-0 flex-1">
-                  <span className="break-words">{entry.message}</span>
-                  <span className="block text-xs text-muted-foreground">{timeLabel(entry.createdAt)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
     </DialogShell>
   )
 }

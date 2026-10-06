@@ -106,8 +106,8 @@ func itemFromAlbum(album music.Album) discovery.MusicItem {
 		ID: album.ID, Title: album.Title, Album: album.Title, Artist: album.ArtistName, Year: album.Year,
 	}
 	switch album.Status {
-	case "downloading":
-		item.Status = "downloading"
+	case "downloading", "paused", "cancelled":
+		item.Status = album.Status
 	case "failed":
 		item.Status = "failed"
 		item.Error = album.Error
@@ -118,6 +118,12 @@ func itemFromAlbum(album music.Album) discovery.MusicItem {
 		item.Available = true
 	default:
 		item.Status = "wanted"
+	}
+	for _, file := range album.Files {
+		if !file.Missing {
+			item.Available = true
+			break
+		}
 	}
 	return item
 }

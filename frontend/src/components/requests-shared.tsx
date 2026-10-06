@@ -47,7 +47,6 @@ export function DeliveryProgress({ delivery }: { delivery: Delivery }) {
             {delivery.done ?? 0}/{delivery.total} episodes
           </span>
         ) : null}
-        {delivery.jobId && <span className="font-mono text-[0.7rem]">job {delivery.jobId.slice(0, 8)}</span>}
       </div>
       {percent !== null && (
         <div

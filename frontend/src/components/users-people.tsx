@@ -91,11 +91,11 @@ function CreateUserDialog({ open, onOpenChange, roles, onCreated }: {
         <Field label="Password" htmlFor="new-user-password" hint="At least 8 characters. Share it through a secure channel.">
           <Input id="new-user-password" type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="new-password" required />
         </Field>
-        <div className="space-y-1.5">
-          <p className="text-sm font-medium">Roles</p>
+        <fieldset className="min-w-0 space-y-1.5">
+          <legend className="text-sm font-medium">Roles</legend>
           <RolePicker roles={roles} selected={selected} onChange={setSelected} />
           <p className="text-xs text-muted-foreground">Accounts without a role can sign in but have no permissions.</p>
-        </div>
+        </fieldset>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
@@ -144,11 +144,11 @@ function EditUserDialog({ user, roles, onClose, onSaved }: {  user: AuthUser
         <Field label="Name" htmlFor="edit-user-name">
           <Input id="edit-user-name" value={name} onChange={event => setName(event.target.value)} required />
         </Field>
-        <div className="space-y-1.5">
-          <p className="text-sm font-medium">Roles</p>
+        <fieldset className="min-w-0 space-y-1.5">
+          <legend className="text-sm font-medium">Roles</legend>
           <RolePicker roles={roles} selected={selected} onChange={setSelected} />
           <p className="text-xs text-muted-foreground">Roles carry the permissions this account receives.</p>
-        </div>
+        </fieldset>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={busy}>
             Cancel
@@ -339,15 +339,33 @@ export function UsersPeople({ currentUserId }: { currentUserId: string }) {
                 </Button>
                 {person.id !== currentUserId && (
                   <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={pendingId === person.id}
-                      onClick={() => void toggleActive(person)}
-                    >
-                      {pendingId === person.id && <LoaderCircle className="animate-spin" aria-hidden="true" />}
-                      {person.active ? 'Disable' : 'Enable'}
-                    </Button>
+                    {person.active ? (
+                      <Confirm
+                        trigger={
+                          <Button variant="outline" size="sm" disabled={pendingId === person.id}>
+                            {pendingId === person.id && <LoaderCircle className="animate-spin" aria-hidden="true" />}
+                            Disable
+                          </Button>
+                        }
+                        title="Disable account"
+                        description={`Disable ${person.name}? They are signed out everywhere and their API tokens stop working immediately. Re-enabling the account does not bring those tokens back.`}
+                        confirmLabel="Disable account"
+                        onConfirm={async () => {
+                          replaceUser(await authApi.updateUser(person.id, { active: false }))
+                          setNotice(`${person.name} is disabled and signed out everywhere.`)
+                        }}
+                      />
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pendingId === person.id}
+                        onClick={() => void toggleActive(person)}
+                      >
+                        {pendingId === person.id && <LoaderCircle className="animate-spin" aria-hidden="true" />}
+                        Enable
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={() => setResetting(person)}>
                       Reset password
                     </Button>

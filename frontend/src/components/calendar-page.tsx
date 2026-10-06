@@ -113,7 +113,8 @@ export function CalendarPage() {
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
           <p className="text-sm text-muted-foreground">
-            Upcoming movie releases, TV episodes, and album releases from every configured source.
+            Release dates for your whole catalog: movies, TV, and music from every configured source. Individual library
+            pages keep their own, narrower calendars.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -169,7 +170,7 @@ export function CalendarPage() {
 
       <div className="flex flex-wrap items-end gap-3">
         {view === 'month' ? (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="icon-sm" aria-label="Previous month" onClick={() => selectMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>
               <ChevronLeft />
             </Button>

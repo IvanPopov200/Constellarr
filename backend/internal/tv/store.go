@@ -1256,7 +1256,11 @@ type acquisitionRelease struct {
 	EpisodeIDs []string         `json:"episodeIds"`
 }
 
-const acquisitionColumns = `series_id, job_id, release, status, error`
+const acquisitionColumns = `a.series_id, a.job_id, a.release,
+ CASE WHEN a.status IN ('imported','superseded','import-failed') THEN a.status
+      WHEN d.status IN ('paused','cancelled') THEN d.status
+      WHEN a.status IN ('paused','cancelled') THEN 'queued'
+      ELSE a.status END, a.error`
 
 func scanAcquisition(row rowScanner) (Acquisition, error) {
 	var (
@@ -1285,7 +1289,7 @@ func scanAcquisition(row rowScanner) (Acquisition, error) {
 }
 
 func (s *Store) Acquisitions(ctx context.Context) ([]Acquisition, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+acquisitionColumns+` FROM tv_acquisitions ORDER BY updated_at DESC, job_id`)
+	rows, err := s.pool.Query(ctx, `SELECT `+acquisitionColumns+` FROM tv_acquisitions a JOIN downloads d ON d.id=a.job_id ORDER BY a.updated_at DESC, job_id`)
 	if err != nil {
 		return nil, dbError("list acquisitions", err)
 	}

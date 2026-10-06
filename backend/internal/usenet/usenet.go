@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/javi11/nntppool/v5"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -31,6 +32,8 @@ type Config struct {
 	Password      string
 	Connections   int
 	FallbackHosts []string
+	// Limiter is shared runtime state and is never persisted in connection settings.
+	Limiter *rate.Limiter
 }
 
 type Progress struct {
@@ -53,8 +56,9 @@ func tlsConfigFor(host string) *tls.Config {
 	return &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12, RootCAs: tlsRootCAs}
 }
 
-// Test never fetches an article.
+// Connectivity checks ignore the transfer policy so a pause cannot make them wait.
 func Test(ctx context.Context, cfg Config) error {
+	cfg.Limiter = nil
 	hosts, err := cfg.hosts()
 	if err != nil {
 		return err
@@ -122,7 +126,7 @@ func Download(ctx context.Context, nzb []byte, dir string, cfg Config, onProgres
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			worker(jobCtx, clients, partsDir, cached, taskCh, resultCh)
+			worker(jobCtx, clients, cfg.Limiter, partsDir, cached, taskCh, resultCh)
 		}()
 	}
 	go func() {
@@ -256,7 +260,7 @@ func closeClients(clients []*nntppool.Client) {
 }
 
 func providerFor(host string, cfg Config) nntppool.Provider {
-	return nntppool.Provider{
+	provider := nntppool.Provider{
 		Name:           host,
 		Host:           net.JoinHostPort(host, strconv.Itoa(cfg.Port)),
 		TLSConfig:      tlsConfigFor(host),
@@ -266,6 +270,33 @@ func providerFor(host string, cfg Config) nntppool.Provider {
 		AttemptTimeout: providerAttemptTimeout,
 		StallTimeout:   providerStallTimeout,
 		UserAgent:      "Constellarr",
+	}
+	if cfg.Limiter != nil {
+		// Queue and token waits use no short wall-clock budget; socket stalls remain bounded.
+		provider.AttemptTimeout = 365 * 24 * time.Hour
+		provider.Factory = dialFactory(host, cfg)
+	}
+	return provider
+}
+
+// dialFactory returns a verified-TLS dialer that routes reads through the shared transfer limiter.
+func dialFactory(host string, cfg Config) nntppool.ConnFactory {
+	address := net.JoinHostPort(host, strconv.Itoa(cfg.Port))
+	limiter := cfg.Limiter
+	return func(ctx context.Context) (net.Conn, error) {
+		// Bound dial and handshake so a silent server cannot pin a connection slot forever.
+		dialCtx, cancel := context.WithTimeout(ctx, providerAttemptTimeout)
+		defer cancel()
+		raw, err := (&net.Dialer{Timeout: providerAttemptTimeout}).DialContext(dialCtx, "tcp", address)
+		if err != nil {
+			return nil, err
+		}
+		conn := tls.Client(raw, tlsConfigFor(host))
+		if err := conn.HandshakeContext(dialCtx); err != nil {
+			_ = raw.Close()
+			return nil, err
+		}
+		return newLimitedConn(ctx, conn, limiter), nil
 	}
 }
 

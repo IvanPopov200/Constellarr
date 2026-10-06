@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { MouseEvent } from 'react'
 import { AppShell, PageHeading } from '@/components/app-shell'
 import { routeLabels, routePermissions, type Route } from '@/lib/navigation'
@@ -10,6 +10,7 @@ import { RecommendationsPanel } from '@/components/recommendations-panel'
 import { AISettings } from '@/components/recommendations-ai-settings'
 import { MigrationPage } from '@/components/migration-page'
 import { DownloadQueue } from '@/components/download-queue'
+import { DownloadControls } from '@/components/download-controls'
 import { Overview } from '@/components/overview'
 import { ReleaseSearch } from '@/components/release-search'
 import { MoviesPage } from '@/components/movies-page'
@@ -30,9 +31,13 @@ document.documentElement.classList.add('dark')
 const routeIds = Object.keys(routeLabels) as Route[]
 const routeAliases: Record<string, Route> = { search: 'movies', downloads: 'usenet', settings: 'connections' }
 
-function readRoute(): Route {
-  const hash = window.location.hash.replace(/^#\/?/, '')
-  const value = routeAliases[hash] ?? hash
+function readHash() {
+  return window.location.hash
+}
+
+function readRoute(hash: string): Route {
+  const path = hash.replace(/^#\/?/, '').split('?')[0]
+  const value = routeAliases[path] ?? path
   return routeIds.includes(value as Route) ? (value as Route) : 'overview'
 }
 
@@ -48,19 +53,28 @@ function skipToContent(event: MouseEvent<HTMLAnchorElement>) {
 
 function App() {
   const { can } = useAuth()
-  const { jobs, error, refresh, download, retry } = useDownloads(can('downloads.read'))
-  const requestedRoute = useSyncExternalStore(subscribeToHash, readRoute, () => 'overview' as Route)
+  const { jobs, error, refresh, download, retry, pause, resume, cancel } = useDownloads(can('downloads.read'))
+  const hash = useSyncExternalStore(subscribeToHash, readHash, () => '#overview')
+  const requestedRoute = readRoute(hash)
   const permission = routePermissions[requestedRoute]
   const route = permission && !can(permission) ? 'overview' : requestedRoute
 
   useEffect(() => {
-    if (window.location.hash !== `#${route}`) {
+    if (hash.split('?')[0] !== `#${route}`) {
       window.history.replaceState(null, '', `#${route}`)
     }
-  }, [route])
+  }, [hash, route])
 
   const activeDownloads = jobs?.filter(isActiveJob).length ?? 0
   const settingsSection = route === 'connections' || route === 'storage' ? route : null
+  const subtitleTarget = useMemo(() => {
+    const params = new URLSearchParams(hash.split('?')[1])
+    const kind = params.get('kind')
+    const id = params.get('id')
+    return (kind === 'movie' || kind === 'episode') && id
+      ? { kind, id, mode: 'search' as const }
+      : undefined
+  }, [hash])
 
   return (
     <>
@@ -74,7 +88,7 @@ function App() {
       <AppShell route={route} activeDownloads={activeDownloads}>
         {route === 'overview' && (
           <div className="space-y-6">
-            <Overview jobs={jobs} error={error} onRetry={retry} onRefresh={refresh} />
+            <Overview jobs={jobs} error={error} onRetry={retry} onPause={pause} onResume={resume} onCancel={cancel} onRefresh={refresh} />
             {can('library.read') && <RecommendationsPanel />}
           </div>
         )}
@@ -98,7 +112,7 @@ function App() {
         {route === 'calendar' && <CalendarPage />}
         {route === 'migration' && <MigrationPage />}
         {route === 'music' && <MusicPage />}
-        {route === 'subtitles' && <SubtitlesPage />}
+        {route === 'subtitles' && <SubtitlesPage key={hash} target={subtitleTarget} />}
         {route === 'torrents' && <TorrentsPage />}
         {route === 'system' && <OperationsPage />}
         {route === 'backups' && <div className="space-y-6">
@@ -110,17 +124,21 @@ function App() {
           <div className="flex flex-col gap-6">
             <PageHeading
               title="Usenet"
-              description="Transfer and processing stages for queued NZB releases."
+              description="Manage downloads and choose when they use your bandwidth."
               action={
                 can('library.read') ? <Button asChild size="sm">
                   <a href="#movies">Search releases</a>
                 </Button> : undefined
               }
             />
+            <DownloadControls />
             <DownloadQueue
               jobs={jobs}
               error={error}
               onRetry={retry}
+              onPause={pause}
+              onResume={resume}
+              onCancel={cancel}
               onRefresh={refresh}
               emptyAction={can('library.read') ? { label: 'Search releases', href: '#movies' } : undefined}
             />

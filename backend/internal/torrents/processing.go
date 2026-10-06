@@ -269,8 +269,10 @@ func (s *Service) discoverProcessing(ctx context.Context) error {
 }
 
 func (s *Service) pendingProcessing(ctx context.Context) ([]processingRow, error) {
-	rows, err := s.pool.Query(ctx, `SELECT job_id, state, error, input_root FROM torrent_processing
-		WHERE state = $1 ORDER BY updated_at LIMIT $2`, processPending, processingConcurrent)
+	rows, err := s.pool.Query(ctx, `SELECT p.job_id, p.state, p.error, p.input_root FROM torrent_processing p
+		JOIN torrent_jobs j ON j.id = p.job_id
+		WHERE p.state = $1 AND j.status <> $2 ORDER BY p.updated_at LIMIT $3`,
+		processPending, statusCancelled, processingConcurrent)
 	if err != nil {
 		return nil, storeError("list pending processing", err)
 	}
@@ -318,17 +320,42 @@ func (s *Service) scheduleProcessing(ctx context.Context) {
 		}
 		s.processingActive.Add(1)
 		s.workers.Add(1)
-		go func(row processingRow) {
+		rowCtx, cancel := context.WithCancel(ctx)
+		s.setProcessingCancel(row.jobID, cancel)
+		go func(row processingRow, rowCtx context.Context, cancel context.CancelFunc) {
 			defer s.workers.Done()
 			defer s.processingActive.Add(-1)
-			s.runProcessing(ctx, row)
-		}(row)
+			defer cancel()
+			defer s.clearProcessingCancel(row.jobID)
+			s.runProcessing(rowCtx, row)
+		}(row, rowCtx, cancel)
+	}
+}
+
+func (s *Service) setProcessingCancel(jobID string, cancel context.CancelFunc) {
+	s.processMu.Lock()
+	defer s.processMu.Unlock()
+	s.processCancels[jobID] = cancel
+}
+
+func (s *Service) clearProcessingCancel(jobID string) {
+	s.processMu.Lock()
+	defer s.processMu.Unlock()
+	delete(s.processCancels, jobID)
+}
+
+func (s *Service) cancelProcessing(jobID string) {
+	s.processMu.Lock()
+	cancel := s.processCancels[jobID]
+	s.processMu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 
 func (s *Service) runProcessing(ctx context.Context, row processingRow) {
 	job, err := s.jobByID(ctx, s.pool, row.jobID)
-	if err != nil {
+	if err != nil || job.Status == statusCancelled {
 		return
 	}
 	payloadDir, err := s.dataDir(job.InfoHash)

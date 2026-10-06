@@ -217,10 +217,36 @@ func (s *Service) setStatus(ctx context.Context, q querier, id, status, message 
 	return nil
 }
 
-// setEngineStatus never overwrites a pause that another request saved concurrently.
-func (s *Service) setEngineStatusRow(ctx context.Context, q querier, id, status, message string) error {
+func (s *Service) setStatusWhen(ctx context.Context, q querier, id, status, message string, protected ...string) error {
 	_, err := q.Exec(ctx, `UPDATE torrent_jobs SET status = $2, error = $3, updated_at = now()
-		WHERE id = $1 AND status <> $4`, id, status, message, statusPaused)
+		WHERE id = $1 AND status <> ALL($4::text[])`, id, status, message, protected)
+	if err != nil {
+		return storeError("update job", err)
+	}
+	return nil
+}
+
+// setQueuedState requeues a held job unless a manual pause or cancel won the race.
+func (s *Service) setQueuedState(ctx context.Context, q querier, id, reason string) error {
+	return s.setStatusWhen(ctx, q, id, statusQueued, reason, statusPaused, statusCancelled)
+}
+
+// queueUnlessCancelled requeues a job and reports a conflict when a cancel won the race.
+func (s *Service) queueUnlessCancelled(ctx context.Context, q querier, id string) error {
+	tag, err := q.Exec(ctx, `UPDATE torrent_jobs SET status = $2, error = '', updated_at = now()
+		WHERE id = $1 AND status <> $3`, id, statusQueued, statusCancelled)
+	if err != nil {
+		return storeError("queue job", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrConflict
+	}
+	return nil
+}
+
+func (s *Service) setQueuedReason(ctx context.Context, q querier, id, reason string) error {
+	_, err := q.Exec(ctx, `UPDATE torrent_jobs SET error = $2, updated_at = now()
+		WHERE id = $1 AND status = $3`, id, reason, statusQueued)
 	if err != nil {
 		return storeError("update job", err)
 	}
@@ -229,7 +255,7 @@ func (s *Service) setEngineStatusRow(ctx context.Context, q querier, id, status,
 
 func (s *Service) markSeeding(ctx context.Context, q querier, id string, started time.Time) error {
 	_, err := q.Exec(ctx, `UPDATE torrent_jobs SET status = $2, error = '', seeding_started_at = $3,
-		updated_at = now() WHERE id = $1`, id, statusSeeding, started)
+		updated_at = now() WHERE id = $1 AND status <> $4`, id, statusSeeding, started, statusCancelled)
 	if err != nil {
 		return storeError("start seeding", err)
 	}
@@ -238,8 +264,8 @@ func (s *Service) markSeeding(ctx context.Context, q querier, id string, started
 
 func (s *Service) markCompleted(ctx context.Context, q querier, id string, seedingSeconds int64) error {
 	_, err := q.Exec(ctx, `UPDATE torrent_jobs SET status = $2, error = '', seeding_started_at = NULL,
-		seeding_seconds = $3, completed_at = now(), updated_at = now() WHERE id = $1`,
-		id, statusCompleted, seedingSeconds)
+		seeding_seconds = $3, completed_at = now(), updated_at = now() WHERE id = $1 AND status <> $4`,
+		id, statusCompleted, seedingSeconds, statusCancelled)
 	if err != nil {
 		return storeError("complete job", err)
 	}
@@ -248,7 +274,7 @@ func (s *Service) markCompleted(ctx context.Context, q querier, id string, seedi
 
 func (s *Service) markFailed(ctx context.Context, q querier, id, message string) error {
 	_, err := q.Exec(ctx, `UPDATE torrent_jobs SET status = $2, error = $3, seeding_started_at = NULL,
-		updated_at = now() WHERE id = $1`, id, statusFailed, message)
+		updated_at = now() WHERE id = $1 AND status <> $4`, id, statusFailed, message, statusCancelled)
 	if err != nil {
 		return storeError("fail job", err)
 	}

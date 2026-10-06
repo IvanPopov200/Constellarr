@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { DeliveryProgress, DiscoveryDialog, EmptyNote, ErrorNote, Field, LoadingNote, MediaBadge, Notice, RequestStatusBadge, Choice, Toggle } from '@/components/requests-shared'
+import { Confirm } from '@/components/users-shared'
 import { errorMessage } from '@/lib/api'
 import { useAuth } from '@/lib/auth-context'
 import {
@@ -31,6 +32,16 @@ type Props = {
 
 const monitorModes = ['all', 'future', 'missing', 'existing', 'first', 'latest', 'none']
 
+const monitorModeLabels: Record<string, string> = {
+  all: 'All episodes',
+  future: 'Future episodes',
+  missing: 'Missing episodes',
+  existing: 'Existing episodes',
+  first: 'First episode',
+  latest: 'Latest episode',
+  none: 'No episodes',
+}
+
 export function RequestDetailDialog({ id, canApprove, permissions, onClose, onChanged }: Props) {
   const { user } = useAuth()
   const currentUserId = user?.id ?? null
@@ -38,7 +49,7 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [busy, setBusy] = useState<'approve' | 'reject' | 'comment' | 'cancel' | null>(null)
+  const [busy, setBusy] = useState<'approve' | 'reject' | 'comment' | null>(null)
   const [options, setOptions] = useState<ApproverOptions>({ profiles: [], movieRoots: [], tvRoots: [] })
   const [profileId, setProfileId] = useState('')
   const [rootId, setRootId] = useState('')
@@ -83,7 +94,7 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
     return () => controller.abort()
   }, [canApprove])
 
-  async function act(kind: 'approve' | 'reject' | 'comment' | 'cancel') {
+  async function act(kind: 'approve' | 'reject' | 'comment') {
     setBusy(kind)
     setError('')
     setNotice('')
@@ -107,13 +118,10 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
         await discoveryApi.rejectRequest(id, reason.trim())
         setNotice('Rejected. The requester can submit it again later.')
         setRejecting(false)
-      } else if (kind === 'comment') {
+      } else {
         await discoveryApi.comment(id, comment.trim())
         setComment('')
         setNotice('Comment added.')
-      } else {
-        await discoveryApi.cancelRequest(id)
-        setNotice('Request cancelled.')
       }
       await reload()
       onChanged()
@@ -124,11 +132,21 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
     }
   }
 
+  // Only a pending request can be cancelled, so nothing has been downloaded or imported yet.
+  async function cancel() {
+    setError('')
+    setNotice('')
+    await discoveryApi.cancelRequest(id)
+    setNotice('Request cancelled. Nothing was downloaded or imported.')
+    await reload()
+    onChanged()
+  }
+
   const request = detail?.request
   const roots = options.movieRoots.length > 0 ? options.movieRoots : options.tvRoots
   const rootsForType = request?.mediaType === 'tv' ? (options.tvRoots.length > 0 ? options.tvRoots : roots) : roots
   const catalog = request ? catalogHref(request.mediaType, request.libraryId) : ''
-  const canCancel = request?.status === 'pending' && !canApprove && permissions.requestsWrite
+  const canCancel = request?.status === 'pending' && request.userId === currentUserId && permissions.requestsWrite
 
   return (
     <DiscoveryDialog
@@ -217,7 +235,7 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
                       <option value="">Library default</option>
                       {rootsForType.map((root) => (
                         <option key={root.id} value={root.id}>
-                          {root.id} — {root.path}
+                          {root.path}
                         </option>
                       ))}
                     </Choice>
@@ -228,7 +246,7 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
                         <option value="">Library default (all)</option>
                         {monitorModes.map((mode) => (
                           <option key={mode} value={mode}>
-                            {mode}
+                            {monitorModeLabels[mode] ?? mode}
                           </option>
                         ))}
                       </Choice>
@@ -284,10 +302,18 @@ export function RequestDetailDialog({ id, canApprove, permissions, onClose, onCh
 
           {canCancel && (
             <div className="flex justify-end">
-              <Button variant="destructive" size="sm" disabled={busy !== null} onClick={() => void act('cancel')}>
-                {busy === 'cancel' ? <LoaderCircle className="animate-spin" /> : <XCircle />}
-                Cancel request
-              </Button>
+              <Confirm
+                trigger={
+                  <Button variant="destructive" size="sm" disabled={busy !== null}>
+                    <XCircle />
+                    Cancel request
+                  </Button>
+                }
+                title="Cancel this request?"
+                description={`Withdraws your pending request for ${request?.title ?? 'this title'}. It was never approved, so nothing is downloaded or imported, and the approver will no longer see it. You can submit it again later.`}
+                confirmLabel="Cancel request"
+                onConfirm={cancel}
+              />
             </div>
           )}
 

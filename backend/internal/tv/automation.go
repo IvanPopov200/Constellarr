@@ -427,12 +427,12 @@ func (s *Service) resetFailedSearches(ctx context.Context, before []Acquisition)
 	return nil
 }
 
-// activeEpisodeIDs maps episodes with an in-flight acquisition so only they are held back.
+// activeEpisodeIDs maps episodes with an in-flight or cancelled acquisition so only explicit grabs resume them.
 func activeEpisodeIDs(acquisitions []Acquisition) map[string]bool {
 	active := map[string]bool{}
 	for _, acquisition := range acquisitions {
 		switch acquisition.Status {
-		case "queued", "downloading", "importing", "import-failed", "":
+		case "queued", "downloading", "paused", "cancelled", "importing", "import-failed", "":
 			for _, id := range acquisition.EpisodeIDs {
 				active[id] = true
 			}

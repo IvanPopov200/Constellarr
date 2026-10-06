@@ -17,6 +17,21 @@ const severityTones = {
   critical: 'border-destructive/40 bg-destructive/10 text-destructive',
 } as const
 
+const eventKindLabels: Record<string, string> = {
+  download_failed: 'Download failed',
+  import_error: 'Import failed',
+  provider_failure: 'Provider failed',
+  backup: 'Backup',
+  backup_failed: 'Backup failed',
+  restore: 'Restore',
+  alert: 'Alert',
+  notification_failed: 'Notification failed',
+}
+
+function eventKindLabel(kind: string) {
+  return eventKindLabels[kind] ?? (kind ? kind.replace(/_/g, ' ') : 'Event')
+}
+
 export function OperationsPage() {
   const [status, setStatus] = useState<OperationsStatus | null>(null)
   const [events, setEvents] = useState<OperationEvent[]>([])
@@ -72,7 +87,7 @@ export function OperationsPage() {
     <div className="flex flex-col gap-6">
       <PageHeading
         title="System"
-        description="Server health, queues, metrics, structured events, and alerts."
+        description="Check server health, recent activity, and anything that needs attention."
         action={
           <Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
             {refreshing ? <LoaderCircle className="animate-spin motion-reduce:animate-none" /> : <RefreshCw />}
@@ -134,10 +149,10 @@ export function OperationsPage() {
                 <p className="mt-0.5 text-sm">
                   {status.library.artists} artists · {status.library.albums} albums · {status.library.tracks} tracks
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Prometheus metrics are exposed at <code>{status.metricsPath}</code> with Go, process, database pool, and
-                  transfer counters. Labels never contain titles, paths, or user names.
-                </p>
+                <details className="mt-2 text-xs text-muted-foreground">
+                  <summary className="cursor-pointer">Metrics endpoint</summary>
+                  <p className="mt-1">Prometheus metrics: <code>{status.metricsPath}</code>. Labels exclude titles, paths, and user names.</p>
+                </details>
               </CardContent>
             </Card>
             <Card className="shadow-none">
@@ -172,10 +187,10 @@ export function OperationsPage() {
             {events.slice(0, 20).map((event) => (
               <li key={event.id} className="flex flex-wrap items-center gap-2 border-b border-border/50 pb-1 last:border-0">
                 <Badge variant="outline" className={cn(severityTones[event.severity])}>
-                  {event.kind.replace(/_/g, ' ')}
+                  {eventKindLabel(event.kind)}
                 </Badge>
                 <span className="min-w-0 flex-1 truncate" title={event.message ?? ''}>
-                  {event.message || event.source || '—'}
+                  {event.message || event.source || 'No details recorded'}
                 </span>
                 <span className="text-xs text-muted-foreground">{formatAge(event.at)}</span>
               </li>

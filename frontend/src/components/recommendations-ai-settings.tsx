@@ -182,29 +182,32 @@ export function AISettings() {
                     : 'Leave blank for a local endpoint that accepts unauthenticated requests; the key is never returned to the browser.'}
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Max tokens" hint="Response budget per request.">
-                  <Input
-                    type="number"
-                    min={1}
-                    max={4096}
-                    value={draft.maxTokens}
-                    disabled={!canWrite}
-                    onChange={(event) => change({ ...draft, maxTokens: Number(event.target.value) || 1 })}
-                  />
-                </Field>
-                <Field label="Temperature" hint="0 is deterministic, 2 is adventurous.">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={2}
-                    step={0.1}
-                    value={draft.temperature}
-                    disabled={!canWrite}
-                    onChange={(event) => change({ ...draft, temperature: Number(event.target.value) })}
-                  />
-                </Field>
-              </div>
+              <details className="rounded-lg border border-border px-3 py-2 lg:col-span-2">
+                <summary className="cursor-pointer text-sm font-medium">Advanced: response limits</summary>
+                <div className="grid grid-cols-2 gap-4 pt-4">
+                  <Field label="Max tokens" hint="Response budget per request.">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={4096}
+                      value={draft.maxTokens}
+                      disabled={!canWrite}
+                      onChange={(event) => change({ ...draft, maxTokens: Number(event.target.value) || 1 })}
+                    />
+                  </Field>
+                  <Field label="Temperature" hint="0 is deterministic, 2 is adventurous.">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={2}
+                      step={0.1}
+                      value={draft.temperature}
+                      disabled={!canWrite}
+                      onChange={(event) => change({ ...draft, temperature: Number(event.target.value) })}
+                    />
+                  </Field>
+                </div>
+              </details>
             </div>
 
             {models.length > 0 && (

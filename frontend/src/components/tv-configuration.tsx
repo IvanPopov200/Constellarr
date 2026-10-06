@@ -181,7 +181,8 @@ export function TVConfiguration() {
                 Add TV root folder
               </Button>
               <p className="text-xs text-muted-foreground">
-                New folders are registered when you save. Existing files are never moved by saving settings.
+                New folders are registered when you save. Removing a folder only unregisters it here; files on disk are
+                never moved or deleted by saving settings.
               </p>
             </div>
 
@@ -221,7 +222,7 @@ export function TVConfiguration() {
               <ul className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
                 {templateTokens.map((token) => (
                   <li key={token.token}>
-                    <code className="text-foreground">{token.token}</code> — {token.label}
+                    <code className="text-foreground">{token.token}</code>: {token.label}
                   </li>
                 ))}
               </ul>
@@ -262,12 +263,16 @@ export function TVConfiguration() {
               <HardDrive className="size-4 text-muted-foreground" />
               TV automation
             </CardTitle>
-            <CardDescription>Scheduled searches and how failed grabs are handled.</CardDescription>
+            <CardDescription>Scheduled searches for series with automatic downloads on, and how failed grabs are handled.</CardDescription>
           </CardHeader>
           <CardContent className="gap-5">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Automatic downloads are set per series. Series added with automatic downloads off are never searched here;
+              choose a release from the series details or turn automatic downloads on there.
+            </p>
             <div className="space-y-2">
               <label htmlFor="tv-poll-minutes" className="text-sm font-medium">
-                RSS check interval (minutes)
+                Check indexer feeds every (minutes)
               </label>
               <Input
                 id="tv-poll-minutes"
@@ -281,7 +286,7 @@ export function TVConfiguration() {
             </div>
             <div className="space-y-2">
               <label htmlFor="tv-search-hours" className="text-sm font-medium">
-                Missing search interval (hours)
+                Search missing episodes every (hours)
               </label>
               <Input
                 id="tv-search-hours"

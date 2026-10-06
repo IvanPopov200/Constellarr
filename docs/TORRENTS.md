@@ -8,7 +8,7 @@ on disk under the download directory.
 ## Wiring contract
 
 ```go
-service, err := torrents.New(ctx, pool, torrents.Options{Directory: downloadDir})
+service, err := torrents.New(ctx, pool, torrents.Options{Directory: downloadDir, Policy: manager.Policy()})
 service.Start(ctx)          // starts the coordinator and engine clients
 defer service.Close()       // flushes resume state and drops torrents
 service.Register(mux)       // adds the routes below under /api/v1
@@ -16,7 +16,7 @@ service.Register(mux)       // adds the routes below under /api/v1
 
 `New` requires the platform migrations to have run: the schema is owned by
 `backend/internal/downloads/migrations/011_torrents.sql` and
-`015_torrent_processing.sql`, and is applied by the downloads service migration runner, so
+`015_torrent_processing.sql` and `018_torrent_cancel.sql`, applied by the downloads migration runner, so
 construct the downloads manager before the torrent service.
 `Options.Testing` binds the engine to loopback and disables DHT, trackers and PEX; tests and
 local fixtures use it, production does not.
@@ -30,7 +30,7 @@ metadata, piece bitmaps and indexer API keys) are never returned.
 - `POST /api/v1/torrents` – add by `{magnet}`, `{torrent: <base64>, filename}`, or
   `{sourceId, resultId}` from a search result.
 - `GET /api/v1/torrents/{id}` – `{job, peers}` including files and peer connections.
-- `POST /api/v1/torrents/{id}/pause|resume|recheck` – transfer control; recheck clears
+- `POST /api/v1/torrents/{id}/pause|resume|cancel|recheck` – transfer control; recheck clears
   verified pieces and rehashes the data on disk before resuming.
 - `PUT /api/v1/torrents/{id}/limits` – `{seedRatioLimit, seedTimeLimitMinutes}`.
 - `DELETE /api/v1/torrents/{id}?files=true` – keeps files by default.
@@ -52,8 +52,13 @@ stay on disk. Pause keeps the torrent attached but disallows transfers. Verified
 persisted per job (`piece_bits`), so a restarted engine resumes without rehashing and a
 recheck re-verifies data that was changed outside Constellarr.
 
-DHT, PEX, the listening port, rate limits, active-job count and default seed limits are
-stored in `torrent_settings`. Rate limits and the active-job count apply immediately; a
+Cancel keeps the job, downloaded files, and verified pieces, and stops it until explicitly
+resumed. Global download holds keep unfinished torrents queued while completed torrents
+can keep seeding. Individual pauses and cancellations survive global resume and restarts.
+
+DHT, PEX, the listening port, upload cap, active-job count and default seed limits are
+stored in `torrent_settings`. The platform download cap and weekly schedule are shared
+with Usenet through **Speed & schedule**. Upload limits and active-job count apply immediately; a
 listening port, DHT or PEX change is reported with `restartRequired: true` and applies the
 next time the engine starts. Private torrents run on a dedicated client without DHT or PEX
 and listen on the next port after the configured one.
@@ -106,7 +111,7 @@ exposes the state as `processing` for the UI.
 ## Permissions and UI
 
 The Torrents page mirrors the API permissions: `downloads.read` shows the queue, details and
-search; `downloads.write` enables adding, pause, resume, recheck, retry, limits and delete;
+search; `downloads.write` enables adding, pause, resume, cancel, recheck, retry, limits and delete;
 `settings.read` shows engine settings and Torznab sources; `settings.write` changes them. A
 role without a permission never issues the matching request, so a read-only viewer sees
 values instead of errors. Engine health (`GET /api/v1/torrents/health`) is registered by the

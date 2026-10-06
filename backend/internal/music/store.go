@@ -637,7 +637,11 @@ func (s *Store) SaveConfig(ctx context.Context, cfg Config) (Config, error) {
 	return cfg, nil
 }
 
-const acquisitionColumns = `job_id, album_id, release, status, error, updated_at`
+const acquisitionColumns = `a.job_id, a.album_id, a.release,
+ CASE WHEN a.status IN ('imported','superseded','import-failed') THEN a.status
+      WHEN d.status IN ('paused','cancelled') THEN d.status
+      WHEN a.status IN ('paused','cancelled') THEN 'queued'
+      ELSE a.status END, a.error, a.updated_at`
 
 func scanAcquisition(row rowScanner) (Acquisition, error) {
 	var (
@@ -659,7 +663,11 @@ func scanAcquisition(row rowScanner) (Acquisition, error) {
 }
 
 func (s *Store) Acquisitions(ctx context.Context) ([]Acquisition, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+acquisitionColumns+` FROM music_acquisitions ORDER BY updated_at DESC LIMIT 200`)
+	// The recent window plus every album's latest acquisition, so older paused or cancelled downloads stay visible.
+	rows, err := s.pool.Query(ctx, `SELECT `+acquisitionColumns+` FROM music_acquisitions a JOIN downloads d ON d.id=a.job_id
+		WHERE a.job_id IN (SELECT job_id FROM music_acquisitions ORDER BY updated_at DESC LIMIT 200)
+		   OR a.job_id IN (SELECT DISTINCT ON (album_id) job_id FROM music_acquisitions ORDER BY album_id, updated_at DESC, job_id)
+		ORDER BY a.updated_at DESC, a.job_id`)
 	if err != nil {
 		return nil, dbError("list acquisitions", err)
 	}
@@ -676,7 +684,7 @@ func (s *Store) Acquisitions(ctx context.Context) ([]Acquisition, error) {
 }
 
 func (s *Store) AcquisitionsFor(ctx context.Context, albumID string) ([]Acquisition, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+acquisitionColumns+` FROM music_acquisitions WHERE album_id = $1 ORDER BY updated_at DESC`, albumID)
+	rows, err := s.pool.Query(ctx, `SELECT `+acquisitionColumns+` FROM music_acquisitions a JOIN downloads d ON d.id=a.job_id WHERE a.album_id = $1 ORDER BY a.updated_at DESC`, albumID)
 	if err != nil {
 		return nil, dbError("list album acquisitions", err)
 	}

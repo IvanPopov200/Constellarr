@@ -339,6 +339,10 @@ export function deliveryPhaseLabel(phase: string) {
       return 'Waiting for a release'
     case 'downloading':
       return 'Downloading'
+    case 'paused':
+      return 'Download paused'
+    case 'cancelled':
+      return 'Download cancelled'
     case 'importing':
       return 'Importing'
     case 'failed':

@@ -18,6 +18,7 @@ import (
 
 	"github.com/IvanPopov200/Constellarr/backend/internal/indexer"
 	"github.com/IvanPopov200/Constellarr/backend/internal/media"
+	"github.com/IvanPopov200/Constellarr/backend/internal/transferpolicy"
 	"github.com/IvanPopov200/Constellarr/backend/internal/usenet"
 )
 
@@ -31,6 +32,8 @@ var (
 const (
 	statusQueued      = "queued"
 	statusDownloading = "downloading"
+	statusPaused      = "paused"
+	statusCancelled   = "cancelled"
 	statusFailed      = "failed"
 	statusCompleted   = "completed"
 
@@ -64,6 +67,7 @@ type Job struct {
 	ReleaseID       string       `json:"releaseId"`
 	Title           string       `json:"title"`
 	Status          string       `json:"status"`
+	PauseReason     string       `json:"pauseReason,omitempty"`
 	BytesDone       int64        `json:"bytesDone"`
 	BytesTotal      int64        `json:"bytesTotal"`
 	SegmentsDone    int          `json:"segmentsDone"`
@@ -76,14 +80,18 @@ type Job struct {
 }
 
 type Manager struct {
-	pool *pgxpool.Pool
-	root string
+	pool   *pgxpool.Pool
+	root   string
+	policy *transferpolicy.Controller
 
 	configMu sync.RWMutex
 	cfg      Config
 	indexer  *indexer.Client
 	torrents TorrentSource
 	updateMu sync.Mutex
+
+	controlsMu sync.Mutex
+	controls   map[string]*jobControl
 
 	started  atomic.Bool
 	cancelMu sync.Mutex
@@ -110,6 +118,10 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg Config) (*Manager, error) 
 	if err := migrate(ctx, pool); err != nil {
 		return nil, err
 	}
+	policy, err := transferpolicy.New(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("downloads: initialize transfer policy: %w", err)
+	}
 	cfg.Directory = directory
 	if err := loadSettings(ctx, pool, &cfg); err != nil {
 		return nil, err
@@ -118,7 +130,7 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg Config) (*Manager, error) 
 	if err != nil {
 		return nil, err
 	}
-	return &Manager{pool: pool, root: root, cfg: cfg, indexer: client}, nil
+	return &Manager{pool: pool, root: root, policy: policy, cfg: cfg, indexer: client, controls: map[string]*jobControl{}}, nil
 }
 
 func (m *Manager) Start(ctx context.Context) {
@@ -132,7 +144,15 @@ func (m *Manager) Start(ctx context.Context) {
 	m.cancelMu.Lock()
 	m.cancel = cancel
 	m.cancelMu.Unlock()
-	m.workers.Add(1)
+	m.workers.Add(3)
+	go func() {
+		defer m.workers.Done()
+		m.policy.Run(runCtx)
+	}()
+	go func() {
+		defer m.workers.Done()
+		m.watchPolicy(runCtx)
+	}()
 	go func() {
 		defer m.workers.Done()
 		m.coordinate(runCtx)
@@ -264,7 +284,9 @@ func (m *Manager) Retry(ctx context.Context, id string) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	if job.Status != statusFailed {
+	switch job.Status {
+	case statusFailed, statusCancelled:
+	default:
 		return Job{}, ErrConflict
 	}
 	if job.Protocol == "torrent" {
@@ -278,6 +300,7 @@ func (m *Manager) Retry(ctx context.Context, id string) (Job, error) {
 		}
 		return m.saveTorrent(ctx, live, job.ReleaseID)
 	}
+	m.dropIntent(id)
 	return m.requeueJob(ctx, m.pool, id)
 }
 
@@ -438,6 +461,12 @@ func (m *Manager) runQueue(session *lockSession) {
 		if session.ctx.Err() != nil {
 			return
 		}
+		if !m.policy.Allowed() {
+			if !sleep(session.ctx, claimPoll) {
+				return
+			}
+			continue
+		}
 		job, nzb, err := m.claimNext(session.ctx, session.conn)
 		switch {
 		case errors.Is(err, ErrNotFound):
@@ -454,6 +483,12 @@ func (m *Manager) runQueue(session *lockSession) {
 }
 
 func (m *Manager) process(session *lockSession, job Job, nzb []byte) {
+	jobCtx, control := m.beginJob(session.ctx, job.ID)
+	defer m.endJob(control)
+	if !m.policy.Allowed() {
+		m.stopForControl(session, job.ID, control)
+		return
+	}
 	cfg := m.Config()
 	if !usenetConfigured(cfg) {
 		m.recordFailure(session, job.ID, "Usenet source is not configured")
@@ -469,10 +504,14 @@ func (m *Manager) process(session *lockSession, job Job, nzb []byte) {
 		return
 	}
 	progress := &progressWriter{manager: m, session: session, id: job.ID}
-	result, err := usenet.Download(session.ctx, nzb, inputDir, cfg.Usenet, progress.report)
+	result, err := usenet.Download(jobCtx, nzb, inputDir, cfg.Usenet, progress.report)
 	progress.finish(result.MissingSegments)
 	if err != nil {
 		if session.ctx.Err() != nil {
+			return
+		}
+		if jobCtx.Err() != nil {
+			m.stopForControl(session, job.ID, control)
 			return
 		}
 		m.recordFailure(session, job.ID, safeError(err, cfg))
@@ -483,15 +522,22 @@ func (m *Manager) process(session *lockSession, job Job, nzb []byte) {
 		m.recordFailure(session, job.ID, "download directory is invalid")
 		return
 	}
-	files, err := media.Process(session.ctx, inputDir, outputDir, result.MissingSegments, func(stage string) {
-		if session.ctx.Err() == nil {
-			if err := m.setStatus(session.ctx, session.conn, job.ID, stage); err != nil {
-				session.fail()
-			}
+	files, err := media.Process(jobCtx, inputDir, outputDir, result.MissingSegments, func(stage string) {
+		if jobCtx.Err() != nil {
+			return
+		}
+		// A stop that races the stage write must not look like a storage failure.
+		err := m.setStatus(jobCtx, session.conn, job.ID, stage)
+		if err != nil && !errors.Is(err, ErrConflict) && !errors.Is(err, context.Canceled) {
+			session.fail()
 		}
 	})
 	if err != nil {
 		if session.ctx.Err() != nil {
+			return
+		}
+		if jobCtx.Err() != nil {
+			m.stopForControl(session, job.ID, control)
 			return
 		}
 		m.recordFailure(session, job.ID, safeError(err, cfg))
@@ -502,13 +548,20 @@ func (m *Manager) process(session *lockSession, job Job, nzb []byte) {
 		m.recordFailure(session, job.ID, err.Error())
 		return
 	}
-	if err := m.complete(session.ctx, session.conn, job.ID, outputs); err != nil {
+	// A paused or cancelled row is not the worker's to overwrite.
+	if err := m.complete(session.ctx, session.conn, job.ID, outputs); err != nil && !errors.Is(err, ErrConflict) {
+		session.fail()
+	}
+}
+
+func (m *Manager) stopForControl(session *lockSession, id string, control *jobControl) {
+	if err := m.settleStop(session.ctx, session.conn, id, control); err != nil {
 		session.fail()
 	}
 }
 
 func (m *Manager) recordFailure(session *lockSession, id, message string) {
-	if err := m.failJob(session.ctx, session.conn, id, message); err != nil {
+	if err := m.failJob(session.ctx, session.conn, id, message); err != nil && !errors.Is(err, ErrConflict) {
 		session.fail()
 	}
 }
@@ -581,7 +634,7 @@ func (p *progressWriter) report(update usenet.Progress) {
 		return
 	}
 	p.last = time.Now()
-	if err := p.manager.saveProgress(p.session.ctx, p.session.conn, p.id, update); err != nil {
+	if err := p.manager.saveProgress(p.session.ctx, p.session.conn, p.id, update); err != nil && !errors.Is(err, ErrConflict) {
 		p.session.fail()
 	}
 }
@@ -595,7 +648,7 @@ func (p *progressWriter) finish(missing int) {
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(p.session.ctx), persistTimeout)
 	defer cancel()
-	if err := p.manager.saveProgress(ctx, p.session.conn, p.id, p.latest); err != nil {
+	if err := p.manager.saveProgress(ctx, p.session.conn, p.id, p.latest); err != nil && !errors.Is(err, ErrConflict) {
 		p.session.fail()
 	}
 }

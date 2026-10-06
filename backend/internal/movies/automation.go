@@ -250,7 +250,7 @@ func (s *Service) recordTask(ctx context.Context, name string) error {
 }
 
 func automaticCandidate(movie Movie, cfg Config) bool {
-	if !movie.Monitored || movie.Status == "downloading" || movie.Status == "importing" || movie.Status == "available" || movie.Status == "import-failed" || (!cfg.RetryFailed && movie.Error != "") {
+	if !movie.Monitored || movie.Status == "downloading" || movie.Status == "paused" || movie.Status == "cancelled" || movie.Status == "importing" || movie.Status == "available" || movie.Status == "import-failed" || (!cfg.RetryFailed && movie.Error != "") {
 		return false
 	}
 	return availabilityReached(movie, cfg)
