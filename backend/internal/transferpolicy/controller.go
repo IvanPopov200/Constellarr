@@ -117,7 +117,7 @@ func (c *Controller) Run(ctx context.Context) {
 	}
 }
 
-// Limiter returns the process-wide limiter; the pointer is stable for the controller's lifetime.
+// Limiter returns the process-wide limiter; the pointer is stable and its rate is never zero.
 func (c *Controller) Limiter() *rate.Limiter { return c.limiter }
 
 // Allowed reports whether transfers may run at the current clock without waiting for the ticker.
@@ -162,16 +162,17 @@ func (c *Controller) refreshLocked(now time.Time) {
 	c.effective = eff
 }
 
-// applyLimiter maps the effect onto the shared limiter; a paused policy holds all tokens.
+// applyLimiter maps the effect onto the shared limiter; a pause keeps the last usable rate.
 func applyLimiter(limiter *rate.Limiter, eff Effective) {
-	switch {
-	case eff.Paused:
-		limiter.SetLimit(0)
-	case eff.LimitBytesPerSecond <= 0:
-		limiter.SetLimit(rate.Inf)
-	default:
-		limiter.SetLimit(rate.Limit(eff.LimitBytesPerSecond))
+	if eff.Paused {
+		// The pause is enforced by Allowed() plus stopping or holding runs.
+		return
 	}
+	if eff.LimitBytesPerSecond > 0 {
+		limiter.SetLimit(rate.Limit(eff.LimitBytesPerSecond))
+		return
+	}
+	limiter.SetLimit(rate.Inf)
 }
 
 func (c *Controller) updateStored(ctx context.Context, mutate func(*Config)) (Config, error) {

@@ -169,6 +169,10 @@ func downloadJob(job Job, row *processingRow) downloads.Job {
 // downloadStatus maps torrent states onto the vocabulary used by movie and TV imports.
 func downloadStatus(status string, row *processingRow) string {
 	switch status {
+	case statusCancelled:
+		return "cancelled"
+	case statusPaused:
+		return "paused"
 	case statusCompleted, statusSeeding:
 		if row != nil {
 			switch row.state {

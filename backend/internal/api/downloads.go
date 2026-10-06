@@ -15,8 +15,11 @@ import (
 
 	"github.com/IvanPopov200/Constellarr/backend/internal/downloads"
 	"github.com/IvanPopov200/Constellarr/backend/internal/movies"
+	"github.com/IvanPopov200/Constellarr/backend/internal/transferpolicy"
 	"github.com/IvanPopov200/Constellarr/backend/internal/tv"
 )
+
+const maxPolicyBytes = 64 << 10
 
 type source struct {
 	Name        string `json:"name"`
@@ -100,6 +103,48 @@ func registerDownloads(mux *http.ServeMux, m *downloads.Manager) {
 		job, err := m.Retry(r.Context(), r.PathValue("id"))
 		respond(w, http.StatusOK, job, err)
 	})
+	mux.HandleFunc("POST /api/v1/downloads/{id}/pause", func(w http.ResponseWriter, r *http.Request) {
+		job, err := m.Pause(r.Context(), r.PathValue("id"))
+		respond(w, http.StatusOK, job, err)
+	})
+	mux.HandleFunc("POST /api/v1/downloads/{id}/resume", func(w http.ResponseWriter, r *http.Request) {
+		job, err := m.Resume(r.Context(), r.PathValue("id"))
+		respond(w, http.StatusOK, job, err)
+	})
+	mux.HandleFunc("POST /api/v1/downloads/{id}/cancel", func(w http.ResponseWriter, r *http.Request) {
+		job, err := m.Cancel(r.Context(), r.PathValue("id"))
+		respond(w, http.StatusOK, job, err)
+	})
+	mux.HandleFunc("GET /api/v1/downloads/policy", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, m.PolicySnapshot())
+	})
+	mux.HandleFunc("PUT /api/v1/downloads/policy", func(w http.ResponseWriter, r *http.Request) {
+		var input transferpolicy.Config
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPolicyBytes))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid transfer policy request"})
+			return
+		}
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send one transfer policy request"})
+			return
+		}
+		snapshot, err := m.UpdatePolicy(r.Context(), input)
+		respond(w, http.StatusOK, snapshot, err)
+	})
+	for _, endpoint := range []struct {
+		path   string
+		paused bool
+	}{
+		{"/api/v1/downloads/pause", true},
+		{"/api/v1/downloads/resume", false},
+	} {
+		mux.HandleFunc("POST "+endpoint.path, func(w http.ResponseWriter, r *http.Request) {
+			snapshot, err := m.SetPaused(r.Context(), endpoint.paused)
+			respond(w, http.StatusOK, snapshot, err)
+		})
+	}
 	mux.HandleFunc("GET /api/v1/downloads/{id}/file", func(w http.ResponseWriter, r *http.Request) {
 		name := r.URL.Query().Get("name")
 		file, err := m.OpenFile(r.Context(), r.PathValue("id"), name)

@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -110,7 +111,7 @@ func runServer(shutdown context.Context, addr, databaseURL string) (restart bool
 		return false, err
 	}
 	automation.add(musicLibrary.Close)
-	transfers, err := torrents.New(workersCtx, pool, torrents.Options{Directory: settings.Directory})
+	transfers, err := torrents.New(workersCtx, pool, torrents.Options{Directory: settings.Directory, Policy: manager.Policy()})
 	if err != nil {
 		return false, err
 	}

@@ -159,6 +159,10 @@ func TestControllerSetPausedKeepsSchedule(t *testing.T) {
 	if _, err := controller.Update(ctx, config); err != nil {
 		t.Fatal(err)
 	}
+	before := controller.Limiter().Limit()
+	if before <= 0 {
+		t.Fatalf("policy left an unusable limiter rate: %v", before)
+	}
 	paused, err := controller.SetPaused(ctx, true)
 	if err != nil {
 		t.Fatal(err)
@@ -171,8 +175,9 @@ func TestControllerSetPausedKeepsSchedule(t *testing.T) {
 	if !reflect.DeepEqual(paused.Config, expectedPaused) {
 		t.Fatalf("manual pause changed the config = %+v", paused.Config)
 	}
-	if controller.Limiter().Limit() != 0 {
-		t.Fatalf("limiter while paused = %v", controller.Limiter().Limit())
+	// A pause must not zero the shared rate: torrent clients cannot run with a zero limit.
+	if got := controller.Limiter().Limit(); got != before {
+		t.Fatalf("limiter while paused = %v, want the usable rate %v", got, before)
 	}
 	restored, err := transferpolicy.New(ctx, pool)
 	if err != nil {
@@ -278,8 +283,8 @@ func TestControllerSharesOneLimiter(t *testing.T) {
 	if _, err := controller.SetPaused(ctx, true); err != nil {
 		t.Fatal(err)
 	}
-	if limiter.Limit() != 0 {
-		t.Fatalf("limiter while paused = %v", limiter.Limit())
+	if limiter.Limit() != rate.Limit(512*1024) {
+		t.Fatalf("limiter while paused = %v, want the usable 512 KiB/s", limiter.Limit())
 	}
 	if _, err := controller.SetPaused(ctx, false); err != nil {
 		t.Fatal(err)
@@ -333,11 +338,14 @@ func TestControllerRunBlocksUntilCancelled(t *testing.T) {
 		close(done)
 	}()
 	deadline := time.Now().Add(3 * time.Second)
-	for controller.Limiter().Limit() != 0 || controller.Allowed() {
+	for controller.Allowed() {
 		if time.Now().After(deadline) {
 			t.Fatalf("Run did not apply the pause: limiter = %v, allowed = %v", controller.Limiter().Limit(), controller.Allowed())
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+	if got := controller.Limiter().Limit(); got != rate.Inf {
+		t.Fatalf("a pause must keep the limiter usable, got %v", got)
 	}
 	select {
 	case <-done:

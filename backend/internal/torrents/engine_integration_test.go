@@ -64,7 +64,7 @@ func testSchema(t *testing.T) *pgxpool.Pool {
 // applySchema runs the platform migrations that own the torrent tables.
 func applySchema(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	for _, name := range []string{"011_torrents.sql", "015_torrent_processing.sql"} {
+	for _, name := range []string{"011_torrents.sql", "015_torrent_processing.sql", "018_torrent_cancel.sql"} {
 		body, err := os.ReadFile(filepath.Join("..", "downloads", "migrations", name))
 		if err != nil {
 			t.Fatalf("cannot read %s: %v", name, err)

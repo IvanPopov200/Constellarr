@@ -449,13 +449,48 @@ func TestControllerFollowsClockAndCachesNextChange(t *testing.T) {
 	}
 	clock.set(monday.Add(12*time.Hour + 30*time.Minute))
 	c.refresh(clock.now())
-	if limiter.Limit() != 0 || c.Allowed() {
+	if limiter.Limit() != rate.Limit(256*1024) || c.Allowed() {
 		t.Fatalf("paused limiter = %v, allowed = %v", limiter.Limit(), c.Allowed())
 	}
 	clock.set(monday.Add(13 * time.Hour))
 	c.refresh(clock.now())
 	if limiter.Limit() != rate.Limit(1024*1024) || !c.Allowed() {
 		t.Fatalf("resumed limiter = %v, allowed = %v", limiter.Limit(), c.Allowed())
+	}
+}
+
+// A pause is reported through Allowed() and Effective and must never zero the shared limiter rate.
+func TestControllerPauseKeepsLimiterUsable(t *testing.T) {
+	cfg := Config{
+		Timezone: "UTC", Limit: Limit{Mode: ModeKbps, Value: 512}, OutsideSchedule: OutsideNormal,
+		ScheduleEnabled: true,
+		Windows:         []Window{{ID: "sleep", Name: "Sleep", Days: []int{1}, Start: "12:00", End: "13:00", Action: ActionPaused}},
+	}
+	monday := time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)
+	c, clock := testController(t, monday.Add(11*time.Hour), cfg)
+	limiter := c.Limiter()
+	if limiter.Limit() != rate.Limit(512*1024) || !c.Allowed() {
+		t.Fatalf("limited limiter = %v, allowed = %v", limiter.Limit(), c.Allowed())
+	}
+	clock.set(monday.Add(12 * time.Hour))
+	snapshot := c.Snapshot()
+	if !snapshot.Effective.Paused || snapshot.Effective.LimitBytesPerSecond != 0 {
+		t.Fatalf("paused effective = %+v, want paused with no resolved limit", snapshot.Effective)
+	}
+	if c.Allowed() || limiter.Limit() != rate.Limit(512*1024) {
+		t.Fatalf("paused limiter = %v, allowed = %v", limiter.Limit(), c.Allowed())
+	}
+	clock.set(monday.Add(13 * time.Hour))
+	if !c.Allowed() || limiter.Limit() != rate.Limit(512*1024) {
+		t.Fatalf("resumed limiter = %v, allowed = %v", limiter.Limit(), c.Allowed())
+	}
+	// A controller loaded paused starts unlimited, never unusable.
+	startsPaused, _ := testController(t, monday.Add(12*time.Hour), cfg)
+	if startsPaused.Allowed() {
+		t.Fatal("a controller inside a paused window must not allow transfers")
+	}
+	if got := startsPaused.Limiter().Limit(); got != rate.Inf {
+		t.Fatalf("newly paused limiter = %v, want unlimited", got)
 	}
 }
 
@@ -477,11 +512,14 @@ func TestControllerRunAppliesChangesUntilCancelled(t *testing.T) {
 	}()
 	clock.set(monday.Add(6*time.Hour + 30*time.Minute))
 	deadline := time.Now().Add(3 * time.Second)
-	for c.Limiter().Limit() != 0 || c.Allowed() {
+	for c.Allowed() {
 		if time.Now().After(deadline) {
 			t.Fatalf("Run did not apply the pause: limiter = %v, allowed = %v", c.Limiter().Limit(), c.Allowed())
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+	if c.Limiter().Limit() != rate.Inf {
+		t.Fatalf("a pause must keep the limiter usable, got %v", c.Limiter().Limit())
 	}
 	select {
 	case <-done:

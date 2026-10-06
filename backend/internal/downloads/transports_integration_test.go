@@ -28,6 +28,18 @@ func (f *torrentFixture) Retry(context.Context, string) (downloads.Job, error) {
 	f.job.Status = "downloading"
 	return f.job, nil
 }
+func (f *torrentFixture) Pause(context.Context, string) (downloads.Job, error) {
+	f.job.Status = "paused"
+	return f.job, nil
+}
+func (f *torrentFixture) Resume(context.Context, string) (downloads.Job, error) {
+	f.job.Status = "downloading"
+	return f.job, nil
+}
+func (f *torrentFixture) Cancel(context.Context, string) (downloads.Job, error) {
+	f.job.Status = "cancelled"
+	return f.job, nil
+}
 func (f *torrentFixture) OutputDirectory(string) (string, error) { return f.directory, nil }
 
 func TestTorrentAcquisitionPersistsAndKeepsSeedingFiles(t *testing.T) {

@@ -36,6 +36,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/v1/torrents/{id}", s.handleDelete)
 	mux.HandleFunc("POST /api/v1/torrents/{id}/pause", s.handlePause)
 	mux.HandleFunc("POST /api/v1/torrents/{id}/resume", s.handleResume)
+	mux.HandleFunc("POST /api/v1/torrents/{id}/cancel", s.handleCancel)
 	mux.HandleFunc("POST /api/v1/torrents/{id}/recheck", s.handleRecheck)
 	mux.HandleFunc("PUT /api/v1/torrents/{id}/limits", s.handleLimits)
 	mux.HandleFunc("GET /api/v1/torrents/{id}/file", s.handleFile)
@@ -102,6 +103,11 @@ func (s *Service) handlePause(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) handleResume(w http.ResponseWriter, r *http.Request) {
 	job, err := s.Resume(r.Context(), r.PathValue("id"))
+	respond(w, http.StatusOK, job, err)
+}
+
+func (s *Service) handleCancel(w http.ResponseWriter, r *http.Request) {
+	job, err := s.Cancel(r.Context(), r.PathValue("id"))
 	respond(w, http.StatusOK, job, err)
 }
 

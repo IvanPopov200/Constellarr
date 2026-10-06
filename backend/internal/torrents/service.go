@@ -26,6 +26,7 @@ type Options struct {
 	Directory  string
 	Testing    bool
 	ListenPort int
+	Policy     Policy
 }
 
 type Service struct {
@@ -41,6 +42,10 @@ type Service struct {
 	publicClient  *torrent.Client
 	privateClient *torrent.Client
 	engineErr     string
+	clientErr     bool
+
+	policy        Policy
+	sharedLimiter bool
 
 	downloadLimiter *rate.Limiter
 	uploadLimiter   *rate.Limiter
@@ -51,7 +56,10 @@ type Service struct {
 	runs   map[string]*jobRun
 
 	intentsMu sync.Mutex
-	intents   map[string]bool
+	intents   map[string]jobIntent
+
+	processMu      sync.Mutex
+	processCancels map[string]context.CancelFunc
 
 	started  atomic.Bool
 	cancelMu sync.Mutex
@@ -60,6 +68,12 @@ type Service struct {
 	wake     chan struct{}
 
 	processingActive atomic.Int64
+}
+
+// jobIntent records pause and cancel requests that must survive a concurrent torrent attach.
+type jobIntent struct {
+	paused    bool
+	cancelled bool
 }
 
 // New creates the torrent service; downloads migrations must have created the torrent tables.
@@ -81,9 +95,17 @@ func New(ctx context.Context, pool *pgxpool.Pool, options Options) (*Service, er
 	}
 	service := &Service{
 		pool: pool, directory: directory, root: root, testing: options.Testing,
-		runs: make(map[string]*jobRun), intents: make(map[string]bool), wake: make(chan struct{}, 1),
+		runs: make(map[string]*jobRun), intents: make(map[string]jobIntent), wake: make(chan struct{}, 1),
+		processCancels:  make(map[string]context.CancelFunc),
 		downloadLimiter: rate.NewLimiter(rate.Inf, 1<<20), uploadLimiter: rate.NewLimiter(rate.Inf, 1<<20),
 		httpClient: boundedHTTPClient(), results: newResultCache(),
+	}
+	if usablePolicy(options.Policy) {
+		service.policy = options.Policy
+		// The policy owns the shared download limiter; torrent settings must not touch it.
+		if limiter := options.Policy.Limiter(); limiter != nil {
+			service.downloadLimiter, service.sharedLimiter = limiter, true
+		}
 	}
 	if err := service.checkSchema(ctx, pool); err != nil {
 		return nil, err
@@ -266,6 +288,14 @@ func (s *Service) Add(ctx context.Context, input AddInput) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
+	if !s.policyAllowed() {
+		reason := s.holdReason()
+		if err := s.setQueuedReason(ctx, s.pool, created.ID, reason); err != nil {
+			s.setEngineError(err.Error())
+		} else {
+			created.Error = reason
+		}
+	}
 	s.wakeEngine()
 	return s.liveJob(created), nil
 }
@@ -438,30 +468,48 @@ func ratioOf(uploaded, downloaded int64) float64 {
 func (s *Service) markPauseIntent(id string, paused bool) {
 	s.intentsMu.Lock()
 	defer s.intentsMu.Unlock()
-	if paused {
-		s.intents[id] = true
-		return
-	}
-	delete(s.intents, id)
+	intent := s.intents[id]
+	intent.paused = paused
+	s.storeIntentLocked(id, intent)
 }
 
 func (s *Service) pausedByIntent(id string) bool {
 	s.intentsMu.Lock()
 	defer s.intentsMu.Unlock()
-	return s.intents[id]
+	return s.intents[id].paused
+}
+
+// markCancelIntent records a cancel before any status write so a concurrent attach cannot revive the job.
+func (s *Service) markCancelIntent(id string, cancelled bool) {
+	s.intentsMu.Lock()
+	defer s.intentsMu.Unlock()
+	intent := s.intents[id]
+	intent.cancelled = cancelled
+	s.storeIntentLocked(id, intent)
+}
+
+func (s *Service) cancelledByIntent(id string) bool {
+	s.intentsMu.Lock()
+	defer s.intentsMu.Unlock()
+	return s.intents[id].cancelled
+}
+
+func (s *Service) storeIntentLocked(id string, intent jobIntent) {
+	if intent == (jobIntent{}) {
+		delete(s.intents, id)
+		return
+	}
+	s.intents[id] = intent
 }
 
 func (s *Service) Pause(ctx context.Context, id string) (Job, error) {
-	s.markPauseIntent(id, true)
+	if s.cancelledByIntent(id) {
+		return Job{}, ErrConflict
+	}
 	if run := s.run(id); run != nil {
-		run.mu.Lock()
-		run.paused = true
-		run.mu.Unlock()
-		if tor := run.torrent(); tor != nil {
-			tor.DisallowDataDownload()
-			tor.DisallowDataUpload()
+		if !s.pauseRun(ctx, run) {
+			return Job{}, ErrConflict
 		}
-		s.setRunStatus(ctx, run, statusPaused, "")
 		return s.liveJob(run.snapshot().Job), nil
 	}
 	job, err := s.jobByID(ctx, s.pool, id)
@@ -475,28 +523,46 @@ func (s *Service) Pause(ctx context.Context, id string) (Job, error) {
 	default:
 		return Job{}, ErrConflict
 	}
-	if err := s.setStatus(ctx, s.pool, id, statusPaused, ""); err != nil {
+	s.markPauseIntent(id, true)
+	if err := s.setStatusWhen(ctx, s.pool, id, statusPaused, "", statusCancelled); err != nil {
+		s.markPauseIntent(id, false)
 		return Job{}, err
 	}
-	job.Status = statusPaused
+	job.Status, job.Error = statusPaused, ""
 	// The engine may have attached the torrent while the pause was saved.
 	if run := s.run(id); run != nil {
-		run.mu.Lock()
-		run.paused = true
-		run.mu.Unlock()
-		if tor := run.torrent(); tor != nil {
-			tor.DisallowDataDownload()
-			tor.DisallowDataUpload()
-		}
-		s.setRunStatus(ctx, run, statusPaused, "")
+		s.pauseRun(ctx, run)
 	}
 	return job, nil
+}
+
+// pauseRun pauses an attached run; a cancellation that won the race is never overwritten.
+func (s *Service) pauseRun(ctx context.Context, run *jobRun) bool {
+	run.mu.Lock()
+	if run.cancelled {
+		run.mu.Unlock()
+		return false
+	}
+	run.paused = true
+	run.job.Status, run.job.Error, run.job.UpdatedAt = statusPaused, "", time.Now()
+	run.mu.Unlock()
+	if tor := run.torrent(); tor != nil {
+		tor.DisallowDataDownload()
+		tor.DisallowDataUpload()
+	}
+	if err := s.setStatusWhen(ctx, s.pool, run.job.ID, statusPaused, "", statusCancelled); err != nil {
+		s.setEngineError(err.Error())
+	}
+	return true
 }
 
 func (s *Service) Resume(ctx context.Context, id string) (Job, error) {
 	job, err := s.jobByID(ctx, s.pool, id)
 	if err != nil {
 		return Job{}, err
+	}
+	if job.Status == statusCancelled || s.cancelledByIntent(id) {
+		return s.resumeCancelled(ctx, job)
 	}
 	retried := s.retryProcessing(ctx, id)
 	if run := s.run(id); run != nil {
@@ -537,11 +603,57 @@ func (s *Service) Resume(ctx context.Context, id string) (Job, error) {
 		}
 		job.Error = ""
 	}
-	if err := s.setStatus(ctx, s.pool, id, statusQueued, ""); err != nil {
+	if err := s.queueUnlessCancelled(ctx, s.pool, id); err != nil {
 		return Job{}, err
 	}
 	job.Status = statusQueued
 	s.wakeEngine()
+	return job, nil
+}
+
+// resumeCancelled requeues a cancelled job; cancelled jobs never restart without this explicit request.
+func (s *Service) resumeCancelled(ctx context.Context, job Job) (Job, error) {
+	s.markCancelIntent(job.ID, false)
+	s.markPauseIntent(job.ID, false)
+	s.retryProcessing(ctx, job.ID)
+	// The guard in startRun keeps a cancel that races this requeue from being lost.
+	if err := s.setStatus(ctx, s.pool, job.ID, statusQueued, ""); err != nil {
+		return Job{}, err
+	}
+	job.Status, job.Error = statusQueued, ""
+	s.wakeEngine()
+	return job, nil
+}
+
+// Cancel stops a job's transfer and extraction without deleting its files; resume is the only way back.
+func (s *Service) Cancel(ctx context.Context, id string) (Job, error) {
+	job, err := s.jobByID(ctx, s.pool, id)
+	if err != nil {
+		return Job{}, err
+	}
+	if job.Status == statusCancelled || s.cancelledByIntent(id) {
+		return job, nil
+	}
+	s.markCancelIntent(id, true)
+	s.markPauseIntent(id, false)
+	s.cancelProcessing(id)
+	if run := s.run(id); run != nil {
+		run.mu.Lock()
+		run.cancelled = true
+		run.mu.Unlock()
+		if tor := run.torrent(); tor != nil {
+			tor.DisallowDataDownload()
+			tor.DisallowDataUpload()
+		}
+		s.persistRunNow(run)
+		s.dropRun(run)
+	}
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), persistTimeout)
+	defer cancel()
+	if err := s.setStatus(writeCtx, s.pool, id, statusCancelled, ""); err != nil {
+		return Job{}, err
+	}
+	job.Status, job.Error = statusCancelled, ""
 	return job, nil
 }
 
@@ -551,12 +663,21 @@ func (s *Service) Recheck(ctx context.Context, id string) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
+	if job.Status == statusCancelled {
+		return Job{}, ErrConflict
+	}
 	if run := s.run(id); run != nil {
 		s.dropRun(run)
 	}
-	if _, err := s.pool.Exec(ctx, `UPDATE torrent_jobs SET pieces_done = 0, piece_bits = '', status = $2,
-		error = '', seeding_started_at = NULL, updated_at = now() WHERE id = $1`, id, statusQueued); err != nil {
+	// A cancel that lands mid-recheck must win over the requeue below.
+	tag, err := s.pool.Exec(ctx, `UPDATE torrent_jobs SET pieces_done = 0, piece_bits = '', status = $2,
+		error = '', seeding_started_at = NULL, updated_at = now() WHERE id = $1 AND status <> $3`,
+		id, statusQueued, statusCancelled)
+	if err != nil {
 		return Job{}, storeError("recheck job", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return Job{}, ErrConflict
 	}
 	job.Status, job.PiecesDone = statusQueued, 0
 	s.markPauseIntent(id, false)
@@ -590,6 +711,7 @@ func (s *Service) Delete(ctx context.Context, id string, removeFiles bool) (bool
 		s.dropRun(run)
 	}
 	s.markPauseIntent(id, false)
+	s.markCancelIntent(id, false)
 	removed := false
 	if removeFiles {
 		dir, err := s.dataDir(job.InfoHash)

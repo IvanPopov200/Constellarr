@@ -31,6 +31,7 @@ const (
 	statusPaused      = "paused"
 	statusCompleted   = "completed"
 	statusFailed      = "failed"
+	statusCancelled   = "cancelled"
 
 	sourceMagnet  = "magnet"
 	sourceFile    = "file"

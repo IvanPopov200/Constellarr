@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/javi11/nntppool/v5"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -178,7 +179,7 @@ func verifyParts(f *os.File, st *fileState) error {
 	return nil
 }
 
-func worker(ctx context.Context, clients []*nntppool.Client, partsDir string, cached map[string]segment, tasks <-chan segmentTask, results chan<- segmentResult) {
+func worker(ctx context.Context, clients []*nntppool.Client, limiter *rate.Limiter, partsDir string, cached map[string]segment, tasks <-chan segmentTask, results chan<- segmentResult) {
 	for task := range tasks {
 		if ctx.Err() != nil {
 			return
@@ -187,7 +188,7 @@ func worker(ctx context.Context, clients []*nntppool.Client, partsDir string, ca
 			results <- segmentResult{task: task, seg: s}
 			continue
 		}
-		s, err, hard := fetchSegment(ctx, clients, task)
+		s, err, hard := fetchSegment(ctx, clients, limiter, task)
 		if err != nil {
 			results <- segmentResult{task: task, err: err, hard: hard}
 			continue
@@ -200,9 +201,17 @@ func worker(ctx context.Context, clients []*nntppool.Client, partsDir string, ca
 	}
 }
 
+// A shared limiter may wait indefinitely; socket stalls remain bounded by limitedConn.
+func segmentContext(ctx context.Context, limiter *rate.Limiter) (context.Context, context.CancelFunc) {
+	if limiter == nil {
+		return context.WithTimeout(ctx, segmentTimeout)
+	}
+	return context.WithCancel(ctx)
+}
+
 // fetchSegment tries each configured host with a real BODY before concluding the article is missing.
-func fetchSegment(ctx context.Context, clients []*nntppool.Client, task segmentTask) (segment, error, bool) {
-	actx, cancel := context.WithTimeout(ctx, segmentTimeout)
+func fetchSegment(ctx context.Context, clients []*nntppool.Client, limiter *rate.Limiter, task segmentTask) (segment, error, bool) {
+	actx, cancel := segmentContext(ctx, limiter)
 	defer cancel()
 	var hardErr, damagedErr, lastErr error
 	for _, client := range clients {

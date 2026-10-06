@@ -55,6 +55,24 @@ func (s torrentSource) Retry(ctx context.Context, id string) (downloads.Job, err
 	return s.Get(ctx, id)
 }
 
+func (s torrentSource) Pause(ctx context.Context, id string) (downloads.Job, error) {
+	if _, err := s.service.Pause(ctx, id); err != nil {
+		return downloads.Job{}, torrentError(err)
+	}
+	return s.Get(ctx, id)
+}
+
+func (s torrentSource) Resume(ctx context.Context, id string) (downloads.Job, error) {
+	return s.Retry(ctx, id)
+}
+
+func (s torrentSource) Cancel(ctx context.Context, id string) (downloads.Job, error) {
+	if _, err := s.service.Cancel(ctx, id); err != nil {
+		return downloads.Job{}, torrentError(err)
+	}
+	return s.Get(ctx, id)
+}
+
 func (s torrentSource) OutputDirectory(id string) (string, error) {
 	path, err := s.service.OutputDirectory(id)
 	return path, torrentError(err)
