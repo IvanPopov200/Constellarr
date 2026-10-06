@@ -50,6 +50,7 @@ import {
   detailFetchLimit,
   formatDate,
   formatDateTime,
+  manualWantedRows,
   monitorModes,
   ratingText,
   seasonLabel,
@@ -61,12 +62,14 @@ import {
   tagsOf,
   todayStart,
   wantedRows,
+  type WantedRow,
 } from '@/components/tv-shared'
 import {
   tvApi,
   type AddSeriesInput,
   type BulkSeriesInput,
   type CalendarEntry,
+  type Episode,
   type RootFolder,
   type Series,
   type Target,
@@ -78,6 +81,8 @@ import { cn } from 'cn'
 type Tab = 'library' | 'wanted' | 'calendar' | 'activity' | 'profiles'
 
 type SortField = 'title' | 'year' | 'rating' | 'added' | 'progress' | 'next'
+
+const manualPickPageSize = 25
 
 const sortFields: { value: SortField; label: string }[] = [
   { value: 'title', label: 'Title' },
@@ -377,7 +382,7 @@ function LibraryView({
       <div id="tv-library-filters" className={cn(filtersOpen ? 'grid' : 'hidden', 'gap-2 rounded-lg border border-border p-3 sm:grid sm:grid-cols-2 lg:grid-cols-4')}>
         <div className="space-y-1.5">
           <label htmlFor="tv-filter-monitor" className="text-xs font-medium text-muted-foreground">
-            Monitoring
+            Automatic downloads
           </label>
           <Select
             id="tv-filter-monitor"
@@ -385,9 +390,9 @@ function LibraryView({
             value={monitor}
             onChange={(event) => setMonitor(event.target.value)}
           >
-            <option value="all">All monitoring</option>
-            <option value="monitored">Monitored</option>
-            <option value="unmonitored">Unmonitored</option>
+            <option value="all">All series</option>
+            <option value="monitored">Downloading automatically</option>
+            <option value="unmonitored">Manual only</option>
           </Select>
         </div>
         <div className="space-y-1.5">
@@ -583,7 +588,7 @@ function LibraryView({
                 <th scope="col" className="px-3 py-2 font-medium">Progress</th>
                 <th scope="col" className="px-3 py-2 font-medium">Next air date</th>
                 <th scope="col" className="px-3 py-2 font-medium">Rating</th>
-                <th scope="col" className="px-3 py-2 font-medium">Monitored</th>
+                <th scope="col" className="px-3 py-2 font-medium">Automatic downloads</th>
                 <th scope="col" className="px-3 py-2 font-medium">Profile</th>
                 <th scope="col" className="px-3 py-2 font-medium">Tags</th>
               </tr>
@@ -636,7 +641,7 @@ function LibraryView({
                       {next !== undefined ? formatDate(next) : 'None'}
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground">{rating ?? 'Unknown'}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{item.monitored ? 'Yes' : 'No'}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{item.monitored ? 'Automatic' : 'Manual'}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{profileName}</td>
                     <td className="px-3 py-2.5">
                       {tagsOf(item).length > 0 ? (
@@ -674,23 +679,23 @@ function LibraryView({
           </div>
           <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
             <Select
-              aria-label="Bulk monitoring"
+              aria-label="Bulk automatic downloads"
               value={bulk.monitored}
               onChange={(event) => setBulk({ ...bulk, monitored: event.target.value })}
             >
-              <option value="keep">Monitoring: keep</option>
-              <option value="monitored">Monitoring: monitored</option>
-              <option value="unmonitored">Monitoring: unmonitored</option>
+              <option value="keep">Automatic downloads: keep</option>
+              <option value="monitored">Automatic downloads: on</option>
+              <option value="unmonitored">Automatic downloads: off</option>
             </Select>
             <Select
-              aria-label="Bulk monitor mode"
+              aria-label="Bulk episodes to download"
               value={bulk.monitorMode}
               onChange={(event) => setBulk({ ...bulk, monitorMode: event.target.value })}
             >
-              <option value="keep">Monitor mode: keep</option>
+              <option value="keep">Episodes to download: keep</option>
               {monitorModes.map((mode) => (
                 <option key={mode.value} value={mode.value}>
-                  Monitor mode: {mode.label}
+                  Episodes to download: {mode.label}
                 </option>
               ))}
             </Select>
@@ -757,6 +762,77 @@ function LibraryView({
   )
 }
 
+function WantedItem({
+  row,
+  manual,
+  canWrite,
+  onOpenSeries,
+  onSearch,
+}: {
+  row: WantedRow
+  manual: boolean
+  canWrite: boolean
+  onOpenSeries: (id: string) => void
+  onSearch: (series: Series, episode: Episode) => void
+}) {
+  const { series: item, episode } = row
+  const at = airDateValue(episode.airDate)
+  const upgrade = episode.status === 'cutoff-unmet'
+  const current = bestFile(episode)
+  const context = `${item.metadata.title || 'Series'} ${seasonLabel(episode.season)} episode ${episode.number}`
+  return (
+    <li className="flex flex-wrap items-center gap-3 p-3">
+      <Poster title={item.metadata.title} poster={item.metadata.poster} className="h-14 w-10 shrink-0 rounded-sm" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">
+          {item.metadata.title || 'Untitled'}
+          <span className="font-normal text-muted-foreground">
+            {' '}
+            · {seasonLabel(episode.season)} episode {episode.number}
+          </span>
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {episode.title || 'Untitled episode'} ·{' '}
+          {at === null ? 'Air date unknown' : `Aired ${formatDate(at)}`}
+          {upgrade && current ? ` · Current file ${current.quality || 'quality unknown'}` : ''}
+          {episode.lastSearchAt ? ` · Last search ${formatAge(episode.lastSearchAt)}` : ''}
+        </p>
+        {manual && (
+          <p className="text-xs text-muted-foreground">
+            Automatic downloads are off for this series. Search releases and pick one yourself, or turn automatic
+            downloads on in the series details.
+          </p>
+        )}
+        {upgrade && <p className="text-xs text-amber-300">Below the profile cutoff; an upgrade is wanted.</p>}
+        {!manual && at === null && !upgrade && (
+          <p className="flex items-center gap-1 text-xs text-amber-300">
+            <CircleAlertIcon className="size-3.5 shrink-0" />
+            Waiting for a known air date; automatic searches skip this episode until then.
+          </p>
+        )}
+        {episode.error && <p className="text-xs text-destructive">{episode.error}</p>}
+      </div>
+      <Badge variant="outline" className="text-muted-foreground">
+        {manual ? 'Manual' : at === null ? 'Manual choice' : 'Automatic'}
+      </Badge>
+      {episode.status && <StatusBadge status={episode.status} />}
+      <Button size="sm" variant="outline" onClick={() => onOpenSeries(item.id)}>
+        Open series
+      </Button>
+      {canWrite && (
+        <Button
+          size="sm"
+          aria-label={`Search releases for ${context}`}
+          onClick={() => onSearch(item, episode)}
+        >
+          <SearchIcon data-icon="inline-start" />
+          Search releases
+        </Button>
+      )}
+    </li>
+  )
+}
+
 function WantedTab({
   active,
   series,
@@ -764,6 +840,7 @@ function WantedTab({
   canWrite,
   onOpenSeries,
   onGrabbed,
+  onLoadDetails,
 }: {
   active: boolean
   series: Series[]
@@ -771,15 +848,57 @@ function WantedTab({
   canWrite: boolean
   onOpenSeries: (id: string) => void
   onGrabbed: (id: string) => void
+  onLoadDetails: (ids: string[]) => Promise<string[]>
 }) {
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<string>('')
   const [release, setRelease] = useState<{ series: Series; target: Target } | null>(null)
+  const [manualOpen, setManualOpen] = useState(false)
+  const [manualShown, setManualShown] = useState(manualPickPageSize)
+  const [manualLoading, setManualLoading] = useState(false)
+  const [manualFailed, setManualFailed] = useState<string[]>([])
 
   const pendingDetails = series.filter((item) => seriesNeedsAttention(item) && !details[item.id])
   const rows = useMemo(() => wantedRows(series, details), [series, details])
   const searchable = rows.filter((row) => airDateValue(row.episode.airDate) !== null).length
+  const manualSeries = useMemo(() => series.filter((item) => !item.monitored), [series])
+  const manualIds = useMemo(
+    () => manualSeries.slice(0, detailFetchLimit).map((item) => item.id),
+    [manualSeries],
+  )
+  const manualRows = useMemo(() => manualWantedRows(manualSeries, details), [manualSeries, details])
+  const manualPending = manualIds.filter((id) => !details[id] && !manualFailed.includes(id)).length
+  const manualRequested = useRef<Set<string>>(new Set())
+
+  const loadManual = useCallback(
+    async (ids: string[]) => {
+      setManualLoading(true)
+      setManualFailed(await onLoadDetails(ids))
+      setManualLoading(false)
+    },
+    [onLoadDetails],
+  )
+
+  // Manual picks load their episode details only after the row list is expanded; a failed series waits for Retry.
+  useEffect(() => {
+    if (!manualOpen) return
+    const pending = manualIds.filter(
+      (id) => !details[id] && !manualRequested.current.has(id) && !manualFailed.includes(id),
+    )
+    if (pending.length === 0) return
+    pending.forEach((id) => manualRequested.current.add(id))
+    void loadManual(pending)
+  }, [manualOpen, manualIds, details, manualFailed, loadManual])
+
+  const retryManual = () => {
+    const failed = manualFailed
+    setManualFailed([])
+    if (failed.length > 0) void loadManual(failed)
+  }
+
+  const openRelease = (item: Series, episode: Episode) =>
+    setRelease({ series: item, target: { season: episode.season, episode: episode.number } })
 
   const runSync = async () => {
     setSyncing(true)
@@ -799,8 +918,9 @@ function WantedTab({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Monitored episodes with a missing file or a file below the profile cutoff appear here. Future episodes and
-          active downloads stay out, and unknown air dates wait for a date before searching.
+          Episodes with automatic downloads on that are missing a file, or whose file is below the profile cutoff,
+          appear here. Future episodes and active downloads stay out. Automatic rows are searched by the schedule
+          above; manual choice rows wait until an air date is known.
           {!canWrite && ' Searching for releases requires library write access.'}
         </p>
         {canWrite && (
@@ -831,63 +951,81 @@ function WantedTab({
 
       {rows.length === 0 ? (
         <EmptyState>
-          Nothing is waiting. Missing monitored episodes and below-cutoff upgrades appear here.
+          Nothing is waiting. Missing episodes with automatic downloads on and below-cutoff upgrades appear here.
         </EmptyState>
       ) : (
         <ul className="flex flex-col divide-y divide-border rounded-xl ring-1 ring-foreground/10">
-          {rows.map(({ series: item, episode }) => {
-            const at = airDateValue(episode.airDate)
-            const upgrade = episode.status === 'cutoff-unmet'
-            const current = bestFile(episode)
-            return (
-              <li key={episode.id} className="flex flex-wrap items-center gap-3 p-3">
-                <Poster
-                  title={item.metadata.title}
-                  poster={item.metadata.poster}
-                  className="h-14 w-10 shrink-0 rounded-sm"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {item.metadata.title || 'Untitled'}
-                    <span className="font-normal text-muted-foreground">
-                      {' '}
-                      · {seasonLabel(episode.season)} episode {episode.number}
-                    </span>
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {episode.title || 'Untitled episode'} ·{' '}
-                    {at === null ? 'Air date unknown' : `Aired ${formatDate(at)}`}
-                    {upgrade && current ? ` · Current file ${current.quality || 'quality unknown'}` : ''}
-                    {episode.lastSearchAt ? ` · Last search ${formatAge(episode.lastSearchAt)}` : ''}
-                  </p>
-                  {upgrade && <p className="text-xs text-amber-300">Below the profile cutoff; an upgrade is wanted.</p>}
-                  {at === null && !upgrade && (
-                    <p className="flex items-center gap-1 text-xs text-amber-300">
-                      <CircleAlertIcon className="size-3.5 shrink-0" />
-                      Waiting for a known air date; automatic searches skip this episode until then.
-                    </p>
-                  )}
-                  {episode.error && <p className="text-xs text-destructive">{episode.error}</p>}
-                </div>
-                {episode.status && <StatusBadge status={episode.status} />}
-                <Button size="sm" variant="outline" onClick={() => onOpenSeries(item.id)}>
-                  Open series
-                </Button>
-                {canWrite && (
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      setRelease({ series: item, target: { season: episode.season, episode: episode.number } })
-                    }
-                  >
-                    <SearchIcon data-icon="inline-start" />
-                    Search
-                  </Button>
-                )}
-              </li>
-            )
-          })}
+          {rows.map((row) => (
+            <WantedItem
+              key={row.episode.id}
+              row={row}
+              manual={false}
+              canWrite={canWrite}
+              onOpenSeries={onOpenSeries}
+              onSearch={openRelease}
+            />
+          ))}
         </ul>
+      )}
+
+      {manualSeries.length > 0 && (
+        <details
+          className="rounded-xl border border-border p-3"
+          open={manualOpen}
+          onToggle={(event) => setManualOpen(event.currentTarget.open)}
+        >
+          <summary className="cursor-pointer text-sm font-medium">
+            Manual picks ({manualSeries.length} series with automatic downloads off)
+          </summary>
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Series where automatic downloads are off are never searched by the schedule. Expand this list to search
+              releases yourself. Details load for up to {detailFetchLimit} series at a time.
+            </p>
+            {manualFailed.length > 0 && (
+              <ErrorNote onRetry={retryManual}>
+                Could not load episode details for {manualFailed.length} series with automatic downloads off, so this
+                list is incomplete.
+              </ErrorNote>
+            )}
+            {(manualLoading || manualPending > 0) && <LoadingNote>Loading manual series details…</LoadingNote>}
+            {manualOpen && manualRows.length === 0 && manualPending === 0 && manualFailed.length === 0 && (
+              <EmptyState>
+                No aired episodes are missing files in these series. Open a series to add episodes or fetch metadata.
+              </EmptyState>
+            )}
+            {manualRows.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Missing episodes from these series: showing {Math.min(manualShown, manualRows.length)} of{' '}
+                {manualRows.length}, newest first.
+              </p>
+            )}
+            {manualRows.length > 0 && (
+              <ul className="flex flex-col divide-y divide-border rounded-xl ring-1 ring-foreground/10">
+                {manualRows.slice(0, manualShown).map((row) => (
+                  <WantedItem
+                    key={row.episode.id}
+                    row={row}
+                    manual
+                    canWrite={canWrite}
+                    onOpenSeries={onOpenSeries}
+                    onSearch={openRelease}
+                  />
+                ))}
+              </ul>
+            )}
+            {manualRows.length > manualShown && (
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label={`Show more missing episodes from manual series (${manualRows.length - manualShown} remaining)`}
+                onClick={() => setManualShown((current) => current + manualPickPageSize)}
+              >
+                Show more ({manualRows.length - manualShown} more)
+              </Button>
+            )}
+          </div>
+        </details>
       )}
 
       {release && (
@@ -1056,7 +1194,7 @@ function ActivityTab({
             <option value="all">All series</option>
             {series.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.metadata.title || item.id}
+                {item.metadata.title || 'Untitled series'}
               </option>
             ))}
           </Select>
@@ -1086,7 +1224,7 @@ function ActivityTab({
                 <div className="min-w-0 flex-1">
                   <p className="text-sm break-words">{entry.message}</p>
                   <p className="text-xs text-muted-foreground">
-                    {item?.metadata.title ?? entry.seriesId ?? 'Unknown series'} ·{' '}
+                    {item?.metadata.title || 'Series no longer in the library'} ·{' '}
                     <time dateTime={entry.createdAt} title={formatDateTime(entry.createdAt)}>
                       {formatAge(entry.createdAt)}
                     </time>
@@ -1124,6 +1262,7 @@ export function TVPage({ active }: { active: boolean }) {
   const canWrite = can(accessPermissions.libraryWrite)
   const canReadSettings = can(accessPermissions.settingsRead)
   const canWriteSettings = can(accessPermissions.settingsWrite)
+  const canReadSubtitles = can('subtitles.read')
   const [series, setSeries] = useState<Series[] | null>(null)
   const [profiles, setProfiles] = useState<MovieProfile[]>([])
   const [config, setConfig] = useState<TvConfig | null>(null)
@@ -1136,6 +1275,8 @@ export function TVPage({ active }: { active: boolean }) {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
+  // Series-wide release search started from the add dialog confirmation.
+  const [addedRelease, setAddedRelease] = useState<{ id: string; title: string } | null>(null)
   const [watched, setWatched] = useState<string[]>([])
   const controller = useRef<AbortController | null>(null)
   const requestId = useRef(0)
@@ -1145,9 +1286,9 @@ export function TVPage({ active }: { active: boolean }) {
 
   const loadDetails = useCallback(async (ids: string[], signal?: AbortSignal) => {
     const unique = [...new Set(ids)].filter(Boolean).slice(0, detailFetchLimit)
-    if (unique.length === 0) return
+    if (unique.length === 0) return []
     const results = await Promise.allSettled(unique.map((id) => tvApi.detail(id, signal)))
-    if (signal?.aborted) return
+    if (signal?.aborted) return []
     setDetails((previous) => {
       const next = { ...previous }
       results.forEach((result) => {
@@ -1158,6 +1299,8 @@ export function TVPage({ active }: { active: boolean }) {
       })
       return next
     })
+    // Callers that need to retry failed series get the ids the detail call could not load.
+    return unique.filter((_, index) => results[index].status === 'rejected')
   }, [])
 
   const reload = useCallback(async () => {
@@ -1394,6 +1537,7 @@ export function TVPage({ active }: { active: boolean }) {
             canWrite={canWrite}
             onOpenSeries={openSeries}
             onGrabbed={watchSeries}
+            onLoadDetails={loadDetails}
           />
         )}
         {activeTab === 'calendar' && (
@@ -1484,9 +1628,30 @@ export function TVPage({ active }: { active: boolean }) {
           active={active}
           profiles={profiles}
           roots={roots}
+          knownSeriesIds={(series ?? []).map((item) => item.id)}
           canReadSettings={canReadSettings}
           onClose={() => setAddOpen(false)}
           onAdded={addSeries}
+          onOpenSeries={(id) => {
+            setAddOpen(false)
+            openSeries(id)
+          }}
+          onSearchReleases={(created) => {
+            setAddOpen(false)
+            setAddedRelease({ id: created.id, title: created.metadata.title })
+          }}
+        />
+      )}
+
+      {addedRelease && (
+        <ReleaseDialog
+          key={addedRelease.id}
+          active={active}
+          seriesId={addedRelease.id}
+          seriesTitle={addedRelease.title}
+          target={{ season: -1, episode: 0 }}
+          onClose={() => setAddedRelease(null)}
+          onGrabbed={watchSeries}
         />
       )}
 
@@ -1510,6 +1675,7 @@ export function TVPage({ active }: { active: boolean }) {
           roots={roots}
           canWrite={canWrite}
           canReadSettings={canReadSettings}
+          canReadSubtitles={canReadSubtitles}
           onClose={() => {
             setDetailId(null)
             detailIdRef.current = null

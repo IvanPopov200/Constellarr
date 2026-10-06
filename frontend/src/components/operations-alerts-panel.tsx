@@ -233,7 +233,9 @@ export function AlertsPanel() {
       </Card>
 
       {editable && (
-        <fieldset disabled={readOnly} className="space-y-5">
+        <details className="rounded-xl border border-border p-4">
+          <summary className="cursor-pointer text-sm font-medium">Alert rules & notifications</summary>
+        <fieldset disabled={readOnly} className="mt-4 space-y-5">
           <Card className="shadow-none">
         <CardHeader className="border-b border-border">
           <CardTitle className="flex items-center gap-2">
@@ -416,6 +418,7 @@ export function AlertsPanel() {
         </CardContent>
       </Card>
         </fieldset>
+        </details>
       )}
 
       <Card className="shadow-none">

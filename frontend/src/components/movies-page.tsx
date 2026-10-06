@@ -3478,7 +3478,7 @@ function AddMovieDialog({
   // Catalog contents when the dialog opened, so an existing entry is reported instead of a fresh add.
   const [knownIds] = useState(() => new Set(movies.map((movie) => movie.id)))
   const controller = useRef<AbortController | null>(null)
-  const confirmation = useRef<HTMLDivElement>(null)
+  const confirmation = useRef<HTMLHeadingElement>(null)
 
   useEffect(() => () => controller.current?.abort(), [])
 
@@ -3573,10 +3573,7 @@ function AddMovieDialog({
         size="lg"
       >
         <div
-          ref={confirmation}
-          tabIndex={-1}
-          aria-labelledby="add-movie-confirmation"
-          className="space-y-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="space-y-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4"
         >
           <div className="flex flex-col gap-4 sm:flex-row">
             <Poster
@@ -3585,10 +3582,10 @@ function AddMovieDialog({
               className="h-28 w-20 shrink-0 rounded-md"
             />
             <div className="min-w-0 space-y-2">
-              <p id="add-movie-confirmation" className="font-heading text-base font-semibold">
+              <h3 ref={confirmation} tabIndex={-1} className="font-heading text-base font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 {title}
                 {added.metadata.year > 0 ? ` (${added.metadata.year})` : ''}
-              </p>
+              </h3>
               <p className="text-sm text-muted-foreground">
                 {existed
                   ? 'This movie is already in your library, so nothing changed. Its existing settings stay as they are.'

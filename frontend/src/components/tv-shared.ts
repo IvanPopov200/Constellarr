@@ -26,11 +26,15 @@ const statusLabels: Record<string, string> = {
   missing: 'Missing',
   wanted: 'Wanted',
   searching: 'Searching',
+  queued: 'Queued',
   downloading: 'Downloading',
+  paused: 'Paused',
+  cancelled: 'Cancelled',
   upgrading: 'Upgrading',
   'cutoff-unmet': 'Cutoff unmet',
+  'import-failed': 'Import failed',
   failed: 'Failed',
-  unmonitored: 'Unmonitored',
+  unmonitored: 'Manual only',
 }
 
 export const statusTones: Record<string, string> = {
@@ -43,6 +47,10 @@ export const statusTones: Record<string, string> = {
   missing: 'border-amber-400/25 bg-amber-400/10 text-amber-300',
   wanted: 'border-amber-400/25 bg-amber-400/10 text-amber-300',
   'cutoff-unmet': 'border-amber-400/25 bg-amber-400/10 text-amber-300',
+  paused: 'border-amber-400/25 bg-amber-400/10 text-amber-300',
+  queued: 'border-border bg-muted/60 text-muted-foreground',
+  cancelled: 'border-border bg-muted/60 text-muted-foreground',
+  'import-failed': 'border-destructive/30 bg-destructive/10 text-destructive',
   unmonitored: 'border-border bg-muted/60 text-muted-foreground',
 }
 
@@ -135,6 +143,23 @@ export function seasonLabel(season: number) {
   return season === 0 ? 'Specials' : `Season ${season}`
 }
 
+export function episodeCode(episode: Episode) {
+  return `S${String(episode.season).padStart(2, '0')}E${String(episode.number).padStart(2, '0')}`
+}
+
+// The app router resolves this hash; the subtitles page owns the query handling.
+export function episodeSubtitleHref(episodeId: string) {
+  return `#subtitles?kind=episode&id=${encodeURIComponent(episodeId)}`
+}
+
+export function queueHref(protocol: string | null | undefined) {
+  return protocol === 'torrent' ? '#torrents' : '#usenet'
+}
+
+export function queueLabel(protocol: string | null | undefined) {
+  return protocol === 'torrent' ? 'Torrents' : 'Usenet'
+}
+
 // A monitored episode that needs a file, or a file that still sits below the profile cutoff.
 export function episodeWanted(episode: Episode) {
   if (!episode.monitored) return false
@@ -148,6 +173,19 @@ export function isAired(episode: Episode) {
 }
 
 export type WantedRow = { series: Series; episode: Episode }
+
+// Most recently aired first; episodes that still wait for a date come last.
+function byAirDateDesc(a: WantedRow, b: WantedRow) {
+  const left = airDateValue(a.episode.airDate)
+  const right = airDateValue(b.episode.airDate)
+  if (left === null && right === null) {
+    if (a.episode.season !== b.episode.season) return a.episode.season - b.episode.season
+    return a.episode.number - b.episode.number
+  }
+  if (left === null) return 1
+  if (right === null) return -1
+  return right - left
+}
 
 // Missing files and below-cutoff upgrades, minus future episodes, active downloads, and unmonitored series.
 export function wantedRows(series: Series[], details: Record<string, Series>): WantedRow[] {
@@ -164,18 +202,26 @@ export function wantedRows(series: Series[], details: Record<string, Series>): W
       output.push({ series: item, episode })
     }
   }
-  // Most recently aired first; episodes that still wait for a date come last.
-  return output.sort((a, b) => {
-    const left = airDateValue(a.episode.airDate)
-    const right = airDateValue(b.episode.airDate)
-    if (left === null && right === null) {
-      if (a.episode.season !== b.episode.season) return a.episode.season - b.episode.season
-      return a.episode.number - b.episode.number
+  return output.sort(byAirDateDesc)
+}
+
+// Manual picks: series with automatic downloads off, listed only when the user asks for them.
+export function manualWantedRows(series: Series[], details: Record<string, Series>): WantedRow[] {
+  const today = todayStart()
+  const output: WantedRow[] = []
+  for (const item of series) {
+    if (item.monitored) continue
+    const detail = details[item.id]
+    if (!detail) continue
+    for (const episode of detail.episodes ?? []) {
+      if (activeStatuses.has(episode.status)) continue
+      if (episode.status !== 'cutoff-unmet' && availableFiles(episode).length > 0) continue
+      const at = airDateValue(episode.airDate)
+      if (at !== null && at > today) continue
+      output.push({ series: item, episode })
     }
-    if (left === null) return 1
-    if (right === null) return -1
-    return right - left
-  })
+  }
+  return output.sort(byAirDateDesc)
 }
 
 export function tagsOf(series: Series) {

@@ -87,7 +87,7 @@ export function OperationsPage() {
     <div className="flex flex-col gap-6">
       <PageHeading
         title="System"
-        description="Server health, queues, metrics, structured events, and alerts."
+        description="Check server health, recent activity, and anything that needs attention."
         action={
           <Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
             {refreshing ? <LoaderCircle className="animate-spin motion-reduce:animate-none" /> : <RefreshCw />}
@@ -149,10 +149,10 @@ export function OperationsPage() {
                 <p className="mt-0.5 text-sm">
                   {status.library.artists} artists · {status.library.albums} albums · {status.library.tracks} tracks
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Prometheus metrics are exposed at <code>{status.metricsPath}</code> with Go, process, database pool, and
-                  transfer counters. Labels never contain titles, paths, or user names.
-                </p>
+                <details className="mt-2 text-xs text-muted-foreground">
+                  <summary className="cursor-pointer">Metrics endpoint</summary>
+                  <p className="mt-1">Prometheus metrics: <code>{status.metricsPath}</code>. Labels exclude titles, paths, and user names.</p>
+                </details>
               </CardContent>
             </Card>
             <Card className="shadow-none">

@@ -143,7 +143,7 @@ export function ScanDialog({
             ) : (
               <FolderSearchIcon data-icon="inline-start" />
             )}
-            {scanning ? 'Scanning…' : 'Scan folder'}
+            {scanning ? 'Scanning…' : candidates === null ? 'Scan folder' : 'Scan again'}
           </Button>
         </div>
 
@@ -195,7 +195,7 @@ export function ScanDialog({
                       <Badge variant="outline">Suggested: {suggested.metadata.title}</Badge>
                     ) : (
                       <Badge variant="outline" className="text-amber-300">
-                        No match — choose a series
+                        No match: choose a series
                       </Badge>
                     )}
                   </div>
@@ -263,6 +263,9 @@ export function ScanDialog({
                       size="sm"
                       variant="outline"
                       disabled={importing !== '' || Boolean(importedAs)}
+                      aria-label={`Import ${candidate.path} into ${
+                        series.find((item) => item.id === draft.seriesId)?.metadata.title || 'the chosen series'
+                      }`}
                       onClick={() => void importCandidate(candidate)}
                     >
                       {importing === candidate.path ? (
@@ -270,7 +273,7 @@ export function ScanDialog({
                       ) : (
                         <CheckIcon data-icon="inline-start" />
                       )}
-                      Import
+                      {importedAs ? 'Imported' : 'Import'}
                     </Button>
                   </div>
                 </li>

@@ -6,10 +6,11 @@ import {
   LoaderCircleIcon,
   PlusIcon,
   SearchIcon,
+  Settings2Icon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Checkbox, DialogShell, EmptyState, ErrorNote, Notice, Poster, Select } from '@/components/tv-ui'
+import { Checkbox, DialogShell, EmptyState, ErrorNote, Poster, Select } from '@/components/tv-ui'
 import { errorMessage } from '@/lib/api'
 import { monitorModes, splitList, strings } from '@/components/tv-shared'
 import { tvApi, type AddSeriesInput, type MovieProfile, type RootFolder, type Series, type SeriesTitle } from '@/lib/tv-api'
@@ -48,26 +49,34 @@ export function AddSeriesDialog({
   active,
   profiles,
   roots,
+  knownSeriesIds,
   canReadSettings,
   onClose,
   onAdded,
+  onOpenSeries,
+  onSearchReleases,
 }: {
   active: boolean
   profiles: MovieProfile[]
   roots: RootFolder[]
+  knownSeriesIds: string[]
   canReadSettings: boolean
   onClose: () => void
   onAdded: (input: AddSeriesInput) => Promise<Series>
+  onOpenSeries: (id: string) => void
+  onSearchReleases: (series: Series) => void
 }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SeriesTitle[] | null>(null)
   const [page, setPage] = useState(1)
   const [busy, setBusy] = useState<'search' | 'add' | null>(null)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
+  const [added, setAdded] = useState<Series | null>(null)
+  const [alreadyAdded, setAlreadyAdded] = useState(false)
+  const [advanced, setAdvanced] = useState(false)
   const [imdbId, setImdbId] = useState('')
   const [options, setOptions] = useState({
-    monitored: true,
+    monitored: false,
     monitorMode: 'all',
     profileId: '',
     rootId: '',
@@ -81,8 +90,15 @@ export function AddSeriesDialog({
     poster: '',
   })
   const controller = useRef<AbortController | null>(null)
+  const confirmation = useRef<HTMLHeadingElement>(null)
+  // Catalog contents when the dialog opened, so an existing series is reported instead of a fresh add.
+  const [knownIds] = useState(() => new Set(knownSeriesIds))
 
   useEffect(() => () => controller.current?.abort(), [])
+
+  useEffect(() => {
+    if (added) confirmation.current?.focus()
+  }, [added])
 
   const base = {
     monitored: options.monitored,
@@ -100,7 +116,6 @@ export function AddSeriesDialog({
     controller.current = request
     setBusy('search')
     setError('')
-    setNotice('')
     try {
       const found = await tvApi.discover(term, nextPage, request.signal)
       if (request.signal.aborted) return
@@ -113,15 +128,14 @@ export function AddSeriesDialog({
     }
   }
 
-  const addResult = async (candidate: SeriesTitle) => {
+  const add = async (input: AddSeriesInput) => {
+    if (busy !== null || added) return
     setBusy('add')
     setError('')
-    setNotice('')
     try {
-      const series = await onAdded(
-        candidate.imdbId ? { imdbId: candidate.imdbId, ...base } : { metadata: candidate, ...base },
-      )
-      setNotice(`Added ${series.metadata.title || candidate.title}.`)
+      const series = await onAdded(input)
+      setAlreadyAdded(knownIds.has(series.id))
+      setAdded(series)
     } catch (cause) {
       setError(errorMessage(cause))
     } finally {
@@ -129,42 +143,24 @@ export function AddSeriesDialog({
     }
   }
 
-  const addByImdb = async () => {
+  const addResult = (candidate: SeriesTitle) =>
+    add(candidate.imdbId ? { imdbId: candidate.imdbId, ...base } : { metadata: candidate, ...base })
+
+  const addByImdb = () => {
     const id = imdbId.trim()
     if (!id) {
       setError('Enter an IMDb ID such as tt0944947.')
       return
     }
-    setBusy('add')
-    setError('')
-    setNotice('')
-    try {
-      const series = await onAdded({ imdbId: id, ...base })
-      setNotice(`Added ${series.metadata.title || id}.`)
-      setImdbId('')
-    } catch (cause) {
-      setError(errorMessage(cause))
-    } finally {
-      setBusy(null)
-    }
+    return add({ imdbId: id, ...base })
   }
 
-  const addManual = async () => {
+  const addManual = () => {
     if (!fields.title.trim()) {
       setError('Enter at least a title for an offline series.')
       return
     }
-    setBusy('add')
-    setError('')
-    setNotice('')
-    try {
-      const series = await onAdded({ metadata: manualSeries(fields), ...base })
-      setNotice(`Added ${series.metadata.title || fields.title}.`)
-    } catch (cause) {
-      setError(errorMessage(cause))
-    } finally {
-      setBusy(null)
-    }
+    return add({ metadata: manualSeries(fields), ...base })
   }
 
   const manualField = (key: keyof ManualFields, label: string, props: { type?: string } = {}) => (
@@ -181,109 +177,74 @@ export function AddSeriesDialog({
     </div>
   )
 
+  if (added) {
+    const title = added.metadata.title || 'The series'
+    const offline = !added.metadata.imdbId
+    return (
+      <DialogShell
+        active={active}
+        title={alreadyAdded ? 'Already in your library' : 'Series added'}
+        description={`${added.metadata.year > 0 ? added.metadata.year : 'Year unknown'} · ${
+          alreadyAdded ? 'no new entry was created' : 'added to your TV library'
+        }`}
+        onClose={onClose}
+      >
+        <div className="space-y-4 rounded-lg border border-border p-4">
+          <h3
+            id="tv-add-confirmation-title"
+            ref={confirmation}
+            tabIndex={-1}
+            className="font-heading text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {alreadyAdded ? `${title} is already in your library.` : `Added ${title}.`}
+          </h3>
+          <p role="status" className="text-sm text-muted-foreground">
+            {alreadyAdded
+              ? 'Nothing changed. Opening it shows its seasons and episodes, where you can pick a release yourself.'
+              : added.monitored
+                ? 'Automatic downloads are on for this series: missing aired episodes appear in Wanted and Constellarr searches indexers for them. Nothing is downloaded until a release matches.'
+                : 'Automatic downloads are off: nothing is searched or downloaded. The series waits in Wanted until you choose a release, and you can turn automatic downloads on later in its settings.'}
+          </p>
+          {!alreadyAdded && offline && (
+            <p className="text-sm text-muted-foreground">
+              This is an offline series, so no episodes came from a metadata provider. Open it to add seasons and
+              episodes by hand, then search for releases.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {(alreadyAdded || offline) && (
+              <Button size="sm" onClick={() => onOpenSeries(added.id)}>
+                Open series
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant={alreadyAdded || offline ? 'outline' : 'default'}
+              onClick={() => onSearchReleases(added)}
+            >
+              <SearchIcon data-icon="inline-start" />
+              Search releases
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onClose}>
+              Done
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Searching releases only lists candidates; nothing downloads until you confirm one.
+          </p>
+        </div>
+      </DialogShell>
+    )
+  }
+
   return (
     <DialogShell
       active={active}
       title="Add series"
-      description="Search series metadata, add by IMDb ID, or enter an offline series manually."
+      description="Add a series, then choose the episodes and releases to download."
       onClose={onClose}
     >
       <div className="space-y-5">
-        <div className="grid gap-4 rounded-lg border border-border p-3 sm:grid-cols-2 xl:grid-cols-3">
-          <Checkbox
-            id="tv-add-monitored"
-            label="Monitored"
-            checked={options.monitored}
-            onChange={(monitored) => setOptions({ ...options, monitored })}
-          />
-          <div className="space-y-2">
-            <label htmlFor="tv-add-mode" className="text-sm font-medium">
-              Monitor mode
-            </label>
-            <Select
-              id="tv-add-mode"
-              className="w-full"
-              value={options.monitorMode}
-              disabled={!options.monitored}
-              onChange={(event) => setOptions({ ...options, monitorMode: event.target.value })}
-            >
-              {monitorModes.map((mode) => (
-                <option key={mode.value} value={mode.value}>
-                  {mode.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          {canReadSettings && (
-            <div className="space-y-2">
-              <label htmlFor="tv-add-profile" className="text-sm font-medium">
-                Quality profile
-              </label>
-              <Select
-                id="tv-add-profile"
-                className="w-full"
-                value={options.profileId}
-                onChange={(event) => setOptions({ ...options, profileId: event.target.value })}
-              >
-                <option value="">Default</option>
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-          {canReadSettings && (
-            <div className="space-y-2">
-              <label htmlFor="tv-add-root" className="text-sm font-medium">
-                Root folder
-              </label>
-              <Select
-                id="tv-add-root"
-                className="w-full"
-                value={options.rootId}
-                onChange={(event) => setOptions({ ...options, rootId: event.target.value })}
-              >
-                <option value="">Default</option>
-                {roots.map((root) => (
-                  <option key={root.id || root.path} value={root.id}>
-                    {root.path}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-          <div className="space-y-2">
-            <label htmlFor="tv-add-tags" className="text-sm font-medium">
-              Tags
-            </label>
-            <Input
-              id="tv-add-tags"
-              value={options.tags}
-              placeholder="kids, anime"
-              onChange={(event) => setOptions({ ...options, tags: event.target.value })}
-            />
-          </div>
-          {!canReadSettings ? (
-            <p className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
-              <CircleAlertIcon className="size-4 shrink-0" />
-              Series use the server's default TV root folder and quality profile.
-            </p>
-          ) : (
-            roots.length === 0 && (
-              <p className="flex items-center gap-2 text-xs text-amber-300 sm:col-span-2">
-                <CircleAlertIcon className="size-4 shrink-0" />
-                No TV root folder configured. Add one in{' '}
-                <a href="#storage" className="underline underline-offset-4">
-                  Storage & Paths
-                </a>{' '}
-                so imports have a destination.
-              </p>
-            )
-          )}
-        </div>
-
         <section className="space-y-3">
           <h3 className="font-heading text-sm font-semibold">Search series metadata</h3>
           <form
@@ -294,6 +255,7 @@ export function AddSeriesDialog({
             }}
           >
             <Input
+              autoFocus
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Series title"
@@ -308,9 +270,40 @@ export function AddSeriesDialog({
               {busy === 'search' ? 'Searching…' : 'Search'}
             </Button>
           </form>
+
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            <Checkbox
+              id="tv-add-monitored"
+              label="Download automatically"
+              description={
+                options.monitored
+                  ? 'Constellarr searches indexers and downloads releases for this series later without asking again.'
+                  : undefined
+              }
+              checked={options.monitored}
+              onChange={(monitored) => setOptions({ ...options, monitored })}
+            />
+            {options.monitored && <div className="space-y-2 sm:max-w-xs">
+              <label htmlFor="tv-add-mode" className="text-sm font-medium">
+                Episodes to download
+              </label>
+              <Select
+                id="tv-add-mode"
+                className="w-full"
+                value={options.monitorMode}
+                onChange={(event) => setOptions({ ...options, monitorMode: event.target.value })}
+              >
+                {monitorModes.map((mode) => (
+                  <option key={mode.value} value={mode.value}>
+                    {mode.label}
+                  </option>
+                ))}
+              </Select>
+            </div>}
+          </div>
           {results === null ? (
             <p className="text-sm text-muted-foreground">
-              Results appear here with poster, year, rating, and season count.
+              Search by title to find a series.
             </p>
           ) : results.length === 0 ? (
             <EmptyState>No series metadata on this page. Try another title or the next page.</EmptyState>
@@ -346,7 +339,12 @@ export function AddSeriesDialog({
                           {genres.length > 0 ? ` · ${genres.slice(0, 2).join(', ')}` : ''}
                         </p>
                       </div>
-                      <Button size="sm" disabled={busy !== null} onClick={() => void addResult(candidate)}>
+                      <Button
+                        size="sm"
+                        disabled={busy !== null}
+                        aria-label={`Add ${candidate.title || 'series'}`}
+                        onClick={() => void addResult(candidate)}
+                      >
                         {busy === 'add' ? (
                           <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
                         ) : (
@@ -381,48 +379,146 @@ export function AddSeriesDialog({
               </div>
             </>
           )}
-        </section>
-
-        <section className="space-y-3 border-t border-border pt-4">
-          <h3 className="font-heading text-sm font-semibold">Add by IMDb ID</h3>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              value={imdbId}
-              onChange={(event) => setImdbId(event.target.value)}
-              placeholder="tt0944947"
-              aria-label="IMDb ID"
-              className="sm:max-w-xs"
-            />
-            <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void addByImdb()}>
-              <PlusIcon data-icon="inline-start" />
-              Add by IMDb ID
-            </Button>
-          </div>
-        </section>
-
-        <section className="space-y-3 border-t border-border pt-4">
-          <h3 className="font-heading text-sm font-semibold">Offline series</h3>
           <p className="text-xs text-muted-foreground">
-            Use this when there is no metadata provider or the series is not listed. Episodes are matched
-            manually after adding.
+            {options.monitored
+              ? 'Adding starts automatic downloads for the selected episodes.'
+              : 'Added series stay unsearched until you choose a release or turn on automatic downloads.'}
           </p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            {manualField('title', 'Title')}
-            {manualField('year', 'Year', { type: 'number' })}
-            {manualField('imdbId', 'IMDb ID (optional)')}
-            {manualField('totalSeasons', 'Seasons (optional)', { type: 'number' })}
-            <div className="sm:col-span-2">{manualField('poster', 'Poster URL (optional)', { type: 'url' })}</div>
-          </div>
-          <div className="flex justify-end">
-            <Button size="sm" disabled={busy !== null} onClick={() => void addManual()}>
-              <PlusIcon data-icon="inline-start" />
-              Add offline series
-            </Button>
-          </div>
         </section>
 
         {error && <ErrorNote>{error}</ErrorNote>}
-        {notice && <Notice>{notice}</Notice>}
+
+        <section className="space-y-3 border-t border-border pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-expanded={advanced}
+              aria-controls="tv-add-advanced"
+              onClick={() => setAdvanced((current) => !current)}
+            >
+              <Settings2Icon data-icon="inline-start" />
+              {advanced ? 'Hide advanced options' : 'Advanced options'}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {canReadSettings
+              ? "New series use the server's default quality profile and root folder unless you change them."
+              : "Series use the server's default TV root folder and quality profile."}
+          </p>
+          {canReadSettings && roots.length === 0 && (
+            <p className="flex items-center gap-2 text-xs text-amber-300">
+              <CircleAlertIcon className="size-4 shrink-0" />
+              No TV root folder configured. Add one in{' '}
+              <a href="#storage" className="underline underline-offset-4">
+                Storage & Paths
+              </a>{' '}
+              so imports have a destination.
+            </p>
+          )}
+
+          {advanced && (
+            <div id="tv-add-advanced" className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {canReadSettings && (
+                  <div className="space-y-2">
+                    <label htmlFor="tv-add-profile" className="text-sm font-medium">
+                      Quality profile
+                    </label>
+                    <Select
+                      id="tv-add-profile"
+                      className="w-full"
+                      value={options.profileId}
+                      onChange={(event) => setOptions({ ...options, profileId: event.target.value })}
+                    >
+                      <option value="">Default</option>
+                      {profiles.map((profile) => (
+                        <option key={profile.id} value={profile.id}>
+                          {profile.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+                {canReadSettings && (
+                  <div className="space-y-2">
+                    <label htmlFor="tv-add-root" className="text-sm font-medium">
+                      Root folder
+                    </label>
+                    <Select
+                      id="tv-add-root"
+                      className="w-full"
+                      value={options.rootId}
+                      onChange={(event) => setOptions({ ...options, rootId: event.target.value })}
+                    >
+                      <option value="">Default</option>
+                      {roots.map((root) => (
+                        <option key={root.id || root.path} value={root.id}>
+                          {root.path}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label htmlFor="tv-add-tags" className="text-sm font-medium">
+                    Tags
+                  </label>
+                  <Input
+                    id="tv-add-tags"
+                    value={options.tags}
+                    placeholder="kids, anime"
+                    onChange={(event) => setOptions({ ...options, tags: event.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-heading text-sm font-semibold">Add by IMDb ID</h4>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    value={imdbId}
+                    onChange={(event) => setImdbId(event.target.value)}
+                    placeholder="tt0944947"
+                    aria-label="IMDb ID"
+                    className="sm:max-w-xs"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy !== null || !imdbId.trim()}
+                    onClick={() => void addByImdb()}
+                  >
+                    <PlusIcon data-icon="inline-start" />
+                    Add by IMDb ID
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-heading text-sm font-semibold">Offline series</h4>
+                <p className="text-xs text-muted-foreground">
+                  Use this when there is no metadata provider or the series is not listed. Episodes are matched
+                  manually after adding.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {manualField('title', 'Title')}
+                  {manualField('year', 'Year', { type: 'number' })}
+                  {manualField('imdbId', 'IMDb ID (optional)')}
+                  {manualField('totalSeasons', 'Seasons (optional)', { type: 'number' })}
+                  <div className="sm:col-span-2">{manualField('poster', 'Poster URL (optional)', { type: 'url' })}</div>
+                </div>
+                <div className="flex justify-end">
+                  <Button size="sm" disabled={busy !== null || !fields.title.trim()} onClick={() => void addManual()}>
+                    <PlusIcon data-icon="inline-start" />
+                    Add offline series
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">A title is required; every other field is optional.</p>
+              </div>
+            </div>
+          )}
+        </section>
       </div>
     </DialogShell>
   )

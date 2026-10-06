@@ -85,7 +85,10 @@ metadata stays unknown; saved metadata remains browsable offline. Poster request
 are proxied and cached by the server so provider credentials stay private.
 
 The library supports poster and table views, metadata sorting and filters, tags,
-collections, and bulk editing. Monitored movies are searched on the server, with
+collections, and bulk editing. New movies use manual release selection by default:
+adding a title puts it in Wanted, and **Choose release** lets you compare downloads.
+Enable **Download automatically** to authorize background acquisition.
+Monitored movies are searched on the server, with
 RSS polling and scheduled searches continuing after browser closure or restart.
 Quality profiles order allowed qualities best first, set an upgrade cutoff,
 limit size/language, and score or reject release patterns. Interactive search
@@ -162,8 +165,18 @@ their own backup; database backups preserve catalog state and credentials.
 and `data/downloads/<job-id>/output` for extracted media. PostgreSQL stores the
 NZB, queue, processing state, and output manifest. Versioned SQL migrations run
 at startup. One job runs at a time; duplicate release selections reuse its job.
-Failed jobs can be retried without fetching verified article parts again.
-Interrupted jobs resume after the server restarts.
+Pause, resume, or cancel jobs from the queue. Cancellation keeps the partial data
+and history; retrying reuses verified article parts. Paused and cancelled jobs stay
+stopped after restarts, while interrupted active jobs recover automatically.
+
+**Speed & schedule** on either download page controls one shared download cap
+across Usenet and torrents. Choose a fixed rate or a percentage of your entered
+connection speed. Weekly windows can allow full speed, apply a limit, or pause
+downloads. Choose to pause outside those windows for overnight-only
+downloading. Windows use the saved timezone, support overnight periods, and may
+not overlap. A global pause takes precedence; resuming returns to the schedule
+and keeps individually paused jobs stopped. Completed torrents can continue
+seeding under their separate upload and seeding limits.
 
 [Torrents](docs/TORRENTS.md) supports magnets, `.torrent` files, Torznab sources,
 pause/resume/recheck, bandwidth limits, and seeding limits. Torrent library imports
