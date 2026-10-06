@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { HardDriveIcon, PauseIcon, PlayIcon, RotateCwIcon, Trash2Icon } from 'lucide-react'
+import { HardDriveIcon, PauseIcon, PlayIcon, RotateCwIcon, Trash2Icon, XIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { errorMessage } from '@/lib/api'
+import { api, errorMessage } from '@/lib/api'
 import { formatAge, formatBytes } from '@/lib/format'
 import { torrentsApi, type TorrentJob } from '@/lib/torrents-api'
 import {
@@ -27,16 +27,19 @@ type Props = {
   onChanged: () => void
 }
 
+type Confirmation = 'cancel' | 'remove' | 'remove-files'
+
 export function TorrentQueueRow({ job, busy, canWrite, onAction, onOpen, onChanged }: Props) {
   const [ratio, setRatio] = useState(String(job.seedRatioLimit))
   const [minutes, setMinutes] = useState(String(job.seedTimeLimitMinutes))
   const [limitError, setLimitError] = useState<string | null>(null)
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
 
   const percent = progressPercent(job)
-  const active = job.status !== 'completed' && job.status !== 'failed'
-  const paused = job.status === 'paused'
   const status = displayStatus(job)
   const extractionFailed = job.processing?.state === 'failed'
+  const finished = job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled'
+  const paused = job.status === 'paused'
 
   const saveLimits = async () => {
     const parsedRatio = Number(ratio)
@@ -54,14 +57,23 @@ export function TorrentQueueRow({ job, busy, canWrite, onAction, onOpen, onChang
     }
   }
 
-  const remove = async () => {
-    if (!window.confirm(`Remove "${job.name}" from the queue? The downloaded files are kept.`)) return
-    onAction((id) => torrentsApi.remove(id, false))
+  const confirmAction = () => {
+    const action = confirmation
+    setConfirmation(null)
+    if (action === 'cancel') onAction((id) => api.cancelDownload(id))
+    else if (action === 'remove') onAction((id) => torrentsApi.remove(id, false))
+    else if (action === 'remove-files') onAction((id) => torrentsApi.remove(id, true))
   }
 
-  const removeWithFiles = async () => {
-    if (!window.confirm(`Remove "${job.name}" and delete its downloaded files? This cannot be undone.`)) return
-    onAction((id) => torrentsApi.remove(id, true))
+  const confirmationText: Record<Confirmation, string> = {
+    cancel: 'Cancel this download? The data downloaded so far stays in the cache; nothing is deleted.',
+    remove: `Remove “${job.name}” from the queue? The downloaded files stay on disk.`,
+    'remove-files': `Remove “${job.name}” and delete its downloaded files? This cannot be undone.`,
+  }
+  const confirmationLabel: Record<Confirmation, string> = {
+    cancel: 'Cancel download',
+    remove: 'Remove from queue',
+    'remove-files': 'Remove and delete files',
   }
 
   return (
@@ -76,14 +88,8 @@ export function TorrentQueueRow({ job, busy, canWrite, onAction, onOpen, onChang
             {job.name || job.title || job.infoHash}
           </button>
           <span className="text-xs text-muted-foreground">
-            {formatBytes(job.bytesDone)} of {formatBytes(job.bytesTotal)} · {formatRate(job.downloadRate)} down ·{' '}
-            {formatRate(job.uploadRate)} up · ratio {formatRatio(job.ratio)} · {job.peers} peers · {job.seeds} seeds ·
+            {formatBytes(job.bytesDone)} of {formatBytes(job.bytesTotal)} · {formatRate(job.downloadRate)} down ·
             ETA {formatETA(job.etaSeconds)}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {job.piecesDone}/{job.piecesTotal} pieces · {formatSeedLimit(job.seedRatioLimit, job.seedTimeLimitMinutes)}
-            {job.status === 'seeding' ? ` · seeding ${Math.round(job.seedingElapsedSeconds / 60)}m` : ''} · updated{' '}
-            {formatAge(job.updatedAt)}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -122,74 +128,117 @@ export function TorrentQueueRow({ job, busy, canWrite, onAction, onOpen, onChang
         </p>
       ) : null}
 
+      {confirmation ? (
+        <div
+          role="group"
+          aria-label={`Confirm: ${confirmationLabel[confirmation]}`}
+          className="flex flex-col gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          <p>{confirmationText[confirmation]}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="destructive" disabled={busy} onClick={confirmAction}>
+              {confirmationLabel[confirmation]}
+            </Button>
+            <Button size="sm" variant="ghost" autoFocus disabled={busy} onClick={() => setConfirmation(null)}>
+              Keep it
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {canWrite ? (
-      <div className="flex flex-wrap items-end gap-2">
-        {extractionFailed ? (
-          <Button size="sm" disabled={busy} onClick={() => onAction((id) => torrentsApi.resume(id))}>
+        <div className="flex flex-wrap items-center gap-2">
+          {extractionFailed ? (
+            <Button size="sm" disabled={busy} onClick={() => onAction((id) => torrentsApi.resume(id))}>
+              <RotateCwIcon aria-hidden="true" />
+              Retry import
+            </Button>
+          ) : null}
+          {paused ? (
+            <Button size="sm" disabled={busy} onClick={() => onAction((id) => torrentsApi.resume(id))}>
+              <PlayIcon aria-hidden="true" />
+              Resume
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || finished}
+              onClick={() => onAction((id) => torrentsApi.pause(id))}
+            >
+              <PauseIcon aria-hidden="true" />
+              Pause
+            </Button>
+          )}
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => onAction((id) => torrentsApi.recheck(id))}>
             <RotateCwIcon aria-hidden="true" />
-            Retry import
+            Recheck
           </Button>
-        ) : null}
-        {paused ? (
-          <Button size="sm" disabled={busy} onClick={() => onAction((id) => torrentsApi.resume(id))}>
-            <PlayIcon aria-hidden="true" />
-            Resume
+          {!finished ? (
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => setConfirmation('cancel')}>
+              <XIcon aria-hidden="true" />
+              Cancel download
+            </Button>
+          ) : null}
+          <Button size="sm" variant="destructive" disabled={busy} onClick={() => setConfirmation('remove')}>
+            <Trash2Icon aria-hidden="true" />
+            Remove
           </Button>
-        ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy || !active}
-            onClick={() => onAction((id) => torrentsApi.pause(id))}
-          >
-            <PauseIcon aria-hidden="true" />
-            Pause
-          </Button>
-        )}
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => onAction((id) => torrentsApi.recheck(id))}>
-          <RotateCwIcon aria-hidden="true" />
-          Recheck
-        </Button>
-        <Button size="sm" variant="destructive" disabled={busy} onClick={remove}>
-          <Trash2Icon aria-hidden="true" />
-          Remove
-        </Button>
-        <Button size="sm" variant="ghost" disabled={busy} onClick={removeWithFiles}>
-          <HardDriveIcon aria-hidden="true" />
-          Remove files
-        </Button>
-        <div className="flex items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            Seed ratio
-            <Input
-              className="h-8 w-20"
-              inputMode="decimal"
-              value={ratio}
-              aria-label={`${job.name} seed ratio limit`}
-              onChange={(event) => setRatio(event.target.value)}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            Seed minutes
-            <Input
-              className="h-8 w-24"
-              inputMode="numeric"
-              value={minutes}
-              aria-label={`${job.name} seed time limit in minutes`}
-              onChange={(event) => setMinutes(event.target.value)}
-            />
-          </label>
-          <Button size="sm" variant="outline" disabled={busy} onClick={saveLimits}>
-            Save limits
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setConfirmation('remove-files')}>
+            <HardDriveIcon aria-hidden="true" />
+            Remove files
           </Button>
         </div>
-      </div>
       ) : null}
       {limitError ? (
         <p role="alert" className="text-xs text-destructive">
           {limitError}
         </p>
       ) : null}
+
+      <details className="rounded-md border border-border bg-background/50">
+        <summary className="cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+          Details and seeding limits
+        </summary>
+        <div className="flex flex-col gap-3 border-t border-border px-3 py-3">
+          <p className="text-xs text-muted-foreground">
+            {job.piecesDone}/{job.piecesTotal} pieces · ratio {formatRatio(job.ratio)} · {formatRate(job.uploadRate)} up
+            · {formatBytes(job.uploaded)} uploaded · {job.peers} peers · {job.seeds} seeds
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {formatSeedLimit(job.seedRatioLimit, job.seedTimeLimitMinutes)}
+            {job.status === 'seeding' ? ` · seeding ${Math.round(job.seedingElapsedSeconds / 60)}m` : ''} · updated{' '}
+            {formatAge(job.updatedAt)}
+          </p>
+          {canWrite ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                Seed ratio
+                <Input
+                  className="h-8 w-20"
+                  inputMode="decimal"
+                  value={ratio}
+                  aria-label={`${job.name} seed ratio limit`}
+                  onChange={(event) => setRatio(event.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+                Seed minutes
+                <Input
+                  className="h-8 w-24"
+                  inputMode="numeric"
+                  value={minutes}
+                  aria-label={`${job.name} seed time limit in minutes`}
+                  onChange={(event) => setMinutes(event.target.value)}
+                />
+              </label>
+              <Button size="sm" variant="outline" disabled={busy} onClick={saveLimits}>
+                Save limits
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      </details>
     </li>
   )
 }

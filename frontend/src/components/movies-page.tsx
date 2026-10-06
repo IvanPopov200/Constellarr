@@ -5,6 +5,7 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   CalendarIcon,
+  CaptionsIcon,
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -67,10 +68,12 @@ const statusLabels: Record<string, string> = {
   wanted: 'Wanted',
   searching: 'Searching',
   downloading: 'Downloading',
+  paused: 'Paused',
+  cancelled: 'Cancelled',
   upgrading: 'Upgrading',
   'cutoff-unmet': 'Cutoff unmet',
   failed: 'Failed',
-  unmonitored: 'Unmonitored',
+  unmonitored: 'Manual selection',
 }
 
 const statusTones: Record<string, string> = {
@@ -149,8 +152,42 @@ function bestFile(movie: Movie): MovieFile | null {
   return files.reduce((best, file) => (file.score >= best.score ? file : best))
 }
 
+// Wanted means no usable file yet, whether releases are picked manually or automatically.
+function needsFile(movie: Movie) {
+  return availableFiles(movie).length === 0 && !activeStatuses.has(stateKey(movie))
+}
+
+function downloadModeLabel(monitored: boolean) {
+  return monitored ? 'Automatic downloads' : 'Manual selection'
+}
+
+function DownloadModeBadge({ monitored }: { monitored: boolean }) {
+  return <Badge variant="outline">{downloadModeLabel(monitored)}</Badge>
+}
+
 function tagsOf(movie: Movie) {
   return strings(movie.tags)
+}
+
+function normalizedTitle(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+// Duplicate evidence: the same IMDb identity, or the same title within a year.
+function catalogMatch(movies: Movie[], candidate: Title): Movie | null {
+  const imdbId = candidate.imdbId.trim().toLowerCase()
+  if (imdbId) {
+    const match = movies.find((movie) => movie.metadata.imdbId.trim().toLowerCase() === imdbId)
+    if (match) return match
+  }
+  const title = normalizedTitle(candidate.title)
+  if (!title || candidate.year <= 0) return null
+  return (
+    movies.find(
+      (movie) =>
+        normalizedTitle(movie.metadata.title) === title && Math.abs(movie.metadata.year - candidate.year) <= 1,
+    ) ?? null
+  )
 }
 
 // Local midnight of the release date; date-only values are read as written, not as UTC.
@@ -244,7 +281,7 @@ const sortFields: { value: SortField; label: string }[] = [
   { value: 'certification', label: 'Certification' },
   { value: 'countries', label: 'Country' },
   { value: 'tags', label: 'Tags' },
-  { value: 'monitored', label: 'Monitoring' },
+  { value: 'monitored', label: 'Downloads' },
   { value: 'profile', label: 'Profile' },
   { value: 'quality', label: 'Quality' },
   { value: 'status', label: 'Status' },
@@ -541,7 +578,6 @@ function LibraryView({
   canWrite,
   canReadSettings,
   onOpenMovie,
-  onAdd,
   onScan,
   onBulkEdit,
 }: {
@@ -551,7 +587,6 @@ function LibraryView({
   canWrite: boolean
   canReadSettings: boolean
   onOpenMovie: (id: string) => void
-  onAdd: () => void
   onScan: () => void
   onBulkEdit: (input: BulkEditInput) => Promise<void>
 }) {
@@ -745,10 +780,10 @@ function LibraryView({
             </option>
           ))}
         </Select>
-        <Select aria-label="Filter by monitoring" value={monitor} onChange={(event) => setMonitor(event.target.value)}>
-          <option value="all">All monitoring</option>
-          <option value="monitored">Monitored</option>
-          <option value="unmonitored">Unmonitored</option>
+        <Select aria-label="Filter by download mode" value={monitor} onChange={(event) => setMonitor(event.target.value)}>
+          <option value="all">All download modes</option>
+          <option value="monitored">Automatic downloads</option>
+          <option value="unmonitored">Manual selection</option>
         </Select>
         {qualityOptions.length > 0 && (
           <Select aria-label="Filter by quality" value={quality} onChange={(event) => setQuality(event.target.value)}>
@@ -795,12 +830,6 @@ function LibraryView({
             <Button size="sm" variant="outline" onClick={onScan}>
               <FolderSearchIcon data-icon="inline-start" />
               Scan library
-            </Button>
-          )}
-          {canWrite && (
-            <Button size="sm" onClick={onAdd}>
-              <PlusIcon data-icon="inline-start" />
-              Add movie
             </Button>
           )}
         </div>
@@ -990,7 +1019,7 @@ function LibraryView({
                       </div>
                       <p className="truncate text-xs text-muted-foreground">
                         {file?.quality || 'Quality unknown'}
-                        {movie.monitored ? '' : ' · Unmonitored'}
+                        {movie.monitored ? '' : ' · Manual selection'}
                       </p>
                     </div>
                   </button>
@@ -1031,7 +1060,7 @@ function LibraryView({
                 <th scope="col" className="px-3 py-2 font-medium">Quality</th>
                 <th scope="col" className="px-3 py-2 font-medium">Rating</th>
                 <th scope="col" className="px-3 py-2 font-medium">Runtime</th>
-                <th scope="col" className="px-3 py-2 font-medium">Monitored</th>
+                <th scope="col" className="px-3 py-2 font-medium">Downloads</th>
                 <th scope="col" className="px-3 py-2 font-medium">Profile</th>
                 <th scope="col" className="px-3 py-2 font-medium">Tags</th>
               </tr>
@@ -1097,7 +1126,7 @@ function LibraryView({
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-muted-foreground">{runtime ?? 'Unknown'}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{movie.monitored ? 'Yes' : 'No'}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{downloadModeLabel(movie.monitored)}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">
                       {profileName(profiles, movie.profileId)}
                     </td>
@@ -1141,9 +1170,9 @@ function LibraryView({
               value={bulk.monitored}
               onChange={(event) => setBulk({ ...bulk, monitored: event.target.value })}
             >
-              <option value="keep">Monitoring: keep</option>
-              <option value="monitored">Monitoring: monitored</option>
-              <option value="unmonitored">Monitoring: unmonitored</option>
+              <option value="keep">Downloads: keep</option>
+              <option value="monitored">Downloads: automatic</option>
+              <option value="unmonitored">Downloads: manual selection</option>
             </Select>
             <Select
               aria-label="Bulk quality profile"
@@ -1227,25 +1256,30 @@ function LibraryView({
   )
 }
 
-function WantedList({ movies, canWrite, onOpenMovie }: { movies: Movie[]; canWrite: boolean; onOpenMovie: (id: string) => void }) {
+function WantedList({
+  movies,
+  canWrite,
+  onOpenMovie,
+  onChooseRelease,
+}: {
+  movies: Movie[]
+  canWrite: boolean
+  onOpenMovie: (id: string) => void
+  onChooseRelease: (id: string) => void
+}) {
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<SyncResult | null>(null)
+  const [confirmSearch, setConfirmSearch] = useState(false)
 
   const wanted = useMemo(
-    () =>
-      movies
-        .filter(
-          (movie) =>
-            movie.monitored &&
-            availableFiles(movie).length === 0 &&
-            !activeStatuses.has(stateKey(movie)),
-        )
-        .sort((a, b) => (releasedTimestamp(b) ?? 0) - (releasedTimestamp(a) ?? 0)),
+    () => movies.filter(needsFile).sort((a, b) => (releasedTimestamp(b) ?? 0) - (releasedTimestamp(a) ?? 0)),
     [movies],
   )
+  const automatic = wanted.filter((movie) => movie.monitored).length
 
   const runSync = async () => {
+    setConfirmSearch(false)
     setSyncing(true)
     setError('')
     setResult(null)
@@ -1262,20 +1296,36 @@ function WantedList({ movies, canWrite, onOpenMovie }: { movies: Movie[]; canWri
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {wanted.length} monitored {wanted.length === 1 ? 'movie has' : 'movies have'} no file yet.
-          {!canWrite && ' Searching for releases requires library write access.'}
+          {wanted.length} {wanted.length === 1 ? 'movie has' : 'movies have'} no usable file yet. Movies on
+          Manual selection wait until you choose a release.
+          {!canWrite && ' Choosing releases requires library write access.'}
         </p>
         {canWrite && (
-          <Button size="sm" disabled={syncing || wanted.length === 0} onClick={() => void runSync()}>
+          <Button size="sm" disabled={syncing || automatic === 0} onClick={() => setConfirmSearch(true)}>
             {syncing ? (
               <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
             ) : (
               <SearchIcon data-icon="inline-start" />
             )}
-            {syncing ? 'Searching…' : 'Search all wanted'}
+            {syncing ? 'Searching…' : 'Search & download'}
           </Button>
         )}
       </div>
+      {confirmSearch && (
+        <div role="group" aria-label="Confirm automatic search" className="space-y-3 rounded-lg border border-border p-4">
+          <p className="text-sm">Search all movies with automatic downloads enabled and queue matching releases? This can also download upgrades and sync your watchlists.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => void runSync()}>Search & download</Button>
+            <Button size="sm" variant="outline" onClick={() => setConfirmSearch(false)}>Keep browsing</Button>
+          </div>
+        </div>
+      )}
+      {canWrite && (
+        <p className="text-xs text-muted-foreground">
+          Searching covers movies set to Automatic downloads only. Manual selection movies download nothing until
+          you choose a release.
+        </p>
+      )}
 
       {error && <ErrorNote onRetry={() => void runSync()}>{error}</ErrorNote>}
       {result && (
@@ -1286,7 +1336,7 @@ function WantedList({ movies, canWrite, onOpenMovie }: { movies: Movie[]; canWri
 
       {wanted.length === 0 ? (
         <EmptyState>
-          Nothing is waiting for a file. Monitored movies without a file appear here.
+          Nothing is waiting for a file. Movies without a usable file appear here, whatever their download mode.
         </EmptyState>
       ) : (
         <ul className="flex flex-col divide-y divide-border rounded-xl ring-1 ring-foreground/10">
@@ -1307,10 +1357,22 @@ function WantedList({ movies, canWrite, onOpenMovie }: { movies: Movie[]; canWri
                 {movie.error && <p className="text-xs text-destructive">{movie.error}</p>}
               </div>
               <StatusBadge movie={movie} />
-              <Button size="sm" variant="outline" onClick={() => onOpenMovie(movie.id)}>
-                <SearchIcon data-icon="inline-start" />
-                {canWrite ? 'Search releases' : 'View details'}
-              </Button>
+              {movie.monitored && <DownloadModeBadge monitored />}
+              {canWrite ? (
+                <span className="flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => onChooseRelease(movie.id)}>
+                    <SearchIcon data-icon="inline-start" />
+                    Choose release
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => onOpenMovie(movie.id)}>
+                    Details
+                  </Button>
+                </span>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => onOpenMovie(movie.id)}>
+                  View details
+                </Button>
+              )}
             </li>
           ))}
         </ul>
@@ -1417,7 +1479,7 @@ function CalendarTab({ onOpenMovie }: { onOpenMovie: (id: string) => void }) {
                     <p className="truncate text-sm font-medium">{movie.metadata.title || 'Untitled'}</p>
                     <p className="text-xs text-muted-foreground">
                       {movie.metadata.year > 0 ? movie.metadata.year : 'Year unknown'}
-                      {movie.monitored ? '' : ' · Unmonitored'}
+                      {movie.monitored ? '' : ' · Manual selection'}
                     </p>
                   </div>
                   <StatusBadge movie={movie} />
@@ -2460,18 +2522,282 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
   )
 }
 
+type TabItem = { id: string; label: string; count?: number }
+
+function TabStrip({
+  label,
+  items,
+  active,
+  onChange,
+}: {
+  label: string
+  items: TabItem[]
+  active: string
+  onChange: (id: string) => void
+}) {
+  return (
+    <div role="tablist" aria-label={label} onKeyDown={(event) => {
+      const current = items.findIndex((item) => item.id === active)
+      let next: number
+      if (event.key === 'ArrowRight') next = (current + 1) % items.length
+      else if (event.key === 'ArrowLeft') next = (current - 1 + items.length) % items.length
+      else if (event.key === 'Home') next = 0
+      else if (event.key === 'End') next = items.length - 1
+      else return
+      event.preventDefault()
+      onChange(items[next].id)
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+    }} className="flex flex-wrap gap-1 border-b border-border">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          role="tab"
+          aria-selected={active === item.id}
+          tabIndex={active === item.id ? 0 : -1}
+          onClick={() => onChange(item.id)}
+          className={cn(
+            '-mb-px flex items-center gap-1.5 border-b-2 px-2.5 py-1.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+            active === item.id
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {item.label}
+          {item.count !== undefined && item.count > 0 && (
+            <span className="rounded-full bg-muted px-1.5 text-[11px] font-semibold tabular-nums">{item.count}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function MovieReleaseDialog({
+  movie,
+  onClose,
+  onGrabbed,
+}: {
+  movie: Movie
+  onClose: () => void
+  onGrabbed: (id: string) => void
+}) {
+  const [releases, setReleases] = useState<MovieRelease[] | null>(null)
+  const [searching, setSearching] = useState(true)
+  const [grabbing, setGrabbing] = useState('')
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [queueHref, setQueueHref] = useState('#usenet')
+  const [confirmRelease, setConfirmRelease] = useState('')
+  const controller = useRef<AbortController | null>(null)
+
+  const search = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        const found = await moviesApi.searchReleases(movie.id, signal)
+        if (!signal.aborted) {
+          setReleases(found)
+          setError('')
+        }
+      } catch (cause) {
+        if (!signal.aborted) setError(errorMessage(cause))
+      } finally {
+        if (!signal.aborted) setSearching(false)
+      }
+    },
+    [movie.id],
+  )
+
+  const runSearch = () => {
+    controller.current?.abort()
+    const request = new AbortController()
+    controller.current = request
+    setSearching(true)
+    setReleases(null)
+    setError('')
+    setNotice('')
+    void search(request.signal)
+  }
+
+  useEffect(() => {
+    const request = new AbortController()
+    controller.current = request
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- results are applied after the request settles
+    void search(request.signal)
+    return () => request.abort()
+  }, [search])
+
+  const grab = async (release: MovieRelease) => {
+    setConfirmRelease('')
+    setGrabbing(release.id)
+    setError('')
+    setNotice('')
+    try {
+      await moviesApi.grab(movie.id, release.id, !release.decision.allowed)
+      onGrabbed(movie.id)
+      setQueueHref(release.protocol === 'torrent' ? '#torrents' : '#usenet')
+      setNotice('Download queued.')
+    } catch (cause) {
+      setError(errorMessage(cause))
+    } finally {
+      setGrabbing('')
+    }
+  }
+
+  return (
+    <DialogShell
+      title={movie.metadata.title || 'Choose a release'}
+      description="Compare releases and choose one to download."
+      onClose={onClose}
+      size="xl"
+    >
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-muted-foreground">
+            {movie.monitored
+              ? 'Automatic downloads are on for this movie, so Constellarr may also pick releases on its own.'
+              : 'Manual selection: only the release you choose here downloads.'}
+          </p>
+          <Button size="sm" variant="outline" disabled={searching} onClick={runSearch}>
+            {searching ? (
+              <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+            ) : (
+              <SearchIcon data-icon="inline-start" />
+            )}
+            {searching ? 'Searching…' : 'Search again'}
+          </Button>
+        </div>
+
+        {error && (
+          <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+        {notice && (
+          <p role="status" className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-400">
+            <CheckIcon className="mr-2 inline size-4" />
+            {notice}{' '}<a href={queueHref} onClick={onClose} className="underline underline-offset-4">View download</a>
+          </p>
+        )}
+
+        {releases === null ? (
+          searching ? (
+            <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+              <LoaderCircleIcon className="size-4 animate-spin motion-reduce:animate-none" />
+              Searching indexers…
+            </p>
+          ) : (
+            <EmptyState>No results. Search again to retry.</EmptyState>
+          )
+        ) : releases.length === 0 ? (
+          <EmptyState>No releases found for this movie.</EmptyState>
+        ) : (
+          <ul className="space-y-2">
+            {releases.map((release) => {
+              const decision = release.decision
+              const chips = [
+                decision.details.quality,
+                decision.details.resolution ? `${decision.details.resolution}p` : '',
+                decision.details.source,
+                decision.details.codec,
+                decision.details.audio,
+                decision.details.hdr,
+                decision.details.group,
+                decision.details.edition,
+                decision.details.proper ? 'Proper' : '',
+                decision.details.language,
+              ].filter(Boolean)
+              return (
+                <li key={release.id} className="rounded-lg border border-border p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium break-words">{release.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatBytes(release.size)} ·{' '}
+                        <time dateTime={release.published} title={formatDateTime(release.published)}>
+                          {formatAge(release.published)}
+                        </time>
+                                                {release.source ? ` · ${release.source}` : ''}
+                        {release.protocol === 'torrent' && release.seeders !== undefined
+                          ? ` · ${release.seeders} seeders`
+                          : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{release.protocol === 'torrent' ? 'Torrent' : 'Usenet'}</Badge>
+                      {decision.upgrade && <Badge variant="outline">Upgrade</Badge>}
+                      <Badge
+                        variant={decision.allowed ? 'outline' : 'destructive'}
+                        className={cn(decision.allowed && 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300')}
+                      >
+                        {decision.allowed ? 'Allowed' : 'Rejected'}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {chips.map((chip) => (
+                      <Badge key={chip} variant="outline" className="text-muted-foreground">
+                        {chip}
+                      </Badge>
+                    ))}
+                    <Badge variant="outline" className="text-muted-foreground">
+                      Score {decision.score}
+                    </Badge>
+                  </div>
+                  {strings(decision.reasons).length > 0 && (
+                    <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
+                      {strings(decision.reasons).map((reason, index) => (
+                        <li key={`${reason}-${index}`}>{reason}</li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="mt-3">
+                    <Button
+                      size="sm"
+                      variant={decision.allowed ? 'default' : 'outline'}
+                      disabled={!!grabbing || !!notice}
+                      aria-label={`Download ${release.title}`}
+                      onClick={() => decision.allowed ? void grab(release) : setConfirmRelease(release.id)}
+                    >
+                      {grabbing === release.id ? (
+                        <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                      ) : (
+                        <DownloadIcon data-icon="inline-start" />
+                      )}
+                      {decision.allowed ? 'Download' : 'Download anyway…'}
+                    </Button>
+                    {confirmRelease === release.id && (
+                      <div className="mt-3 space-y-2 rounded-lg border border-destructive/30 p-3">
+                        <p className="text-sm">This release does not meet your rules. Download it anyway?</p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="destructive" disabled={!!grabbing} onClick={() => void grab(release)}>Download anyway</Button>
+                          <Button size="sm" variant="outline" onClick={() => setConfirmRelease('')}>Keep browsing</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </DialogShell>
+  )
+}
+
 function MovieDetailDialog({
   movie,
   profiles,
   roots,
   canWrite,
   canReadSettings,
-  autoSearch,
+  canReadSubtitles,
   onClose,
   onSave,
   onRemove,
   onRefreshed,
-  onGrabbed,
+  onChooseRelease,
   onChanged,
 }: {
   movie: Movie
@@ -2479,12 +2805,12 @@ function MovieDetailDialog({
   roots: RootFolder[]
   canWrite: boolean
   canReadSettings: boolean
-  autoSearch: boolean
+  canReadSubtitles: boolean
   onClose: () => void
   onSave: (movie: Movie) => Promise<Movie>
   onRemove: (id: string) => Promise<void>
   onRefreshed: (movie: Movie) => void
-  onGrabbed: (id: string) => void
+  onChooseRelease: (id: string) => void
   onChanged: () => void
 }) {
   const [form, setForm] = useState(() => ({
@@ -2500,14 +2826,11 @@ function MovieDetailDialog({
   const [renameResult, setRenameResult] = useState<RenameResult | null>(null)
   const [removing, setRemoving] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(false)
-  const [releases, setReleases] = useState<MovieRelease[] | null>(null)
-  const [searching, setSearching] = useState(autoSearch)
-  const [grabbing, setGrabbing] = useState('')
+  const [tab, setTab] = useState('files')
   const [history, setHistory] = useState<HistoryEntry[] | null>(null)
   const [historyError, setHistoryError] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const searchController = useRef<AbortController | null>(null)
 
   const tagsChanged = form.tags !== tagsOf(movie).join(', ')
   const dirty =
@@ -2529,44 +2852,6 @@ function MovieDetailDialog({
       })
     return () => controller.abort()
   }, [movie.id])
-
-  const runReleaseSearch = useCallback(
-    async (signal: AbortSignal) => {
-      try {
-        const found = await moviesApi.searchReleases(movie.id, signal)
-        if (!signal.aborted) {
-          setReleases(found)
-          setError('')
-        }
-      } catch (cause) {
-        if (!signal.aborted) setError(errorMessage(cause))
-      } finally {
-        if (!signal.aborted) setSearching(false)
-      }
-    },
-    [movie.id],
-  )
-
-  const search = () => {
-    searchController.current?.abort()
-    const controller = new AbortController()
-    searchController.current = controller
-    setSearching(true)
-    setError('')
-    setNotice('')
-    void runReleaseSearch(controller.signal)
-  }
-
-  useEffect(() => {
-    if (!autoSearch || !canWrite) return
-    const controller = new AbortController()
-    searchController.current = controller
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- results are applied after the request settles
-    void runReleaseSearch(controller.signal)
-    return () => controller.abort()
-  }, [autoSearch, canWrite, runReleaseSearch])
-
-  useEffect(() => () => searchController.current?.abort(), [])
 
   const save = async () => {
     setSaving(true)
@@ -2644,25 +2929,16 @@ function MovieDetailDialog({
     }
   }
 
-  const grab = async (release: MovieRelease) => {
-    setGrabbing(release.id)
-    setError('')
-    setNotice('')
-    try {
-      const job = await moviesApi.grab(movie.id, release.id, !release.decision.allowed)
-      onGrabbed(movie.id)
-      setNotice(`Download queued as job ${job.id.slice(0, 8)}. Track it in Usenet.`)
-    } catch (cause) {
-      setError(errorMessage(cause))
-    } finally {
-      setGrabbing('')
-    }
-  }
-
   const files = movieFiles(movie)
   const metadata = movie.metadata
   const rating = ratingText(movie)
   const runtime = runtimeText(movie)
+  const file = bestFile(movie)
+  const detailTabs: TabItem[] = [
+    { id: 'files', label: 'Files', count: files.length },
+    { id: 'settings', label: 'Settings' },
+    { id: 'history', label: 'History', count: history?.length ?? 0 },
+  ]
 
   return (
     <DialogShell
@@ -2682,12 +2958,13 @@ function MovieDetailDialog({
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-heading text-lg font-semibold">{metadata.title || 'Untitled'}</h2>
               <StatusBadge movie={movie} />
-              {!movie.monitored && <Badge variant="outline">Unmonitored</Badge>}
+              <DownloadModeBadge monitored={movie.monitored} />
             </div>
             <p className="text-sm text-muted-foreground">
               {metadata.year > 0 ? metadata.year : 'Year unknown'}
               {runtime ? ` · ${runtime}` : ''}
               {metadata.certification ? ` · ${metadata.certification}` : ''}
+              {file ? ` · ${formatBytes(file.size)}` : ' · No file yet'}
               {` · Added ${formatDate(Date.parse(movie.addedAt) || null)}`}
             </p>
             <p className="text-sm">
@@ -2722,6 +2999,46 @@ function MovieDetailDialog({
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          {canWrite && (
+            <Button size="sm" onClick={() => onChooseRelease(movie.id)}>
+              <SearchIcon data-icon="inline-start" />
+              Search releases
+            </Button>
+          )}
+          {file && (
+            <Button asChild size="sm" variant="outline">
+              <a
+                href={moviesApi.fileUrl(movie.id, file.path)}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Play ${file.path}`}
+              >
+                <PlayIcon data-icon="inline-start" />
+                Play
+              </a>
+            </Button>
+          )}
+          {file && canReadSubtitles && (
+            <Button asChild size="sm" variant="outline">
+              <a href={`#subtitles?kind=movie&id=${encodeURIComponent(movie.id)}`} onClick={onClose}>
+                <CaptionsIcon data-icon="inline-start" />
+                Subtitles
+              </a>
+            </Button>
+          )}
+          {canWrite && (
+            <Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
+              {refreshing ? (
+                <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+              ) : (
+                <RefreshCwIcon data-icon="inline-start" />
+              )}
+              Refresh metadata
+            </Button>
+          )}
+        </div>
+
         <dl className="grid gap-2 sm:grid-cols-2">
           <MetaRow label="Genres">{strings(metadata.genres).join(', ') || 'Unknown'}</MetaRow>
           <MetaRow label="Released">{formatDate(releasedTimestamp(movie))}</MetaRow>
@@ -2731,418 +3048,325 @@ function MovieDetailDialog({
           <MetaRow label="Countries">{strings(metadata.countries).join(', ') || 'Unknown'}</MetaRow>
         </dl>
 
-        <Section
-          title="Files"
-          action={<span className="text-xs text-muted-foreground">{movie.lastSearchAt ? `Last search ${formatAge(movie.lastSearchAt)}` : 'Never searched'}</span>}
-        >
-          {files.length === 0 ? (
-            <EmptyState>No file imported yet.{canWrite ? ' Search releases to download this movie.' : ''}</EmptyState>
-          ) : (
-            <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
-              {files.map((file) => (
-                <li key={`${file.rootId}-${file.path}`} className="flex flex-wrap items-center gap-2 p-2.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-2 text-xs break-all">
-                      {file.path}
-                      {file.missing && <Badge variant="destructive">Missing</Badge>}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatBytes(file.size)}
-                      {file.quality ? ` · ${file.quality}` : ''}
-                      {file.importedAt ? ` · imported ${formatAge(file.importedAt)}` : ''}
-                    </p>
-                  </div>
-                  {file.missing ? (
-                    <span className="text-xs text-muted-foreground">
-                      File not found on disk. Import a replacement to restore playback.
-                    </span>
-                  ) : (
-                    <>
-                      <Button asChild size="sm" variant="outline">
-                        <a
-                          href={moviesApi.fileUrl(movie.id, file.path)}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`Play ${file.path}`}
-                        >
-                          <PlayIcon data-icon="inline-start" />
-                          Play
-                        </a>
-                      </Button>
-                      <Button asChild size="sm" variant="ghost">
-                        <a
-                          href={moviesApi.fileUrl(movie.id, file.path)}
-                          download
-                          aria-label={`Download ${file.path}`}
-                        >
-                          <FileDownIcon data-icon="inline-start" />
-                          Download
-                        </a>
-                      </Button>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+        <TabStrip label="Movie sections" items={detailTabs} active={tab} onChange={setTab} />
 
-        <Section
-          title="Monitoring and organization"
-          action={
-            <span className="text-xs text-muted-foreground" role="status">
-              {dirty ? 'Unsaved changes' : 'Saved'}
-            </span>
-          }
-        >
-          {canWrite ? (
-            <>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Checkbox
-                  id="detail-monitored"
-                  label="Monitored"
-                  description="Search for releases and upgrades automatically."
-                  checked={form.monitored}
-                  onChange={(monitored) => setForm({ ...form, monitored })}
-                />
-                {canReadSettings && (
-                  <div className="space-y-2">
-                    <label htmlFor="detail-profile" className="text-sm font-medium">
-                      Quality profile
-                    </label>
-                    <Select
-                      id="detail-profile"
-                      className="h-9 w-full"
-                      value={form.profileId}
-                      onChange={(event) => setForm({ ...form, profileId: event.target.value })}
-                    >
-                      <option value="">Default</option>
-                      {profiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                )}
-                {canReadSettings && (
-                  <div className="space-y-2">
-                    <label htmlFor="detail-root" className="text-sm font-medium">
-                      Root folder
-                    </label>
-                    <Select
-                      id="detail-root"
-                      className="h-9 w-full"
-                      value={form.rootId}
-                      onChange={(event) => setForm({ ...form, rootId: event.target.value })}
-                    >
-                      <option value="">Default</option>
-                      {roots.map((root) => (
-                        <option key={root.id || root.path} value={root.id}>
-                          {root.path}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <label htmlFor="detail-tags" className="text-sm font-medium">
-                    Tags
-                  </label>
-                  <Input
-                    id="detail-tags"
-                    value={form.tags}
-                    placeholder="4k, kids"
-                    onChange={(event) => setForm({ ...form, tags: event.target.value })}
-                  />
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <label htmlFor="detail-collection" className="text-sm font-medium">
-                    Collection
-                  </label>
-                  <Input
-                    id="detail-collection"
-                    value={form.collection}
-                    placeholder="The Matrix Collection"
-                    onChange={(event) => setForm({ ...form, collection: event.target.value })}
-                  />
-                </div>
-              </div>
-              {!canReadSettings ? (
-                <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <CircleAlertIcon className="size-4 shrink-0" />
-                  The current root folder and quality profile stay as configured on the server.
-                </p>
-              ) : (
-                (profiles.length === 0 || roots.length === 0) && (
-                  <p className="flex items-center gap-2 text-xs text-amber-300">
-                    <CircleAlertIcon className="size-4 shrink-0" />
-                    {roots.length === 0 ? (
-                      <>
-                        Add a root folder in{' '}
-                        <a href="#storage" className="underline underline-offset-4">
-                          Storage & Paths
-                        </a>
-                        .
-                      </>
-                    ) : (
-                      'Create a quality profile in the Profiles tab.'
-                    )}
-                  </p>
-                )
-              )}
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>
-                  {saving ? (
-                    <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-                  ) : (
-                    <SaveIcon data-icon="inline-start" />
-                  )}
-                  Save changes
-                </Button>
-              </div>
-            </>
-          ) : (
-            <dl className="grid gap-2 sm:grid-cols-2">
-              <MetaRow label="Monitoring">{movie.monitored ? 'Monitored' : 'Unmonitored'}</MetaRow>
-              <MetaRow label="Quality profile">
-                {canReadSettings ? profileName(profiles, movie.profileId) : movie.profileId ? 'Configured profile' : 'Default'}
-              </MetaRow>
-              <MetaRow label="Root folder">
-                {canReadSettings
-                  ? roots.find((root) => root.id === movie.rootId)?.path || movie.rootId || 'Default'
-                  : movie.rootId
-                    ? 'Configured root folder'
-                    : 'Default'}
-              </MetaRow>
-              <MetaRow label="Tags">{tagsOf(movie).join(', ') || 'None'}</MetaRow>
-              <MetaRow label="Collection">{movie.collection || 'None'}</MetaRow>
-              <p className="text-xs text-muted-foreground sm:col-span-2">
-                Editing movie settings requires library write access.
-              </p>
-            </dl>
-          )}
-        </Section>
-
-        {canWrite && (
-          <Section title="Actions">
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
-              {refreshing ? (
-                <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-              ) : (
-                <RefreshCwIcon data-icon="inline-start" />
-              )}
-              Refresh metadata
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={renaming !== null}
-              onClick={() => void runRename(true)}
-            >
-              {renaming === 'preview' ? (
-                <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-              ) : (
-                <PencilIcon data-icon="inline-start" />
-              )}
-              Rename preview
-            </Button>
-            {confirmRemove ? (
-              <span className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-1.5">
-                <span className="text-sm text-muted-foreground">Remove from catalog? Files stay on disk.</span>
-                <Button size="sm" variant="outline" onClick={() => setConfirmRemove(false)}>
-                  Cancel
-                </Button>
-                <Button size="sm" variant="destructive" disabled={removing} onClick={() => void remove()}>
-                  {removing ? (
-                    <LoaderCircleIcon className="animate-spin motion-reduce:animate-none" />
-                  ) : (
-                    <Trash2Icon />
-                  )}
-                  Remove
-                </Button>
-              </span>
+        {tab === 'files' && (
+          <div role="tabpanel" aria-label="Files" className="space-y-3">
+            {files.length === 0 ? (
+              <EmptyState>
+                No usable file yet.{canWrite ? ' Search releases to download this movie.' : ''}
+              </EmptyState>
             ) : (
-              <Button size="sm" variant="outline" className="text-destructive" onClick={() => setConfirmRemove(true)}>
-                <Trash2Icon data-icon="inline-start" />
-                Remove from catalog
-              </Button>
+              <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
+                {files.map((item) => (
+                  <li key={`${item.rootId}-${item.path}`} className="flex flex-wrap items-center gap-2 p-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-center gap-2 text-xs break-all">
+                        {item.path}
+                        {item.missing && <Badge variant="destructive">Missing</Badge>}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatBytes(item.size)}
+                        {item.quality ? ` · ${item.quality}` : ''}
+                        {item.importedAt ? ` · imported ${formatAge(item.importedAt)}` : ''}
+                      </p>
+                    </div>
+                    {item.missing ? (
+                      <span className="text-xs text-muted-foreground">
+                        File not found on disk. Import a replacement to restore playback.
+                      </span>
+                    ) : (
+                      <>
+                        <Button asChild size="sm" variant="outline">
+                          <a
+                            href={moviesApi.fileUrl(movie.id, item.path)}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`Play ${item.path}`}
+                          >
+                            <PlayIcon data-icon="inline-start" />
+                            Play
+                          </a>
+                        </Button>
+                        <Button asChild size="sm" variant="ghost">
+                          <a
+                            href={moviesApi.fileUrl(movie.id, item.path)}
+                            download
+                            aria-label={`Download ${item.path}`}
+                          >
+                            <FileDownIcon data-icon="inline-start" />
+                            Download
+                          </a>
+                        </Button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {movie.lastSearchAt ? `Last searched ${formatAge(movie.lastSearchAt)}.` : 'Never searched for releases.'}
+            </p>
+          </div>
+        )}
+
+        {tab === 'settings' && (
+          <div role="tabpanel" aria-label="Settings" className="space-y-5">
+            {canWrite ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-heading text-sm font-semibold">Downloads and organization</h3>
+                  <span className="text-xs text-muted-foreground" role="status">
+                    {dirty ? 'Unsaved changes' : 'Saved'}
+                  </span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Checkbox
+                    id="detail-monitored"
+                    label="Download automatically"
+                    description="Constellarr searches indexers and downloads releases for this movie. Off keeps it in Wanted until you choose a release."
+                    checked={form.monitored}
+                    onChange={(monitored) => setForm({ ...form, monitored })}
+                  />
+                  {canReadSettings && (
+                    <div className="space-y-2">
+                      <label htmlFor="detail-profile" className="text-sm font-medium">
+                        Quality profile
+                      </label>
+                      <Select
+                        id="detail-profile"
+                        className="h-9 w-full"
+                        value={form.profileId}
+                        onChange={(event) => setForm({ ...form, profileId: event.target.value })}
+                      >
+                        <option value="">Default</option>
+                        {profiles.map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            {profile.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  )}
+                  {canReadSettings && (
+                    <div className="space-y-2">
+                      <label htmlFor="detail-root" className="text-sm font-medium">
+                        Root folder
+                      </label>
+                      <Select
+                        id="detail-root"
+                        className="h-9 w-full"
+                        value={form.rootId}
+                        onChange={(event) => setForm({ ...form, rootId: event.target.value })}
+                      >
+                        <option value="">Default</option>
+                        {roots.map((root) => (
+                          <option key={root.id || root.path} value={root.id}>
+                            {root.path}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <label htmlFor="detail-tags" className="text-sm font-medium">
+                      Tags
+                    </label>
+                    <Input
+                      id="detail-tags"
+                      value={form.tags}
+                      placeholder="4k, kids"
+                      onChange={(event) => setForm({ ...form, tags: event.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <label htmlFor="detail-collection" className="text-sm font-medium">
+                      Collection
+                    </label>
+                    <Input
+                      id="detail-collection"
+                      value={form.collection}
+                      placeholder="The Matrix Collection"
+                      onChange={(event) => setForm({ ...form, collection: event.target.value })}
+                    />
+                  </div>
+                </div>
+                {!canReadSettings ? (
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <CircleAlertIcon className="size-4 shrink-0" />
+                    The current root folder and quality profile stay as configured on the server.
+                  </p>
+                ) : (
+                  (profiles.length === 0 || roots.length === 0) && (
+                    <p className="flex items-center gap-2 text-xs text-amber-300">
+                      <CircleAlertIcon className="size-4 shrink-0" />
+                      {roots.length === 0 ? (
+                        <>
+                          Add a root folder in{' '}
+                          <a href="#storage" className="underline underline-offset-4">
+                            Storage & Paths
+                          </a>
+                          .
+                        </>
+                      ) : (
+                        'Create a quality profile in the Profiles tab.'
+                      )}
+                    </p>
+                  )
+                )}
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  <Button size="sm" disabled={!dirty || saving} onClick={() => void save()}>
+                    {saving ? (
+                      <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                    ) : (
+                      <SaveIcon data-icon="inline-start" />
+                    )}
+                    Save changes
+                  </Button>
+                </div>
+
+                <Section title="File naming">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="outline" disabled={renaming !== null} onClick={() => void runRename(true)}>
+                      {renaming === 'preview' ? (
+                        <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                      ) : (
+                        <PencilIcon data-icon="inline-start" />
+                      )}
+                      Rename preview
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Shows the new paths before anything on disk changes.
+                    </span>
+                  </div>
+                  {renameResult && (
+                    <div className="space-y-2 rounded-lg border border-border p-3">
+                      <p className="text-sm font-medium">
+                        {renameResult.applied ? 'Renamed files' : 'Rename preview'}
+                      </p>
+                      {renameResult.files.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No files to rename.</p>
+                      ) : (
+                        <ul className="space-y-1 text-xs">
+                          {renameResult.files.map((item, index) => (
+                            <li key={`${item.from}-${index}`} className="break-all">
+                              <span className="text-muted-foreground">{item.from}</span>
+                              {' → '}
+                              <span>{item.to}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {!renameResult.applied && renameResult.files.length > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={renaming !== null}
+                          onClick={() => void runRename(false)}
+                        >
+                          {renaming === 'apply' ? (
+                            <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                          ) : (
+                            <CheckIcon data-icon="inline-start" />
+                          )}
+                          Apply rename
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </Section>
+
+                <Section title="Remove from catalog">
+                  {confirmRemove ? (
+                    <div className="space-y-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
+                      <p className="text-sm">
+                        Remove <span className="font-medium">{metadata.title || 'this movie'}</span> from the
+                        catalog? Downloaded files stay on disk and active downloads keep running.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="destructive" disabled={removing} onClick={() => void remove()}>
+                          {removing ? (
+                            <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                          ) : (
+                            <Trash2Icon data-icon="inline-start" />
+                          )}
+                          Yes, remove from catalog
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setConfirmRemove(false)}>
+                          Keep movie
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        Removing forgets the catalog entry only. Files and downloads are untouched.
+                      </p>
+                      <Button size="sm" variant="outline" className="text-destructive" onClick={() => setConfirmRemove(true)}>
+                        <Trash2Icon data-icon="inline-start" />
+                        Remove from catalog
+                      </Button>
+                    </div>
+                  )}
+                </Section>
+              </>
+            ) : (
+              <dl className="grid gap-2 sm:grid-cols-2">
+                <MetaRow label="Download mode">{downloadModeLabel(movie.monitored)}</MetaRow>
+                <MetaRow label="Quality profile">
+                  {canReadSettings ? profileName(profiles, movie.profileId) : movie.profileId ? 'Configured profile' : 'Default'}
+                </MetaRow>
+                <MetaRow label="Root folder">
+                  {canReadSettings
+                    ? roots.find((root) => root.id === movie.rootId)?.path || movie.rootId || 'Default'
+                    : movie.rootId
+                      ? 'Configured root folder'
+                      : 'Default'}
+                </MetaRow>
+                <MetaRow label="Tags">{tagsOf(movie).join(', ') || 'None'}</MetaRow>
+                <MetaRow label="Collection">{movie.collection || 'None'}</MetaRow>
+                <p className="text-xs text-muted-foreground sm:col-span-2">
+                  Editing movie settings requires library write access.
+                </p>
+              </dl>
             )}
           </div>
+        )}
 
-          {renameResult && (
-            <div className="space-y-2 rounded-lg border border-border p-3">
-              <p className="text-sm font-medium">
-                {renameResult.applied ? 'Renamed files' : 'Rename preview'}
+        {tab === 'history' && (
+          <div role="tabpanel" aria-label="History" className="space-y-3">
+            {historyError ? (
+              <p role="alert" className="text-sm text-destructive">
+                {historyError}
               </p>
-              {renameResult.files.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No files to rename.</p>
-              ) : (
-                <ul className="space-y-1 text-xs">
-                  {renameResult.files.map((file, index) => (
-                    <li key={`${file.from}-${index}`} className="break-all">
-                      <span className="text-muted-foreground">{file.from}</span>
-                      {' → '}
-                      <span>{file.to}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {!renameResult.applied && renameResult.files.length > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={renaming !== null}
-                  onClick={() => void runRename(false)}
-                >
-                  {renaming === 'apply' ? (
-                    <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-                  ) : (
-                    <CheckIcon data-icon="inline-start" />
-                  )}
-                  Apply rename
-                </Button>
-              )}
-            </div>
-          )}
-          </Section>
-        )}
-
-        {canWrite && (
-          <Section
-            title="Releases"
-          action={
-            <Button size="sm" variant="outline" disabled={searching} onClick={() => void search()}>
-              {searching ? (
-                <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-              ) : (
-                <SearchIcon data-icon="inline-start" />
-              )}
-              {searching ? 'Searching…' : 'Search releases'}
-            </Button>
-          }
-        >
-          {releases === null ? (
-            <p className="text-sm text-muted-foreground">
-              Search the indexer for releases. Rejections show the reason before you grab.
-            </p>
-          ) : releases.length === 0 ? (
-            <EmptyState>No releases found for this movie.</EmptyState>
-          ) : (
-            <ul className="space-y-2">
-              {releases.map((release) => {
-                const decision = release.decision
-                const chips = [
-                  decision.details.quality,
-                  decision.details.resolution ? `${decision.details.resolution}p` : '',
-                  decision.details.source,
-                  decision.details.codec,
-                  decision.details.audio,
-                  decision.details.hdr,
-                  decision.details.group,
-                  decision.details.edition,
-                  decision.details.proper ? 'Proper' : '',
-                  decision.details.language,
-                ].filter(Boolean)
-                return (
-                  <li key={release.id} className="rounded-lg border border-border p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium break-words">{release.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatBytes(release.size)} ·{' '}
-                          <time dateTime={release.published} title={formatDateTime(release.published)}>
-                            {formatAge(release.published)}
-                          </time>
-                          {release.imdbId ? ` · ${release.imdbId}` : ''}
-                          {release.source ? ` · ${release.source}` : ''}
-                          {release.protocol === 'torrent' && release.seeders !== undefined ? ` · ${release.seeders} seeders` : ''}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">{release.protocol === 'torrent' ? 'Torrent' : 'Usenet'}</Badge>
-                        {decision.upgrade && <Badge variant="outline">Upgrade</Badge>}
-                        <Badge
-                          variant={decision.allowed ? 'outline' : 'destructive'}
-                          className={cn(decision.allowed && 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300')}
-                        >
-                          {decision.allowed ? 'Allowed' : 'Rejected'}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {chips.map((chip) => (
-                        <Badge key={chip} variant="outline" className="text-muted-foreground">
-                          {chip}
-                        </Badge>
-                      ))}
-                      <Badge variant="outline" className="text-muted-foreground">
-                        Score {decision.score}
-                      </Badge>
-                    </div>
-                    {strings(decision.reasons).length > 0 && (
-                      <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
-                        {strings(decision.reasons).map((reason, index) => (
-                          <li key={`${reason}-${index}`}>{reason}</li>
-                        ))}
-                      </ul>
-                    )}
-                    <div className="mt-3">
-                      <Button
-                        size="sm"
-                        variant={decision.allowed ? 'default' : 'outline'}
-                        disabled={grabbing === release.id}
-                        onClick={() => void grab(release)}
-                      >
-                        {grabbing === release.id ? (
-                          <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-                        ) : (
-                          <DownloadIcon data-icon="inline-start" />
-                        )}
-                        {decision.allowed ? 'Download' : 'Override & download'}
-                      </Button>
-                    </div>
+            ) : history === null ? (
+              <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircleIcon className="size-4 animate-spin motion-reduce:animate-none" />
+                Loading history…
+              </p>
+            ) : history.length === 0 ? (
+              <EmptyState>No history for this movie yet.</EmptyState>
+            ) : (
+              <ul className="flex flex-col divide-y divide-border">
+                {history.map((entry) => (
+                  <li key={entry.id} className="flex flex-wrap items-start gap-2 py-2 first:pt-0 last:pb-0">
+                    <Badge variant="outline" className="capitalize">
+                      {entry.type || 'event'}
+                    </Badge>
+                    <span className="min-w-0 flex-1 text-sm break-words">{entry.message}</span>
+                    <time
+                      dateTime={entry.createdAt}
+                      title={formatDateTime(entry.createdAt)}
+                      className="text-xs text-muted-foreground"
+                    >
+                      {formatAge(entry.createdAt)}
+                    </time>
                   </li>
-                )
-              })}
-            </ul>
-          )}
-          </Section>
+                ))}
+              </ul>
+            )}
+          </div>
         )}
-
-        <Section title="History">
-          {historyError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {historyError}
-            </p>
-          ) : history === null ? (
-            <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-              <LoaderCircleIcon className="size-4 animate-spin motion-reduce:animate-none" />
-              Loading history…
-            </p>
-          ) : history.length === 0 ? (
-            <EmptyState>No history for this movie yet.</EmptyState>
-          ) : (
-            <ul className="flex flex-col divide-y divide-border">
-              {history.map((entry) => (
-                <li key={entry.id} className="flex flex-wrap items-start gap-2 py-2 first:pt-0 last:pb-0">
-                  <Badge variant="outline" className="capitalize">
-                    {entry.type || 'event'}
-                  </Badge>
-                  <span className="min-w-0 flex-1 text-sm break-words">{entry.message}</span>
-                  <time
-                    dateTime={entry.createdAt}
-                    title={formatDateTime(entry.createdAt)}
-                    className="text-xs text-muted-foreground"
-                  >
-                    {formatAge(entry.createdAt)}
-                  </time>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
 
         {error && (
           <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -3195,28 +3419,35 @@ function manualTitle(fields: ManualFields): Title {
 }
 
 function AddMovieDialog({
+  movies,
   profiles,
   roots,
   canReadSettings,
   onClose,
   onAdded,
+  onOpenMovie,
+  onChooseRelease,
 }: {
+  movies: Movie[]
   profiles: MovieProfile[]
   roots: RootFolder[]
   canReadSettings: boolean
   onClose: () => void
   onAdded: (input: AddMovieInput) => Promise<Movie>
+  onOpenMovie: (id: string) => void
+  onChooseRelease: (id: string) => void
 }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Title[] | null>(null)
   const [page, setPage] = useState(1)
   const [busy, setBusy] = useState<'search' | 'add' | null>(null)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [manual, setManual] = useState(false)
+  const [added, setAdded] = useState<Movie | null>(null)
+  const [advanced, setAdvanced] = useState(false)
+  const [other, setOther] = useState<'imdb' | 'manual' | null>(null)
   const [imdbId, setImdbId] = useState('')
   const [options, setOptions] = useState({
-    monitored: true,
+    automatic: false,
     profileId: profiles[0]?.id ?? '',
     rootId: roots[0]?.id ?? '',
     tags: '',
@@ -3235,12 +3466,19 @@ function AddMovieDialog({
     poster: '',
     plot: '',
   })
+  // Catalog contents when the dialog opened, so an existing entry is reported instead of a fresh add.
+  const [knownIds] = useState(() => new Set(movies.map((movie) => movie.id)))
   const controller = useRef<AbortController | null>(null)
+  const confirmation = useRef<HTMLDivElement>(null)
 
   useEffect(() => () => controller.current?.abort(), [])
 
+  useEffect(() => {
+    if (added) confirmation.current?.focus()
+  }, [added])
+
   const base = {
-    monitored: options.monitored,
+    monitored: options.automatic,
     profileId: options.profileId,
     rootId: options.rootId,
     tags: splitList(options.tags),
@@ -3255,7 +3493,6 @@ function AddMovieDialog({
     controller.current = request
     setBusy('search')
     setError('')
-    setNotice('')
     try {
       const found = await moviesApi.discover(term, nextPage, request.signal)
       if (request.signal.aborted) return
@@ -3264,23 +3501,17 @@ function AddMovieDialog({
     } catch (cause) {
       if (request.signal.aborted) return
       setError(errorMessage(cause))
-      setManual(true)
+      setOther('manual')
     } finally {
       if (!request.signal.aborted) setBusy(null)
     }
   }
 
-  const addResult = async (candidate: Title) => {
+  const add = async (input: AddMovieInput) => {
     setBusy('add')
     setError('')
-    setNotice('')
     try {
-      const movie = await onAdded(
-        candidate.imdbId
-          ? { imdbId: candidate.imdbId, ...base }
-          : { metadata: candidate, ...base },
-      )
-      setNotice(`Added ${movie.metadata.title || candidate.title}.`)
+      setAdded(await onAdded(input))
     } catch (cause) {
       setError(errorMessage(cause))
     } finally {
@@ -3288,42 +3519,24 @@ function AddMovieDialog({
     }
   }
 
-  const addByImdb = async () => {
+  const addResult = (candidate: Title) =>
+    add(candidate.imdbId ? { imdbId: candidate.imdbId, ...base } : { metadata: candidate, ...base })
+
+  const addByImdb = () => {
     const id = imdbId.trim()
     if (!id) {
       setError('Enter an IMDb ID such as tt0111161.')
       return
     }
-    setBusy('add')
-    setError('')
-    setNotice('')
-    try {
-      const movie = await onAdded({ imdbId: id, ...base })
-      setNotice(`Added ${movie.metadata.title || id}.`)
-      setImdbId('')
-    } catch (cause) {
-      setError(errorMessage(cause))
-    } finally {
-      setBusy(null)
-    }
+    return add({ imdbId: id, ...base })
   }
 
-  const addManual = async () => {
+  const addManual = () => {
     if (!fields.title.trim()) {
       setError('Enter at least a title for a manual entry.')
       return
     }
-    setBusy('add')
-    setError('')
-    setNotice('')
-    try {
-      const movie = await onAdded({ metadata: manualTitle(fields), ...base })
-      setNotice(`Added ${movie.metadata.title || fields.title}.`)
-    } catch (cause) {
-      setError(errorMessage(cause))
-    } finally {
-      setBusy(null)
-    }
+    return add({ metadata: manualTitle(fields), ...base })
   }
 
   const field = (key: keyof ManualFields, label: string, props: ComponentProps<'input'> = {}) => (
@@ -3340,104 +3553,69 @@ function AddMovieDialog({
     </div>
   )
 
+  if (added) {
+    const title = added.metadata.title || 'Untitled'
+    const existed = knownIds.has(added.id)
+    return (
+      <DialogShell
+        title={existed ? 'Already in your library' : 'Movie added'}
+        description={added.monitored ? 'Automatic downloads are enabled for this movie.' : 'Nothing downloads until you choose a release.'}
+        onClose={onClose}
+        size="lg"
+      >
+        <div
+          ref={confirmation}
+          tabIndex={-1}
+          aria-labelledby="add-movie-confirmation"
+          className="space-y-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <div className="flex flex-col gap-4 sm:flex-row">
+            <Poster
+              title={title}
+              poster={added.metadata.poster}
+              className="h-28 w-20 shrink-0 rounded-md"
+            />
+            <div className="min-w-0 space-y-2">
+              <p id="add-movie-confirmation" className="font-heading text-base font-semibold">
+                {title}
+                {added.metadata.year > 0 ? ` (${added.metadata.year})` : ''}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {existed
+                  ? 'This movie is already in your library, so nothing changed. Its existing settings stay as they are.'
+                  : added.monitored
+                    ? 'Added with Automatic downloads on. Constellarr searches for releases in the background.'
+                    : 'Added to Wanted with automatic downloading off. Nothing was queued or downloaded.'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {added.monitored ? 'You can also choose a release yourself.' : 'Next step: choose a release yourself.'}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => onChooseRelease(added.id)}>
+              <SearchIcon data-icon="inline-start" />
+              Choose release
+            </Button>
+            <Button size="sm" variant="outline" onClick={onClose}>
+              Done
+            </Button>
+          </div>
+        </div>
+      </DialogShell>
+    )
+  }
+
   return (
     <DialogShell
       title="Add movie"
-      description="Search the metadata provider, add directly by IMDb ID, or enter details manually."
+      description="Add a title to Wanted, then choose a release."
       onClose={onClose}
-      size="xl"
+      size="lg"
     >
       <div className="space-y-5">
-        <div className="grid gap-4 rounded-lg border border-border p-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Checkbox
-            id="add-monitored"
-            label="Monitored"
-            checked={options.monitored}
-            onChange={(monitored) => setOptions({ ...options, monitored })}
-          />
-          {canReadSettings && (
-            <div className="space-y-2">
-              <label htmlFor="add-profile" className="text-sm font-medium">
-                Quality profile
-              </label>
-              <Select
-                id="add-profile"
-                className="h-9 w-full"
-                value={options.profileId}
-                onChange={(event) => setOptions({ ...options, profileId: event.target.value })}
-              >
-                <option value="">Default</option>
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-          {canReadSettings && (
-            <div className="space-y-2">
-              <label htmlFor="add-root" className="text-sm font-medium">
-                Root folder
-              </label>
-              <Select
-                id="add-root"
-                className="h-9 w-full"
-                value={options.rootId}
-                onChange={(event) => setOptions({ ...options, rootId: event.target.value })}
-              >
-                <option value="">Default</option>
-                {roots.map((root) => (
-                  <option key={root.id || root.path} value={root.id}>
-                    {root.path}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-          <div className="space-y-2">
-            <label htmlFor="add-tags" className="text-sm font-medium">
-              Tags
-            </label>
-            <Input
-              id="add-tags"
-              value={options.tags}
-              placeholder="4k, kids"
-              onChange={(event) => setOptions({ ...options, tags: event.target.value })}
-            />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <label htmlFor="add-collection" className="text-sm font-medium">
-              Collection
-            </label>
-            <Input
-              id="add-collection"
-              value={options.collection}
-              placeholder="The Matrix Collection"
-              onChange={(event) => setOptions({ ...options, collection: event.target.value })}
-            />
-          </div>
-          {!canReadSettings ? (
-            <p className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
-              <CircleAlertIcon className="size-4 shrink-0" />
-              Movies use the server's default root folder and quality profile.
-            </p>
-          ) : (
-            roots.length === 0 && (
-              <p className="flex items-center gap-2 text-xs text-amber-300 sm:col-span-2">
-                <CircleAlertIcon className="size-4 shrink-0" />
-                No root folder configured. Add one in{' '}
-                <a href="#storage" className="underline underline-offset-4">
-                  Storage & Paths
-                </a>{' '}
-                so imports have a destination.
-              </p>
-            )
-          )}
-        </div>
-
         <section className="space-y-3">
-          <h3 className="font-heading text-sm font-semibold">Search metadata</h3>
+          <h3 className="font-heading text-sm font-semibold">Search by title</h3>
           <form
             className="flex flex-col gap-2 sm:flex-row"
             onSubmit={(event) => {
@@ -3445,12 +3623,20 @@ function AddMovieDialog({
               void search(1)
             }}
           >
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Movie title"
-              aria-label="Search movie metadata"
-            />
+            <div className="relative flex-1">
+              <SearchIcon
+                className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Movie title"
+                aria-label="Search movie by title"
+                className="pl-8"
+                autoFocus
+              />
+            </div>
             <Button type="submit" disabled={!query.trim() || busy === 'search'}>
               {busy === 'search' ? (
                 <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
@@ -3462,47 +3648,68 @@ function AddMovieDialog({
           </form>
           {results === null ? (
             <p className="text-sm text-muted-foreground">
-              Results appear here with year, rating, and poster.
+              Search for the movie you want to add.
             </p>
           ) : results.length === 0 ? (
-            <EmptyState>No metadata results on this page.</EmptyState>
+            <EmptyState>
+              No metadata results on this page. Try another title, or add the movie without searching below.
+            </EmptyState>
           ) : (
             <>
               <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
-                {results.map((candidate) => (
-                  <li key={`${candidate.imdbId}-${candidate.title}`} className="flex flex-wrap items-center gap-3 p-3">
-                    <Poster
-                      title={candidate.title}
-                      poster={candidate.poster}
-                      className="h-14 w-10 shrink-0 rounded-sm"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium">
-                        {candidate.title || 'Untitled'}{' '}
-                        <span className="font-normal text-muted-foreground">
-                          {candidate.year > 0 ? candidate.year : ''}
-                        </span>
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {candidate.type || 'movie'}
-                        {candidate.imdbId ? ` · ${candidate.imdbId}` : ''}
-                        {candidate.rating ? ` · ${candidate.rating.toFixed(1)}/10` : ''}
-                      </p>
-                    </div>
-                    <Button
-                      size="sm"
-                      disabled={busy !== null}
-                      onClick={() => void addResult(candidate)}
+                {results.map((candidate) => {
+                  const match = catalogMatch(movies, candidate)
+                  return (
+                    <li
+                      key={`${candidate.imdbId}-${candidate.title}`}
+                      className="flex flex-wrap items-center gap-3 p-3"
                     >
-                      {busy === 'add' ? (
-                        <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                      <Poster
+                        title={candidate.title}
+                        poster={candidate.poster}
+                        className="h-20 w-14 shrink-0 rounded-sm"
+                      />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-sm font-medium">
+                          {candidate.title || 'Untitled'}{' '}
+                          <span className="font-normal text-muted-foreground">
+                            {candidate.year > 0 ? candidate.year : 'Year unknown'}
+                          </span>
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {strings(candidate.genres).slice(0, 3).join(', ') || candidate.type || 'Movie'}
+                          {candidate.rating ? ` · ${candidate.rating.toFixed(1)}/10` : ''}
+                        </p>
+                        {match && (
+                          <p className="text-xs text-amber-300">
+                            Already in your library as {match.metadata.title || 'an existing entry'}.
+                          </p>
+                        )}
+                      </div>
+                      {match ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            onClose()
+                            onOpenMovie(match.id)
+                          }}
+                        >
+                          View details
+                        </Button>
                       ) : (
-                        <PlusIcon data-icon="inline-start" />
+                        <Button size="sm" aria-label={`Add ${candidate.title} (${candidate.year})`} disabled={busy !== null} onClick={() => void addResult(candidate)}>
+                          {busy === 'add' ? (
+                            <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                          ) : (
+                            <PlusIcon data-icon="inline-start" />
+                          )}
+                          Add
+                        </Button>
                       )}
-                      Add
-                    </Button>
-                  </li>
-                ))}
+                    </li>
+                  )
+                })}
               </ul>
               <div className="flex items-center justify-between gap-2">
                 <Button
@@ -3529,35 +3736,162 @@ function AddMovieDialog({
           )}
         </section>
 
-        <section className="space-y-3 border-t border-border pt-4">
-          <h3 className="font-heading text-sm font-semibold">Add by IMDb ID</h3>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              value={imdbId}
-              onChange={(event) => setImdbId(event.target.value)}
-              placeholder="tt0111161"
-              aria-label="IMDb ID"
-              className="sm:max-w-xs"
-            />
-            <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void addByImdb()}>
-              <PlusIcon data-icon="inline-start" />
-              Add by IMDb ID
-            </Button>
-          </div>
+        {error && (
+          <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+
+        <section className="space-y-2 rounded-lg border border-border p-3">
+          <Checkbox
+            id="add-automatic"
+            label="Download automatically"
+            description="Let Constellarr search and download matching releases in the background."
+            checked={options.automatic}
+            onChange={(automatic) => setOptions({ ...options, automatic })}
+          />
         </section>
 
         <section className="space-y-3 border-t border-border pt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="font-heading text-sm font-semibold">Manual details</h3>
-            <Button size="sm" variant="ghost" onClick={() => setManual((current) => !current)}>
-              {manual ? 'Hide manual entry' : 'Enter details manually'}
+            <h3 className="font-heading text-sm font-semibold">Library options</h3>
+            <Button size="sm" variant="ghost" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>
+              {advanced ? 'Hide advanced options' : 'Advanced options'}
             </Button>
           </div>
-          {manual && (
+          <p className="text-xs text-muted-foreground">
+            {canReadSettings
+              ? "Uses the server's default quality profile and root folder unless you change them."
+              : "Movies use the server's default root folder and quality profile."}
+          </p>
+          {canReadSettings && roots.length === 0 && (
+            <p className="flex items-center gap-2 text-xs text-amber-300">
+              <CircleAlertIcon className="size-4 shrink-0" />
+              No root folder configured. Add one in{' '}
+              <a href="#storage" className="underline underline-offset-4">
+                Storage & Paths
+              </a>{' '}
+              so imports have a destination.
+            </p>
+          )}
+          {advanced && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {canReadSettings && (
+                <div className="space-y-2">
+                  <label htmlFor="add-profile" className="text-sm font-medium">
+                    Quality profile
+                  </label>
+                  <Select
+                    id="add-profile"
+                    className="h-9 w-full"
+                    value={options.profileId}
+                    onChange={(event) => setOptions({ ...options, profileId: event.target.value })}
+                  >
+                    <option value="">Default</option>
+                    {profiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              {canReadSettings && (
+                <div className="space-y-2">
+                  <label htmlFor="add-root" className="text-sm font-medium">
+                    Root folder
+                  </label>
+                  <Select
+                    id="add-root"
+                    className="h-9 w-full"
+                    value={options.rootId}
+                    onChange={(event) => setOptions({ ...options, rootId: event.target.value })}
+                  >
+                    <option value="">Default</option>
+                    {roots.map((root) => (
+                      <option key={root.id || root.path} value={root.id}>
+                        {root.path}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              <div className="space-y-2">
+                <label htmlFor="add-tags" className="text-sm font-medium">
+                  Tags
+                </label>
+                <Input
+                  id="add-tags"
+                  value={options.tags}
+                  placeholder="4k, kids"
+                  onChange={(event) => setOptions({ ...options, tags: event.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="add-collection" className="text-sm font-medium">
+                  Collection
+                </label>
+                <Input
+                  id="add-collection"
+                  value={options.collection}
+                  placeholder="The Matrix Collection"
+                  onChange={(event) => setOptions({ ...options, collection: event.target.value })}
+                />
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-3 border-t border-border pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-heading text-sm font-semibold">Add without searching</h3>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={other === 'imdb' ? 'default' : 'outline'}
+                aria-pressed={other === 'imdb'}
+                onClick={() => setOther(other === 'imdb' ? null : 'imdb')}
+              >
+                IMDb ID
+              </Button>
+              <Button
+                size="sm"
+                variant={other === 'manual' ? 'default' : 'outline'}
+                aria-pressed={other === 'manual'}
+                onClick={() => setOther(other === 'manual' ? null : 'manual')}
+              >
+                My own details
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {other === null
+              ? 'Use these when the movie is missing from search results or no metadata provider is configured.'
+              : other === 'imdb'
+                ? 'Adds by IMDb ID and lets the metadata provider fill in the details.'
+                : 'Details are stored with the movie when no metadata provider is configured.'}
+          </p>
+          {other === 'imdb' && (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={imdbId}
+                onChange={(event) => setImdbId(event.target.value)}
+                placeholder="tt0111161"
+                aria-label="IMDb ID"
+                className="sm:max-w-xs"
+              />
+              <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void addByImdb()}>
+                {busy === 'add' ? (
+                  <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <PlusIcon data-icon="inline-start" />
+                )}
+                Add by IMDb ID
+              </Button>
+            </div>
+          )}
+          {other === 'manual' && (
             <div className="space-y-4">
-              <p className="text-xs text-muted-foreground">
-                Use this when no metadata provider is configured. Details are stored with the movie.
-              </p>
               <div className="grid gap-4 sm:grid-cols-2">
                 {field('title', 'Title', { required: true })}
                 {field('year', 'Year', { type: 'number', min: 0 })}
@@ -3585,24 +3919,12 @@ function AddMovieDialog({
               <div className="flex justify-end">
                 <Button size="sm" disabled={busy !== null} onClick={() => void addManual()}>
                   <PlusIcon data-icon="inline-start" />
-                  Add manual entry
+                  Add with my details
                 </Button>
               </div>
             </div>
           )}
         </section>
-
-        {error && (
-          <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        {notice && (
-          <p role="status" className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-400">
-            <CheckIcon className="mr-2 inline size-4" />
-            {notice}
-          </p>
-        )}
       </div>
     </DialogShell>
   )
@@ -3861,7 +4183,7 @@ export function MoviesPage() {
   const [setupError, setSetupError] = useState('')
   const [tab, setTab] = useState<Tab>('library')
   const [detailId, setDetailId] = useState<string | null>(null)
-  const [detailSearch, setDetailSearch] = useState(false)
+  const [releaseId, setReleaseId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [watched, setWatched] = useState<string[]>([])
@@ -3979,16 +4301,14 @@ export function MoviesPage() {
     notifyMoviesChanged()
   }, [])
 
-  const openMovie = useCallback((id: string) => {
-    setDetailSearch(false)
-    setDetailId(id)
-  }, [])
+  const openMovie = useCallback((id: string) => setDetailId(id), [])
 
-  const searchMovie = useCallback(
+  // Choosing a release needs library.write; the release dialog is only reachable with that right.
+  const chooseRelease = useCallback(
     (id: string) => {
-      // Release search needs library.write; readers open the details without a search.
-      setDetailSearch(canWrite)
-      setDetailId(id)
+      setAddOpen(false)
+      setDetailId(null)
+      if (canWrite) setReleaseId(id)
     },
     [canWrite],
   )
@@ -4019,9 +4339,9 @@ export function MoviesPage() {
 
   const roots = config?.rootFolders ?? []
   const detailMovie = detailId ? ((movies ?? []).find((movie) => movie.id === detailId) ?? null) : null
-  const wantedCount = (movies ?? []).filter(
-    (movie) => movie.monitored && availableFiles(movie).length === 0,
-  ).length
+  const releaseMovie = releaseId ? ((movies ?? []).find((movie) => movie.id === releaseId) ?? null) : null
+  const wantedCount = (movies ?? []).filter(needsFile).length
+  const canReadSubtitles = can('subtitles.read')
 
   const tabs: { id: Tab; label: string; badge?: number }[] = [
     { id: 'library', label: 'Library' },
@@ -4129,12 +4449,18 @@ export function MoviesPage() {
                 canWrite={canWrite}
                 canReadSettings={canReadSettings}
                 onOpenMovie={openMovie}
-                onAdd={() => setAddOpen(true)}
                 onScan={() => setScanOpen(true)}
                 onBulkEdit={bulkEdit}
               />
             </div>
-            {activeTab === 'wanted' && <WantedList movies={movies} canWrite={canWrite} onOpenMovie={searchMovie} />}
+            {activeTab === 'wanted' && (
+              <WantedList
+                movies={movies}
+                canWrite={canWrite}
+                onOpenMovie={openMovie}
+                onChooseRelease={chooseRelease}
+              />
+            )}
             {activeTab === 'calendar' && <CalendarTab onOpenMovie={openMovie} />}
             {activeTab === 'profiles' && (
               <QualityProfilesTab profiles={profiles} canWrite={canWriteSettings} onChanged={() => void reload()} />
@@ -4147,11 +4473,14 @@ export function MoviesPage() {
 
       {canWrite && addOpen && (
         <AddMovieDialog
+          movies={movies ?? []}
           profiles={profiles}
           roots={roots}
           canReadSettings={canReadSettings}
           onClose={() => setAddOpen(false)}
           onAdded={addMovie}
+          onOpenMovie={openMovie}
+          onChooseRelease={chooseRelease}
         />
       )}
 
@@ -4173,16 +4502,22 @@ export function MoviesPage() {
           roots={roots}
           canWrite={canWrite}
           canReadSettings={canReadSettings}
-          autoSearch={detailSearch}
-          onClose={() => {
-            setDetailId(null)
-            setDetailSearch(false)
-          }}
+          canReadSubtitles={canReadSubtitles}
+          onClose={() => setDetailId(null)}
           onSave={saveMovie}
           onRemove={removeMovie}
           onRefreshed={mergeMovie}
-          onGrabbed={watchMovie}
+          onChooseRelease={chooseRelease}
           onChanged={notifyMoviesChanged}
+        />
+      )}
+
+      {canWrite && releaseMovie && (
+        <MovieReleaseDialog
+          key={releaseMovie.id}
+          movie={releaseMovie}
+          onClose={() => setReleaseId(null)}
+          onGrabbed={watchMovie}
         />
       )}
     </div>

@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { errorMessage } from '@/lib/api'
+import { errorMessage, kibPerSecondToMib, mibPerSecondToKib } from '@/lib/api'
 import {
   torrentsApi,
   type TorrentSettings,
@@ -32,6 +32,7 @@ export function TorrentSettingsCard({ sources, canWrite, onSourcesChanged }: Pro
   const [sourceDraft, setSourceDraft] = useState<TorrentSourceInput>(emptySource)
   const [sourceCategories, setSourceCategories] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [sourceError, setSourceError] = useState<string | null>(null)
   const [sourceCaps, setSourceCaps] = useState<Record<string, string[]>>({})
 
@@ -122,7 +123,7 @@ export function TorrentSettingsCard({ sources, canWrite, onSourcesChanged }: Pro
   }
 
   const removeSource = async (source: TorrentSource) => {
-    if (!window.confirm(`Remove the indexer "${source.name}"?`)) return
+    setConfirmDeleteId(null)
     try {
       await torrentsApi.deleteSource(source.id)
       onSourcesChanged()
@@ -180,44 +181,47 @@ export function TorrentSettingsCard({ sources, canWrite, onSourcesChanged }: Pro
                     onChange={(event) => setForm({ ...form, maxActiveJobs: Number(event.target.value) })}
                   />
                 </label>
-                <label className="flex flex-col gap-1 text-sm">
-                  Download limit (KB/s, 0 = unlimited)
-                  <Input
-                    type="number"
-                    min={0}
-                    value={form.downloadLimitKBps}
-                    onChange={(event) => setForm({ ...form, downloadLimitKBps: Number(event.target.value) })}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-sm">
-                  Upload limit (KB/s, 0 = unlimited)
-                  <Input
-                    type="number"
-                    min={0}
-                    value={form.uploadLimitKBps}
-                    onChange={(event) => setForm({ ...form, uploadLimitKBps: Number(event.target.value) })}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-sm">
-                  Default seed ratio (0 = stop after download)
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.1"
-                    value={form.seedRatioLimit}
-                    onChange={(event) => setForm({ ...form, seedRatioLimit: Number(event.target.value) })}
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-sm">
-                  Default seed time (minutes, 0 = no limit)
-                  <Input
-                    type="number"
-                    min={0}
-                    value={form.seedTimeLimitMinutes}
-                    onChange={(event) => setForm({ ...form, seedTimeLimitMinutes: Number(event.target.value) })}
-                  />
-                </label>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Download speed caps and schedules are shared with Usenet; change them in Download controls.
+              </p>
+              <details className="rounded-lg border border-border px-3 py-3">
+                <summary className="cursor-pointer text-sm font-medium">Advanced limits</summary>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <label className="flex flex-col gap-1 text-sm">
+                    Upload limit (MiB/s, 0 = unlimited)
+                    <Input
+                      inputMode="decimal"
+                      value={form.uploadLimitKBps === 0 ? '' : String(Number(kibPerSecondToMib(form.uploadLimitKBps).toFixed(3)))}
+                      onChange={(event) =>
+                        setForm({ ...form, uploadLimitKBps: mibPerSecondToKib(Number(event.target.value) || 0) })
+                      }
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm">
+                    Default seed ratio (0 = stop after download)
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.1"
+                      value={form.seedRatioLimit}
+                      onChange={(event) => setForm({ ...form, seedRatioLimit: Number(event.target.value) })}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm">
+                    Default seed time (minutes, 0 = no limit)
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.seedTimeLimitMinutes}
+                      onChange={(event) => setForm({ ...form, seedTimeLimitMinutes: Number(event.target.value) })}
+                    />
+                  </label>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Upload limit is stored as {form.uploadLimitKBps} KiB/s and applies to torrent uploads only.
+                </p>
+              </details>
               <div className="flex flex-wrap gap-4 text-sm">
                 <label className="flex items-center gap-2">
                   <input
@@ -287,33 +291,55 @@ export function TorrentSettingsCard({ sources, canWrite, onSourcesChanged }: Pro
           ) : (
             <ul className="flex flex-col gap-2">
               {sources.map((source) => (
-                <li key={source.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
-                  <div className="flex min-w-0 flex-col">
-                    <span className="text-sm">{source.name}</span>
-                    <span className="truncate text-xs text-muted-foreground">{source.url}</span>
-                    <span className="text-xs text-muted-foreground">
-                      Categories: {source.categories.length > 0 ? source.categories.join(', ') : 'all'}
-                      {sourceCaps[source.id]?.length ? ` · Capabilities: ${sourceCaps[source.id].join(', ')}` : ''}
-                    </span>
+                <li key={source.id} className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-col">
+                      <span className="text-sm">{source.name}</span>
+                      <span className="truncate text-xs text-muted-foreground">{source.url}</span>
+                      <span className="text-xs text-muted-foreground">
+                        Categories: {source.categories.length > 0 ? source.categories.join(', ') : 'all'}
+                        {sourceCaps[source.id]?.length ? ` · Capabilities: ${sourceCaps[source.id].join(', ')}` : ''}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={source.enabled ? 'secondary' : 'outline'}>{source.enabled ? 'Enabled' : 'Disabled'}</Badge>
+                      {source.apiKeyConfigured ? <Badge variant="outline">API key saved</Badge> : null}
+                      {canWrite ? (
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => void testSource(source)}>
+                            Test
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => editSource(source)}>
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            aria-expanded={confirmDeleteId === source.id}
+                            onClick={() => setConfirmDeleteId(source.id)}
+                          >
+                            <Trash2Icon aria-hidden="true" />
+                            Remove
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={source.enabled ? 'secondary' : 'outline'}>{source.enabled ? 'Enabled' : 'Disabled'}</Badge>
-                    {source.apiKeyConfigured ? <Badge variant="outline">API key saved</Badge> : null}
-                    {canWrite ? (
-                      <>
-                        <Button size="sm" variant="outline" onClick={() => void testSource(source)}>
-                          Test
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => editSource(source)}>
-                          Edit
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => void removeSource(source)}>
-                          <Trash2Icon aria-hidden="true" />
-                          Remove
-                        </Button>
-                      </>
-                    ) : null}
-                  </div>
+                  {canWrite && confirmDeleteId === source.id ? (
+                    <div
+                      role="group"
+                      aria-label={`Confirm removing ${source.name}`}
+                      className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                    >
+                      <span>Remove the indexer “{source.name}”? Its saved API key is deleted with it.</span>
+                      <Button size="sm" variant="destructive" onClick={() => void removeSource(source)}>
+                        Remove indexer
+                      </Button>
+                      <Button size="sm" variant="ghost" autoFocus onClick={() => setConfirmDeleteId(null)}>
+                        Keep indexer
+                      </Button>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

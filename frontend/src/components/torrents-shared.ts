@@ -12,6 +12,7 @@ export const statusLabels: Record<TorrentDisplayStatus, string> = {
   paused: 'Paused',
   completed: 'Completed',
   failed: 'Failed',
+  cancelled: 'Cancelled',
   extracting: 'Extracting',
 }
 

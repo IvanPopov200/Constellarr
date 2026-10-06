@@ -70,5 +70,17 @@ export function useDownloads(enabled = true) {
     [refresh, replaceJob],
   )
 
-  return { jobs, error, refresh, download, retry }
+  const act = useCallback(
+    async (action: (id: string) => Promise<Job>, job: Job) => {
+      replaceJob(await action(job.id))
+      refresh()
+    },
+    [refresh, replaceJob],
+  )
+
+  const pause = useCallback((job: Job) => act(api.pauseDownload, job), [act])
+  const resume = useCallback((job: Job) => act(api.resumeDownload, job), [act])
+  const cancel = useCallback((job: Job) => act(api.cancelDownload, job), [act])
+
+  return { jobs, error, refresh, download, retry, pause, resume, cancel }
 }

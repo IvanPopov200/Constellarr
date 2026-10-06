@@ -9,6 +9,7 @@ export type TorrentStatus =
   | 'paused'
   | 'completed'
   | 'failed'
+  | 'cancelled'
 
 export type TorrentProcessingState = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
 
@@ -137,7 +138,12 @@ export type TorrentAddInput =
   | { sourceId: string; resultId: string }
 
 export function isActiveTorrent(job: TorrentJob) {
-  return job.status !== 'completed' && job.status !== 'failed' && job.status !== 'paused'
+  return (
+    job.status !== 'completed' &&
+    job.status !== 'failed' &&
+    job.status !== 'paused' &&
+    job.status !== 'cancelled'
+  )
 }
 
 export const torrentsApi = {

@@ -4,7 +4,18 @@ import { useAuth } from '@/lib/auth-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { EmptyNote, ErrorNote, Field, Notice, Section, Select, Toggle } from '@/components/subtitles-ui'
+import {
+  ActionNote,
+  Disclosure,
+  EmptyNote,
+  ErrorNote,
+  Field,
+  Section,
+  Select,
+  Toggle,
+  languageOptions,
+  variantText,
+} from '@/components/subtitles-ui'
 import { errorMessage } from '@/lib/api'
 import { discoveryApi, type AISettingsView } from '@/lib/discovery-api'
 import {
@@ -17,7 +28,7 @@ import {
   type SubtitleProviderTest,
 } from '@/lib/subtitles-api'
 
-const languageSuggestion = 'en, de, fr, es, it, pt-BR, nl, pl, ru, uk, sv, no, da, fi, cs, tr, ar, he, ja, ko, zh, hi'
+const languageListId = 'subtitle-language-codes'
 
 function emptyProvider(): SubtitleProvider {
   return {
@@ -37,6 +48,12 @@ function numberValue(value: string, fallback: number) {
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+function languageVariant(item: SubtitleLanguagePreference) {
+  return variantText({ language: item.code, forced: item.forced, hi: item.hi })
+}
+
+type Feedback = { scope: 'config' | 'test' | 'profile'; tone: 'success' | 'error'; message: string }
+
 export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitleProfile[]; onChanged: () => void }) {
   const { can } = useAuth()
   const canRead = can('settings.read')
@@ -50,7 +67,7 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
+  const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [profileDraft, setProfileDraft] = useState<SubtitleProfile>({
     id: '',
     name: '',
@@ -104,15 +121,15 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
     if (!config) return
     setSaving(true)
     setError('')
-    setNotice('')
+    setFeedback(null)
     try {
       const saved = await subtitlesApi.saveConfig(config)
       setConfig(saved)
-      setNotice('Subtitle settings saved.')
+      setFeedback({ scope: 'config', tone: 'success', message: 'Subtitle settings saved.' })
       await load()
       onChanged()
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope: 'config', tone: 'error', message: errorMessage(cause) })
     } finally {
       setSaving(false)
     }
@@ -121,11 +138,22 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
   const testProviders = async () => {
     setTesting(true)
     setError('')
+    setFeedback(null)
     try {
-      setTests(await subtitlesApi.testProviders())
+      const results = await subtitlesApi.testProviders()
+      setTests(results)
+      const ready = results.filter((item) => item.ok).length
+      setFeedback({
+        scope: 'test',
+        tone: ready > 0 ? 'success' : 'error',
+        message:
+          results.length === 0
+            ? 'No enabled provider was available to test.'
+            : `${ready} of ${results.length} enabled ${results.length === 1 ? 'provider is' : 'providers are'} reachable.`,
+      })
       await load()
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope: 'test', tone: 'error', message: errorMessage(cause) })
     } finally {
       setTesting(false)
     }
@@ -140,26 +168,29 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
 
   const saveProfile = async () => {
     setError('')
+    setFeedback(null)
     try {
       const languages = (profileDraft.languages ?? []).filter((item) => item.code.trim() !== '')
       const saved = await subtitlesApi.saveProfile({ ...profileDraft, languages })
-      setNotice(`Saved profile ${saved.name}.`)
+      setFeedback({ scope: 'profile', tone: 'success', message: `Saved profile ${saved.name}.` })
       setProfileDraft({ id: '', name: '', languages: [{ code: 'en', forced: false, hi: false }], cutoff: 1 })
       await load()
       onChanged()
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope: 'profile', tone: 'error', message: errorMessage(cause) })
     }
   }
 
   const deleteProfile = async (id: string) => {
     setError('')
+    setFeedback(null)
     try {
       await subtitlesApi.deleteProfile(id)
+      setFeedback({ scope: 'profile', tone: 'success', message: 'Profile deleted.' })
       await load()
       onChanged()
     } catch (cause) {
-      setError(errorMessage(cause))
+      setFeedback({ scope: 'profile', tone: 'error', message: errorMessage(cause) })
     }
   }
 
@@ -168,6 +199,9 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
     languages[index] = { ...languages[index], ...update }
     setProfileDraft({ ...profileDraft, languages })
   }
+
+  const noteFor = (scope: Feedback['scope']) =>
+    feedback?.scope === scope ? <ActionNote tone={feedback.tone}>{feedback.message}</ActionNote> : null
 
   if (!canRead) {
     return <EmptyNote>Subtitle settings require the settings read permission.</EmptyNote>
@@ -184,52 +218,57 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
   }
 
   const providers = config.providers ?? []
+  const draftLanguages = profileDraft.languages ?? []
 
   return (
     <div className="space-y-6">
       {error && <ErrorNote>{error}</ErrorNote>}
-      {notice && <Notice>{notice}</Notice>}
-      <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={save} disabled={saving || !canWrite}>
-          {saving ? (
-            <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
-          ) : (
-            <SaveIcon data-icon="inline-start" />
-          )}
-          Save settings
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => load().catch((cause) => setError(errorMessage(cause)))}>
-          <RefreshCwIcon data-icon="inline-start" />
-          Reload
-        </Button>
-        <Button size="sm" variant="outline" onClick={testProviders} disabled={testing || !canWrite}>
-          <ZapIcon data-icon="inline-start" />
-          Test providers
-        </Button>
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={save} disabled={saving || !canWrite}>
+            {saving ? (
+              <LoaderCircleIcon data-icon="inline-start" className="animate-spin motion-reduce:animate-none" />
+            ) : (
+              <SaveIcon data-icon="inline-start" />
+            )}
+            Save settings
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => load().catch((cause) => setError(errorMessage(cause)))}>
+            <RefreshCwIcon data-icon="inline-start" />
+            Reload
+          </Button>
+          <Button size="sm" variant="outline" onClick={testProviders} disabled={testing || !canWrite}>
+            <ZapIcon data-icon="inline-start" />
+            Test providers
+          </Button>
+        </div>
+        {noteFor('config')}
+        {noteFor('test')}
+        {!canWrite && <ActionNote>Your role can view subtitle settings but not change them.</ActionNote>}
       </div>
 
       <fieldset disabled={!canWrite} className="min-w-0 space-y-6 border-0 p-0">
-      <Section title="Automation">
+      <Section title="Automatic subtitles">
         <div className="grid gap-3 sm:grid-cols-2">
           <Toggle
-            label="Subtitles enabled"
-            hint="The scheduler scans the library and searches for wanted languages."
+            label="Find subtitles automatically"
+            hint="Constellarr scans the library and searches for the languages your profiles ask for."
             checked={config.enabled}
             onChange={(value) => patch({ enabled: value })}
           />
           <Toggle
-            label="Search automatically"
+            label="Keep searching in the background"
             hint="Recurring search without an open browser."
             checked={config.autoSearch}
             onChange={(value) => patch({ autoSearch: value })}
           />
           <Toggle
-            label="Download best result automatically"
-            hint="Results at or above the score cutoff are queued for download."
+            label="Download the best result automatically"
+            hint="Results at or above the score cutoff are downloaded without asking."
             checked={config.autoDownload}
             onChange={(value) => patch({ autoDownload: value })}
           />
-          <Field label="Default language profile">
+          <Field label="Default language profile" hint="Used for videos without their own profile.">
             <Select value={config.defaultProfileId} onChange={(event) => patch({ defaultProfileId: event.target.value })}>
               <option value="">First profile</option>
               {profiles.map((profile) => (
@@ -239,46 +278,125 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
               ))}
             </Select>
           </Field>
-          <Field label="Scan interval (minutes)">
-            <Input
-              value={String(config.scanMinutes)}
-              inputMode="numeric"
-              onChange={(event) => patch({ scanMinutes: numberValue(event.target.value, config.scanMinutes) })}
-            />
-          </Field>
-          <Field label="Search interval (hours)">
-            <Input
-              value={String(config.searchIntervalHours)}
-              inputMode="numeric"
-              onChange={(event) => patch({ searchIntervalHours: numberValue(event.target.value, config.searchIntervalHours) })}
-            />
-          </Field>
-          <Field label="Retry interval (minutes)">
-            <Input
-              value={String(config.retryMinutes)}
-              inputMode="numeric"
-              onChange={(event) => patch({ retryMinutes: numberValue(event.target.value, config.retryMinutes) })}
-            />
-          </Field>
-          <Field label="Auto-download score cutoff" hint="Result scores combine language, variant, format, popularity, and rating.">
-            <Input
-              value={String(config.cutoffScore)}
-              inputMode="numeric"
-              onChange={(event) => patch({ cutoffScore: numberValue(event.target.value, config.cutoffScore) })}
-            />
-          </Field>
-          <Field label="Provider timeout (seconds)">
-            <Input
-              value={String(config.providerTimeoutSeconds)}
-              inputMode="numeric"
-              onChange={(event) => patch({ providerTimeoutSeconds: numberValue(event.target.value, config.providerTimeoutSeconds) })}
-            />
-          </Field>
+        </div>
+      </Section>
+
+      <Section title={`Languages (${profiles.length} ${profiles.length === 1 ? 'profile' : 'profiles'})`}>
+        {profiles.length === 0 ? (
+          <EmptyNote>
+            No language profile yet. A profile lists the subtitle languages you want, for example English first and German
+            as a second choice.
+          </EmptyNote>
+        ) : (
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {profiles.map((profile) => (
+              <li key={profile.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{profile.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(profile.languages ?? []).map(languageVariant).join(', ') || 'no languages yet'} · stops at {profile.cutoff}
+                  </p>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setProfileDraft({ ...profile, languages: profile.languages ?? [] })}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => deleteProfile(profile.id)}
+                    disabled={!canWrite}
+                    aria-label={`Delete ${profile.name}`}
+                  >
+                    <Trash2Icon data-icon="inline-start" />
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="space-y-3 rounded-lg border border-border p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Profile name">
+              <Input value={profileDraft.name} onChange={(event) => setProfileDraft({ ...profileDraft, name: event.target.value })} />
+            </Field>
+            <Field label="Stop after this many languages" hint="Constellarr keeps looking until this many are found.">
+              <Input
+                value={String(profileDraft.cutoff)}
+                inputMode="numeric"
+                onChange={(event) => setProfileDraft({ ...profileDraft, cutoff: numberValue(event.target.value, 1) })}
+              />
+            </Field>
+          </div>
+          <div className="space-y-2">
+            {draftLanguages.map((language, index) => (
+              <div key={index} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+                <Input
+                  value={language.code}
+                  list={languageListId}
+                  placeholder="Choose or type a language"
+                  onChange={(event) => setLanguage(index, { code: event.target.value })}
+                  aria-label={`Language ${index + 1}`}
+                />
+                <Toggle label="Forced" checked={language.forced} onChange={(value) => setLanguage(index, { forced: value })} />
+                <Toggle label="Hearing impaired" checked={language.hi} onChange={(value) => setLanguage(index, { hi: value })} />
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() =>
+                    setProfileDraft({
+                      ...profileDraft,
+                      languages: draftLanguages.filter((_, at) => at !== index),
+                    })
+                  }
+                >
+                  <Trash2Icon data-icon="inline-start" />
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+          <datalist id={languageListId}>
+            {languageOptions(draftLanguages.map((language) => language.code)).map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.name}
+              </option>
+            ))}
+          </datalist>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() =>
+                setProfileDraft({
+                  ...profileDraft,
+                  languages: [...draftLanguages, { code: '', forced: false, hi: false }],
+                })
+              }
+            >
+              <PlusIcon data-icon="inline-start" />
+              Add language
+            </Button>
+            <Button size="xs" onClick={saveProfile} disabled={!canWrite}>
+              <SaveIcon data-icon="inline-start" />
+              Save profile
+            </Button>
+          </div>
+          {noteFor('profile')}
+          <Disclosure label="Advanced options" variant="inline">
+            <Field label="Profile id" hint="Leave blank to generate one. Only needed when another tool refers to this profile by id.">
+              <Input value={profileDraft.id} onChange={(event) => setProfileDraft({ ...profileDraft, id: event.target.value })} />
+            </Field>
+          </Disclosure>
         </div>
       </Section>
 
       <Section
-        title={`Providers (${providers.length})`}
+        title={`Subtitle provider (${providers.length})`}
         action={
           <Button
             size="xs"
@@ -292,7 +410,7 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
         }
       >
         {providers.length === 0 ? (
-          <EmptyNote>Add an OpenSubtitles.com API key to search and download subtitles.</EmptyNote>
+          <EmptyNote>Add an OpenSubtitles.com API key so Constellarr can search for and download subtitles.</EmptyNote>
         ) : (
           <ul className="space-y-3">
             {providers.map((provider, index) => {
@@ -301,15 +419,19 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
               return (
                 <li key={`${provider.id}-${index}`} className="space-y-3 rounded-lg border border-border p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 text-sm font-medium">
+                    <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
                       <ServerIcon className="size-4 text-muted-foreground" aria-hidden="true" />
                       {provider.name || provider.id}
                       {status && (
                         <Badge variant={status.configured ? 'secondary' : 'outline'}>
-                          {status.configured ? 'configured' : 'add API key'}
+                          {status.configured ? 'ready' : 'needs an API key'}
                         </Badge>
                       )}
-                      {test && <Badge variant={test.ok ? 'secondary' : 'destructive'}>{test.ok ? 'reachable' : 'failed'}</Badge>}
+                      {test && (
+                        <Badge variant={test.ok ? 'secondary' : 'destructive'}>
+                          {test.ok ? 'reachable' : 'not reachable'}
+                        </Badge>
+                      )}
                     </span>
                     <Button
                       size="xs"
@@ -323,16 +445,10 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
                     </Button>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Provider id">
-                      <Input value={provider.id} onChange={(event) => updateProvider(index, { id: event.target.value })} />
-                    </Field>
-                    <Field label="Display name">
-                      <Input value={provider.name} onChange={(event) => updateProvider(index, { name: event.target.value })} />
-                    </Field>
-                    <Field label="API endpoint">
-                      <Input value={provider.endpoint} onChange={(event) => updateProvider(index, { endpoint: event.target.value })} />
-                    </Field>
-                    <Field label="API key" hint={provider.apiKeySet ? 'A key is stored; leave blank to keep it.' : 'Required for OpenSubtitles.com.'}>
+                    <Field
+                      label="API key"
+                      hint={provider.apiKeySet ? 'A key is stored; leave blank to keep it.' : 'Required for OpenSubtitles.com.'}
+                    >
                       <Input
                         type="password"
                         value={provider.apiKey ?? ''}
@@ -340,7 +456,7 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
                         autoComplete="off"
                       />
                     </Field>
-                    <Field label="Username" hint="Optional; sign-in raises the daily download quota.">
+                    <Field label="Username" hint="Optional; signing in raises the daily download limit.">
                       <Input value={provider.username} onChange={(event) => updateProvider(index, { username: event.target.value })} />
                     </Field>
                     <Field label="Password" hint={provider.passwordSet ? 'A password is stored; leave blank to keep it.' : ''}>
@@ -351,20 +467,32 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
                         autoComplete="off"
                       />
                     </Field>
+                    <div className="flex items-end pb-2">
+                      <Toggle
+                        label="Use this provider"
+                        checked={provider.enabled}
+                        onChange={(value) => updateProvider(index, { enabled: value })}
+                      />
+                    </div>
                   </div>
-                  <Toggle
-                    label="Enabled"
-                    checked={provider.enabled}
-                    onChange={(value) => updateProvider(index, { enabled: value })}
-                  />
-                  {status?.lastError && <p className="break-words text-xs text-destructive">{status.lastError}</p>}
+                  {status?.lastError && <ActionNote tone="error">{status.lastError}</ActionNote>}
                   {status?.quotaRemaining !== undefined && (
-                    <p className="text-xs text-muted-foreground">
+                    <ActionNote>
                       {status.quotaRemaining} downloads remain{status.quotaReset ? ` until ${status.quotaReset}` : ''}
-                    </p>
+                    </ActionNote>
                   )}
-                  {test && !test.ok && <p className="break-words text-xs text-destructive">{test.error}</p>}
-                  {test?.ok && test.message && <p className="break-words text-xs text-muted-foreground">{test.message}</p>}
+                  {test && !test.ok && <ActionNote tone="error">{test.error}</ActionNote>}
+                  {test?.ok && test.message && <ActionNote>{test.message}</ActionNote>}
+                  <Disclosure label="Advanced options" variant="inline" detail={provider.endpoint}>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Provider id" hint="Identifies this provider in jobs and history.">
+                        <Input value={provider.id} onChange={(event) => updateProvider(index, { id: event.target.value })} />
+                      </Field>
+                      <Field label="API endpoint">
+                        <Input value={provider.endpoint} onChange={(event) => updateProvider(index, { endpoint: event.target.value })} />
+                      </Field>
+                    </div>
+                  </Disclosure>
                 </li>
               )
             })}
@@ -372,256 +500,199 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
         )}
       </Section>
 
-      <Section title={`Language profiles (${profiles.length})`}>
-        <ul className="divide-y divide-border rounded-lg border border-border">
-          {profiles.map((profile) => (
-            <li key={profile.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{profile.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {(profile.languages ?? [])
-                    .map((item) => item.code + (item.forced ? ' forced' : '') + (item.hi ? ' HI' : ''))
-                    .join(', ')}{' '}
-                  · cutoff {profile.cutoff}
-                </p>
-              </div>
-              <div className="flex gap-1">
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  onClick={() => setProfileDraft({ ...profile, languages: profile.languages ?? [] })}
-                >
-                  Edit
-                </Button>
-                <Button size="xs" variant="ghost" onClick={() => deleteProfile(profile.id)} disabled={!canWrite} aria-label={`Delete ${profile.name}`}>
-                  <Trash2Icon data-icon="inline-start" />
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-        <div className="space-y-3 rounded-lg border border-border p-3">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Profile name">
-              <Input value={profileDraft.name} onChange={(event) => setProfileDraft({ ...profileDraft, name: event.target.value })} />
-            </Field>
-            <Field label="Profile id" hint="Leave blank to generate one.">
-              <Input value={profileDraft.id} onChange={(event) => setProfileDraft({ ...profileDraft, id: event.target.value })} />
-            </Field>
-            <Field label="Cutoff" hint="Stop searching once this many languages are satisfied.">
+      <Section title="Advanced helpers">
+        <p className="text-sm text-muted-foreground">
+          Scheduling, the bundled synchronization tools, and AI translation limits.
+        </p>
+
+        <Disclosure label="Search schedule and scoring" detail={`scan every ${config.scanMinutes} min`}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Scan the library every (minutes)">
               <Input
-                value={String(profileDraft.cutoff)}
+                value={String(config.scanMinutes)}
                 inputMode="numeric"
-                onChange={(event) => setProfileDraft({ ...profileDraft, cutoff: numberValue(event.target.value, 1) })}
+                onChange={(event) => patch({ scanMinutes: numberValue(event.target.value, config.scanMinutes) })}
+              />
+            </Field>
+            <Field label="Search again every (hours)">
+              <Input
+                value={String(config.searchIntervalHours)}
+                inputMode="numeric"
+                onChange={(event) => patch({ searchIntervalHours: numberValue(event.target.value, config.searchIntervalHours) })}
+              />
+            </Field>
+            <Field label="Wait before retrying (minutes)">
+              <Input
+                value={String(config.retryMinutes)}
+                inputMode="numeric"
+                onChange={(event) => patch({ retryMinutes: numberValue(event.target.value, config.retryMinutes) })}
+              />
+            </Field>
+            <Field label="Auto-download score cutoff" hint="Scores combine language, variant, format, popularity, and rating.">
+              <Input
+                value={String(config.cutoffScore)}
+                inputMode="numeric"
+                onChange={(event) => patch({ cutoffScore: numberValue(event.target.value, config.cutoffScore) })}
+              />
+            </Field>
+            <Field label="Give up on a provider after (seconds)">
+              <Input
+                value={String(config.providerTimeoutSeconds)}
+                inputMode="numeric"
+                onChange={(event) => patch({ providerTimeoutSeconds: numberValue(event.target.value, config.providerTimeoutSeconds) })}
               />
             </Field>
           </div>
-          <div className="space-y-2">
-            {(profileDraft.languages ?? []).map((language, index) => (
-              <div key={index} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
-                <Input
-                  value={language.code}
-                  placeholder={languageSuggestion.split(', ')[index % 4]}
-                  onChange={(event) => setLanguage(index, { code: event.target.value })}
-                  aria-label={`Language ${index + 1}`}
-                />
-                <Toggle label="Forced" checked={language.forced} onChange={(value) => setLanguage(index, { forced: value })} />
-                <Toggle label="HI" checked={language.hi} onChange={(value) => setLanguage(index, { hi: value })} />
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  onClick={() =>
-                    setProfileDraft({
-                      ...profileDraft,
-                      languages: (profileDraft.languages ?? []).filter((_, at) => at !== index),
-                    })
-                  }
-                >
-                  <Trash2Icon data-icon="inline-start" />
-                  Remove
-                </Button>
-              </div>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() =>
-                setProfileDraft({
-                  ...profileDraft,
-                  languages: [...(profileDraft.languages ?? []), { code: '', forced: false, hi: false }],
-                })
-              }
-            >
-              <PlusIcon data-icon="inline-start" />
-              Add language
-            </Button>
-            <Button size="xs" onClick={saveProfile} disabled={!canWrite}>
-              <SaveIcon data-icon="inline-start" />
-              Save profile
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">Suggestions: {languageSuggestion}</p>
-        </div>
-      </Section>
+        </Disclosure>
 
-      <Section title="Synchronization helper" action={<span className="text-xs text-muted-foreground">Bundled ffmpeg + ffsubsync</span>}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="ffsubsync path" hint="Leave blank to use ffsubsync from PATH.">
-            <Input value={config.sync.helperPath} onChange={(event) => patch({ sync: { ...config.sync, helperPath: event.target.value } })} />
-          </Field>
-          <Field label="ffmpeg directory" hint="Optional; used for embedded track extraction and audio references.">
-            <Input value={config.sync.ffmpegPath} onChange={(event) => patch({ sync: { ...config.sync, ffmpegPath: event.target.value } })} />
-          </Field>
-          <Field label="Helper timeout (seconds)">
-            <Input
-              value={String(config.sync.timeoutSeconds)}
-              inputMode="numeric"
-              onChange={(event) => patch({ sync: { ...config.sync, timeoutSeconds: numberValue(event.target.value, config.sync.timeoutSeconds) } })}
-            />
-          </Field>
-          <Field label="Max offset (seconds)">
-            <Input
-              value={String(config.sync.maxOffsetSeconds)}
-              inputMode="decimal"
-              onChange={(event) => patch({ sync: { ...config.sync, maxOffsetSeconds: numberValue(event.target.value, config.sync.maxOffsetSeconds) } })}
-            />
-          </Field>
-          <Field label="Minimum alignment score" hint="Passed with --skip-sync-on-low-quality.">
-            <Input
-              value={String(config.sync.minScore)}
-              inputMode="decimal"
-              onChange={(event) => patch({ sync: { ...config.sync, minScore: numberValue(event.target.value, config.sync.minScore) } })}
-            />
-          </Field>
-          <Field label="Quality max offset (seconds)">
-            <Input
-              value={String(config.sync.qualityMaxOffsetSeconds)}
-              inputMode="decimal"
-              onChange={(event) =>
-                patch({ sync: { ...config.sync, qualityMaxOffsetSeconds: numberValue(event.target.value, config.sync.qualityMaxOffsetSeconds) } })
-              }
-            />
-          </Field>
-          <Field label="Max frame rate deviation">
-            <Input
-              value={String(config.sync.maxFramerateDeviation)}
-              inputMode="decimal"
-              onChange={(event) =>
-                patch({ sync: { ...config.sync, maxFramerateDeviation: numberValue(event.target.value, config.sync.maxFramerateDeviation) } })
-              }
-            />
-          </Field>
-          <Field label="Voice activity detector">
-            <Select value={config.sync.vad} onChange={(event) => patch({ sync: { ...config.sync, vad: event.target.value } })}>
-              <option value="">Default (webrtc)</option>
-              <option value="webrtc">webrtc</option>
-              <option value="auditok">auditok</option>
-              <option value="silero">silero</option>
-              <option value="fused">fused</option>
-            </Select>
-          </Field>
-          <Field label="Audio reference limit (seconds)" hint="Bounds ffmpeg extraction when a specific audio track is chosen.">
-            <Input
-              value={String(config.sync.audioReferenceSeconds)}
-              inputMode="numeric"
-              onChange={(event) => patch({ sync: { ...config.sync, audioReferenceSeconds: numberValue(event.target.value, config.sync.audioReferenceSeconds) } })}
-            />
-          </Field>
-          <Field label="Max embedded stream index">
-            <Input
-              value={String(config.sync.maxEmbeddedStreamIndex)}
-              inputMode="numeric"
-              onChange={(event) =>
-                patch({ sync: { ...config.sync, maxEmbeddedStreamIndex: numberValue(event.target.value, config.sync.maxEmbeddedStreamIndex) } })
-              }
-            />
-          </Field>
-        </div>
-      </Section>
-
-      <Section
-        title="AI translation"
-        action={<span className="text-xs text-muted-foreground">Shared provider from Connections</span>}
-      >
-        <div className="space-y-2 rounded-lg border border-border p-3">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium">Translation provider</span>
-            {sharedAI?.model ? (
-              <Badge variant="secondary">{sharedAI.model}</Badge>
-            ) : (
-              <Badge variant="outline">not configured</Badge>
-            )}
-            {sharedAI?.apiKeyConfigured && <Badge variant="outline">API key stored</Badge>}
+        <Disclosure label="Synchronization helper" detail="Bundled ffmpeg + ffsubsync">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="ffsubsync path" hint="Leave blank to use ffsubsync from PATH.">
+              <Input value={config.sync.helperPath} onChange={(event) => patch({ sync: { ...config.sync, helperPath: event.target.value } })} />
+            </Field>
+            <Field label="ffmpeg directory" hint="Optional; used for embedded track extraction and audio references.">
+              <Input value={config.sync.ffmpegPath} onChange={(event) => patch({ sync: { ...config.sync, ffmpegPath: event.target.value } })} />
+            </Field>
+            <Field label="Stop the helper after (seconds)">
+              <Input
+                value={String(config.sync.timeoutSeconds)}
+                inputMode="numeric"
+                onChange={(event) => patch({ sync: { ...config.sync, timeoutSeconds: numberValue(event.target.value, config.sync.timeoutSeconds) } })}
+              />
+            </Field>
+            <Field label="Largest offset to try (seconds)">
+              <Input
+                value={String(config.sync.maxOffsetSeconds)}
+                inputMode="decimal"
+                onChange={(event) => patch({ sync: { ...config.sync, maxOffsetSeconds: numberValue(event.target.value, config.sync.maxOffsetSeconds) } })}
+              />
+            </Field>
+            <Field label="Minimum alignment score" hint="Passed with --skip-sync-on-low-quality.">
+              <Input
+                value={String(config.sync.minScore)}
+                inputMode="decimal"
+                onChange={(event) => patch({ sync: { ...config.sync, minScore: numberValue(event.target.value, config.sync.minScore) } })}
+              />
+            </Field>
+            <Field label="Quality check offset (seconds)">
+              <Input
+                value={String(config.sync.qualityMaxOffsetSeconds)}
+                inputMode="decimal"
+                onChange={(event) =>
+                  patch({ sync: { ...config.sync, qualityMaxOffsetSeconds: numberValue(event.target.value, config.sync.qualityMaxOffsetSeconds) } })
+                }
+              />
+            </Field>
+            <Field label="Allowed frame rate difference">
+              <Input
+                value={String(config.sync.maxFramerateDeviation)}
+                inputMode="decimal"
+                onChange={(event) =>
+                  patch({ sync: { ...config.sync, maxFramerateDeviation: numberValue(event.target.value, config.sync.maxFramerateDeviation) } })
+                }
+              />
+            </Field>
+            <Field label="Voice detection method">
+              <Select value={config.sync.vad} onChange={(event) => patch({ sync: { ...config.sync, vad: event.target.value } })}>
+                <option value="">Default (webrtc)</option>
+                <option value="webrtc">webrtc</option>
+                <option value="auditok">auditok</option>
+                <option value="silero">silero</option>
+                <option value="fused">fused</option>
+              </Select>
+            </Field>
+            <Field label="Audio sample length (seconds)" hint="Bounds ffmpeg extraction when a specific audio track is chosen.">
+              <Input
+                value={String(config.sync.audioReferenceSeconds)}
+                inputMode="numeric"
+                onChange={(event) => patch({ sync: { ...config.sync, audioReferenceSeconds: numberValue(event.target.value, config.sync.audioReferenceSeconds) } })}
+              />
+            </Field>
+            <Field label="Highest embedded track number">
+              <Input
+                value={String(config.sync.maxEmbeddedStreamIndex)}
+                inputMode="numeric"
+                onChange={(event) =>
+                  patch({ sync: { ...config.sync, maxEmbeddedStreamIndex: numberValue(event.target.value, config.sync.maxEmbeddedStreamIndex) } })
+                }
+              />
+            </Field>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Subtitle translation uses the same OpenAI-compatible service as recommendations. Configure the base URL, key,
-            and model once in <a className="underline" href="#connections">Connections</a>.
-          </p>
-          {sharedAI?.baseURL && <p className="break-all text-xs text-muted-foreground">{sharedAI.baseURL}</p>}
-          {sharedAIError && <p className="break-words text-xs text-amber-500">{sharedAIError}</p>}
-        </div>
-        <Toggle
-          label="Allow subtitle translation"
-          hint="Cue integrity, language, and formatting are validated before anything is saved."
-          checked={config.ai.enabled}
-          onChange={(value) => patch({ ai: { ...config.ai, enabled: value } })}
-          disabled={!canWrite}
-        />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Request timeout (seconds)">
-            <Input
-              value={String(config.ai.timeoutSeconds)}
-              inputMode="numeric"
-              disabled={!canWrite}
-              onChange={(event) => patch({ ai: { ...config.ai, timeoutSeconds: numberValue(event.target.value, config.ai.timeoutSeconds) } })}
-            />
-          </Field>
-          <Field label="Max tokens per request">
-            <Input
-              value={String(config.ai.maxTokens)}
-              inputMode="numeric"
-              disabled={!canWrite}
-              onChange={(event) => patch({ ai: { ...config.ai, maxTokens: numberValue(event.target.value, config.ai.maxTokens) } })}
-            />
-          </Field>
-          <Field label="Max requests per translation">
-            <Input
-              value={String(config.ai.maxRequests)}
-              inputMode="numeric"
-              disabled={!canWrite}
-              onChange={(event) => patch({ ai: { ...config.ai, maxRequests: numberValue(event.target.value, config.ai.maxRequests) } })}
-            />
-          </Field>
-          <Field label="Max total tokens" hint="A translation fails closed when the budget is exhausted.">
-            <Input
-              value={String(config.ai.maxTotalTokens)}
-              inputMode="numeric"
-              disabled={!canWrite}
-              onChange={(event) => patch({ ai: { ...config.ai, maxTotalTokens: numberValue(event.target.value, config.ai.maxTotalTokens) } })}
-            />
-          </Field>
-          <Field label="Characters per chunk">
-            <Input
-              value={String(config.ai.maxCharacters)}
-              inputMode="numeric"
-              disabled={!canWrite}
-              onChange={(event) => patch({ ai: { ...config.ai, maxCharacters: numberValue(event.target.value, config.ai.maxCharacters) } })}
-            />
-          </Field>
-          <Field label="Temperature">
-            <Input
-              value={String(config.ai.temperature)}
-              inputMode="decimal"
-              disabled={!canWrite}
-              onChange={(event) => patch({ ai: { ...config.ai, temperature: numberValue(event.target.value, config.ai.temperature) } })}
-            />
-          </Field>
-        </div>
-        {!canWrite && (
-          <p className="text-xs text-muted-foreground">Your role can view subtitle settings but not change them.</p>
-        )}
+        </Disclosure>
+
+        <Disclosure label="AI translation" detail={sharedAI?.model || 'not configured'}>
+          <div className="space-y-2 rounded-lg border border-border p-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium">Translation provider</span>
+              <Badge variant={sharedAI?.model ? 'secondary' : 'outline'}>{sharedAI?.model ? 'ready' : 'not configured'}</Badge>
+              {sharedAI?.model && <span className="text-xs text-muted-foreground">{sharedAI.model}</span>}
+              {sharedAI?.apiKeyConfigured && <Badge variant="outline">API key stored</Badge>}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Subtitle translation uses the same OpenAI-compatible service as recommendations. Configure the base URL, key,
+              and model once in <a className="underline" href="#connections">Connections</a>.
+            </p>
+            {sharedAI?.baseURL && <p className="break-all text-xs text-muted-foreground">{sharedAI.baseURL}</p>}
+            {sharedAIError && <ActionNote tone="warning">{sharedAIError}</ActionNote>}
+          </div>
+          <Toggle
+            label="Allow subtitle translation"
+            hint="Cue timing, language, and formatting are checked before anything is saved."
+            checked={config.ai.enabled}
+            onChange={(value) => patch({ ai: { ...config.ai, enabled: value } })}
+            disabled={!canWrite}
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Request timeout (seconds)">
+              <Input
+                value={String(config.ai.timeoutSeconds)}
+                inputMode="numeric"
+                disabled={!canWrite}
+                onChange={(event) => patch({ ai: { ...config.ai, timeoutSeconds: numberValue(event.target.value, config.ai.timeoutSeconds) } })}
+              />
+            </Field>
+            <Field label="Max tokens per request">
+              <Input
+                value={String(config.ai.maxTokens)}
+                inputMode="numeric"
+                disabled={!canWrite}
+                onChange={(event) => patch({ ai: { ...config.ai, maxTokens: numberValue(event.target.value, config.ai.maxTokens) } })}
+              />
+            </Field>
+            <Field label="Max requests per translation">
+              <Input
+                value={String(config.ai.maxRequests)}
+                inputMode="numeric"
+                disabled={!canWrite}
+                onChange={(event) => patch({ ai: { ...config.ai, maxRequests: numberValue(event.target.value, config.ai.maxRequests) } })}
+              />
+            </Field>
+            <Field label="Max total tokens" hint="A translation stops when the budget is used up.">
+              <Input
+                value={String(config.ai.maxTotalTokens)}
+                inputMode="numeric"
+                disabled={!canWrite}
+                onChange={(event) => patch({ ai: { ...config.ai, maxTotalTokens: numberValue(event.target.value, config.ai.maxTotalTokens) } })}
+              />
+            </Field>
+            <Field label="Characters per chunk">
+              <Input
+                value={String(config.ai.maxCharacters)}
+                inputMode="numeric"
+                disabled={!canWrite}
+                onChange={(event) => patch({ ai: { ...config.ai, maxCharacters: numberValue(event.target.value, config.ai.maxCharacters) } })}
+              />
+            </Field>
+            <Field label="Temperature">
+              <Input
+                value={String(config.ai.temperature)}
+                inputMode="decimal"
+                disabled={!canWrite}
+                onChange={(event) => patch({ ai: { ...config.ai, temperature: numberValue(event.target.value, config.ai.temperature) } })}
+              />
+            </Field>
+          </div>
+        </Disclosure>
       </Section>
       </fieldset>
     </div>

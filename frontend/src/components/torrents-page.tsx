@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth-context'
 import { isActiveTorrent, torrentsApi, type TorrentHealth, type TorrentJob, type TorrentSource } from '@/lib/torrents-api'
 import { fileToBase64, magnetIsValid } from '@/components/torrents-shared'
 import { TorrentQueueRow } from '@/components/torrents-queue-row'
+import { DownloadControls } from '@/components/download-controls'
 import { TorrentDetailDialog } from '@/components/torrents-detail'
 import { TorrentSearch } from '@/components/torrents-search'
 import { TorrentSettingsCard } from '@/components/torrents-settings'
@@ -187,6 +188,8 @@ export function TorrentsPage() {
           {error}
         </p>
       ) : null}
+
+      <DownloadControls />
 
       {canWriteQueue ? (
         <Card>

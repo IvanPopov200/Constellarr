@@ -47,8 +47,10 @@ export type JobStatus =
   | 'verifying'
   | 'repairing'
   | 'extracting'
+  | 'paused'
   | 'completed'
   | 'failed'
+  | 'cancelled'
 
 export type OutputFile = { name: string; size: number; url: string }
 
@@ -68,6 +70,44 @@ export type Job = {
   files: OutputFile[]
 }
 
+export type DownloadLimitMode = 'unlimited' | 'kbps' | 'percent'
+
+export type DownloadLimit = { mode: DownloadLimitMode; value: number }
+
+export type DownloadWindowAction = 'full' | 'limited' | 'paused'
+
+export type DownloadWindow = {
+  id: string
+  name: string
+  days: number[]
+  start: string
+  end: string
+  action: DownloadWindowAction
+  limit: DownloadLimit
+}
+
+export type DownloadPolicyConfig = {
+  paused: boolean
+  timezone: string
+  connectionMbps: number
+  limit: DownloadLimit
+  scheduleEnabled: boolean
+  outsideSchedule: 'normal' | 'paused'
+  windows: DownloadWindow[]
+}
+
+export type DownloadPolicyEffective = {
+  paused: boolean
+  reason: string
+  limitBytesPerSecond: number
+  nextChange?: string
+}
+
+export type DownloadPolicySnapshot = {
+  config: DownloadPolicyConfig
+  effective: DownloadPolicyEffective
+}
+
 export class ApiError extends Error {}
 
 export function errorMessage(cause: unknown) {
@@ -75,7 +115,31 @@ export function errorMessage(cause: unknown) {
 }
 
 export function isActiveJob(job: Job) {
-  return job.status !== 'completed' && job.status !== 'failed'
+  return job.status !== 'completed' && job.status !== 'failed' && job.status !== 'cancelled'
+}
+
+// Transfer limits travel as KiB/s; the interface shows MiB/s and connection speeds in Mbps.
+export function mibPerSecondToKib(mibPerSecond: number) {
+  return Math.round(mibPerSecond * 1024)
+}
+
+export function kibPerSecondToMib(kibPerSecond: number) {
+  return kibPerSecond / 1024
+}
+
+export function mbpsToKibPerSecond(mbps: number) {
+  return Math.round((mbps * 1_000_000) / 8 / 1024)
+}
+
+export function likelyTimeZone(value: string) {
+  return /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)*$/.test(value.trim())
+}
+
+export function formatSpeedLimit(kibPerSecond: number) {
+  if (!Number.isFinite(kibPerSecond) || kibPerSecond <= 0) return 'Unlimited'
+  const mib = kibPerSecondToMib(kibPerSecond)
+  if (mib < 1) return `${Math.round(kibPerSecond)} KiB/s`
+  return `${mib >= 10 ? Math.round(mib * 10) / 10 : Number(mib.toFixed(1))} MiB/s`
 }
 
 export type RequestOptions = {
@@ -137,4 +201,16 @@ export const api = {
     }),
   retryDownload: (id: string) =>
     request<Job>(`/downloads/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
+  pauseDownload: (id: string) =>
+    request<Job>(`/downloads/${encodeURIComponent(id)}/pause`, { method: 'POST' }),
+  resumeDownload: (id: string) =>
+    request<Job>(`/downloads/${encodeURIComponent(id)}/resume`, { method: 'POST' }),
+  cancelDownload: (id: string) =>
+    request<Job>(`/downloads/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  getDownloadPolicy: (signal?: AbortSignal) =>
+    request<DownloadPolicySnapshot>('/downloads/policy', { signal }),
+  saveDownloadPolicy: (config: DownloadPolicyConfig) =>
+    request<DownloadPolicySnapshot>('/downloads/policy', { method: 'PUT', body: config }),
+  pauseAllDownloads: () => request<DownloadPolicySnapshot>('/downloads/pause', { method: 'POST' }),
+  resumeAllDownloads: () => request<DownloadPolicySnapshot>('/downloads/resume', { method: 'POST' }),
 }
