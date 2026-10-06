@@ -146,7 +146,7 @@ export function RequestsPage() {
       {error && <ErrorNote onRetry={() => void reload()}>{error}</ErrorNote>}
       {notice && <Notice>{notice}</Notice>}
 
-      {types.length === 0 && !loading && (
+      {types.length === 0 && !loading && !error && (
         <EmptyNote>No media type is configured yet. Connect a metadata provider or the music library first.</EmptyNote>
       )}
 
@@ -188,7 +188,7 @@ export function RequestsPage() {
       </div>
 
       {loading && requests.length === 0 && <LoadingNote>Loading requests…</LoadingNote>}
-      {!loading && requests.length === 0 && (
+      {!loading && !error && requests.length === 0 && (
         <Card className="shadow-none">
           <CardContent className="items-start gap-3 py-6">
             <Inbox className="size-5 text-muted-foreground" aria-hidden="true" />
@@ -227,7 +227,6 @@ export function RequestsPage() {
                       <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <span>{displayName(request.userId, request.userName, currentUserId, 'Unknown user')}</span>
                         <span>{relativeAge(request.createdAt)}</span>
-                        <span className="font-mono">{request.providerId}</span>
                       </p>
                       {request.message && <p className="text-sm">{request.message}</p>}
                       {request.decisionNote && (

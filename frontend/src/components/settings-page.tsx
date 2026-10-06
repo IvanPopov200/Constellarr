@@ -123,7 +123,7 @@ export function SettingsPage({ section }: { section: 'connections' | 'storage' |
     <div className="space-y-7">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">{section === 'storage' ? 'Storage & Paths' : section === 'system' ? 'System' : 'Connections'}</h1>
-        <p className="text-sm text-muted-foreground">{section === 'storage' ? 'Download directories and persistent storage for this server.' : section === 'system' ? 'Server health and configuration.' : 'Configure and test your indexer and Usenet provider.'}</p>
+        <p className="text-sm text-muted-foreground">{section === 'storage' ? 'Download storage, library folders, naming, and automation for this server.' : section === 'system' ? 'Server health and configuration.' : 'Configure and test your indexer and Usenet provider.'}</p>
       </header>
       {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
         <span>{error}</span>{!saved && <Button variant="outline" size="sm" onClick={() => window.location.reload()}>Retry</Button>}
@@ -142,11 +142,11 @@ export function SettingsPage({ section }: { section: 'connections' | 'storage' |
             <div className="grid items-start gap-5 xl:grid-cols-2">
               <Card className="shadow-none">
                 <CardHeader className="border-b border-border">
-                  <CardTitle className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><Search className="size-4 text-muted-foreground" />NZBGeek</span><Badge variant="outline">{saved.indexer.apiKeyConfigured ? 'Configured' : 'Setup needed'}</Badge></CardTitle>
-                  <CardDescription>Your indexer for finding movie releases.</CardDescription>
+                  <CardTitle className="flex items-center justify-between gap-2"><span className="flex items-center gap-2"><Search className="size-4 text-muted-foreground" />Usenet indexer</span><Badge variant="outline">{saved.indexer.apiKeyConfigured ? 'Configured' : 'Setup needed'}</Badge></CardTitle>
+                  <CardDescription>Works with any Newznab-compatible service. NZBGeek is the reference integration.</CardDescription>
                 </CardHeader>
                 <CardContent className="gap-5">
-                  <div className="space-y-2"><label htmlFor="indexer-url" className="text-sm font-medium">API URL</label><Input id="indexer-url" type="url" required value={draft.indexer.url} onChange={event => change({ ...draft, indexer: { ...draft.indexer, url: event.target.value } })} /></div>
+                  <div className="space-y-2"><label htmlFor="indexer-url" className="text-sm font-medium">API URL</label><Input id="indexer-url" type="url" required placeholder="https://api.nzbgeek.info" value={draft.indexer.url} onChange={event => change({ ...draft, indexer: { ...draft.indexer, url: event.target.value } })} /><p className="text-xs text-muted-foreground">The Newznab API endpoint, not the website address.</p></div>
                   <SecretInput id="api-key" label="API key" configured={saved.indexer.apiKeyConfigured} value={draft.indexer.apiKey || ''} onChange={apiKey => change({ ...draft, indexer: { ...draft.indexer, apiKey } })} />
                   <TestResult result={tests?.indexer} />
                 </CardContent>
@@ -163,9 +163,14 @@ export function SettingsPage({ section }: { section: 'connections' | 'storage' |
                   </div>
                   <div className="space-y-2"><label htmlFor="usenet-username" className="text-sm font-medium">Username</label><Input id="usenet-username" autoComplete="off" value={draft.usenet.username} onChange={event => change({ ...draft, usenet: { ...draft.usenet, username: event.target.value } })} /></div>
                   <SecretInput id="usenet-password" label="Password" configured={saved.usenet.passwordConfigured} value={draft.usenet.password || ''} onChange={password => change({ ...draft, usenet: { ...draft.usenet, password } })} />
-                  <div className="space-y-2"><label htmlFor="usenet-connections" className="text-sm font-medium">Connections</label><Input id="usenet-connections" type="number" min="1" max="32" required value={draft.usenet.connections} className="max-w-28" onChange={event => change({ ...draft, usenet: { ...draft.usenet, connections: Number(event.target.value) } })} /><p className="text-xs text-muted-foreground">Use the connection limit included with your provider plan.</p></div>
-                  <div className="space-y-2"><label htmlFor="usenet-fallbacks" className="text-sm font-medium">Fallback servers</label><Input id="usenet-fallbacks" value={draft.fallbacks} placeholder="news.frugalusenet.com" onChange={event => change({ ...draft, fallbacks: event.target.value })} /><p className="text-xs text-muted-foreground">Optional, comma separated. Uses the same credentials and TLS port.</p></div>
                   <TestResult result={tests?.usenet} />
+                  <details className="rounded-lg border border-border">
+                    <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Advanced connection options</summary>
+                    <div className="space-y-5 border-t border-border p-3">
+                      <div className="space-y-2"><label htmlFor="usenet-connections" className="text-sm font-medium">Connections</label><Input id="usenet-connections" type="number" min="1" max="32" required value={draft.usenet.connections} className="max-w-28" onChange={event => change({ ...draft, usenet: { ...draft.usenet, connections: Number(event.target.value) } })} /><p className="text-xs text-muted-foreground">Use the connection limit included with your provider plan.</p></div>
+                      <div className="space-y-2"><label htmlFor="usenet-fallbacks" className="text-sm font-medium">Fallback servers</label><Input id="usenet-fallbacks" value={draft.fallbacks} placeholder="news.frugalusenet.com" onChange={event => change({ ...draft, fallbacks: event.target.value })} /><p className="text-xs text-muted-foreground">Optional, comma separated. Uses the same credentials and TLS port.</p></div>
+                    </div>
+                  </details>
                 </CardContent>
               </Card>
             </div>

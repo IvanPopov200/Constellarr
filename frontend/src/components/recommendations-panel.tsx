@@ -115,12 +115,12 @@ export function RecommendationsPanel() {
         action,
         profileId: profileId || undefined,
         rootId: rootId || undefined,
-        monitored: true,
+        monitored: false,
       })
       const label = candidate.title
       setNotice(
         action === 'add'
-          ? `Added ${label} to the library.`
+          ? `Added ${label} to the library for manual selection. Open it to choose a release; nothing has been queued.`
           : result.request?.status === 'available'
             ? `${label} is already in the library.`
             : `Requested ${label}. Track it on the Requests page.`,
@@ -199,12 +199,17 @@ export function RecommendationsPanel() {
                     <option value="">Library default</option>
                     {[...options.movieRoots, ...options.tvRoots].map((root) => (
                       <option key={root.id} value={root.id}>
-                        {root.id} — {root.path}
+                        {root.path}
                       </option>
                     ))}
                   </Choice>
                 </Field>
               </div>
+            )}
+            {permissions.libraryWrite && (
+              <p className="text-xs text-muted-foreground">
+                Titles are added for manual selection. Open a title to choose a release or enable automatic downloads.
+              </p>
             )}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
@@ -313,9 +318,13 @@ function CandidateRow({ candidate, recommendationId, index, busy, permissions, o
             {candidate.year > 0 && <span className="text-xs text-muted-foreground">{candidate.year}</span>}
             <Badge variant="ghost" className="text-muted-foreground">{mediaTypeLabel(candidate.mediaType)}</Badge>
             {candidate.verified ? (
-              <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+              <Badge
+                variant="outline"
+                className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                title={`Confirmed as ${candidate.providerId} by ${candidate.provider || 'the metadata provider'}`}
+              >
                 <CheckCircle2 aria-hidden="true" />
-                Verified {candidate.providerId}
+                Verified
               </Badge>
             ) : (
               <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-300">

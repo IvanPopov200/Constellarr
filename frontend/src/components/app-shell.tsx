@@ -380,6 +380,13 @@ export function AppShell({
           id="main-content"
           ref={mainRef}
           tabIndex={-1}
+          onInvalidCapture={(event) => {
+            let section = (event.target as HTMLElement).closest('details')
+            while (section) {
+              section.open = true
+              section = section.parentElement?.closest('details') ?? null
+            }
+          }}
           className="flex-1 px-4 py-6 outline-none sm:px-8 sm:py-8 lg:px-10 xl:px-12"
         >
           <div className="mx-auto w-full max-w-7xl">{children}</div>

@@ -17,6 +17,21 @@ const severityTones = {
   critical: 'border-destructive/40 bg-destructive/10 text-destructive',
 } as const
 
+const eventKindLabels: Record<string, string> = {
+  download_failed: 'Download failed',
+  import_error: 'Import failed',
+  provider_failure: 'Provider failed',
+  backup: 'Backup',
+  backup_failed: 'Backup failed',
+  restore: 'Restore',
+  alert: 'Alert',
+  notification_failed: 'Notification failed',
+}
+
+function eventKindLabel(kind: string) {
+  return eventKindLabels[kind] ?? (kind ? kind.replace(/_/g, ' ') : 'Event')
+}
+
 export function OperationsPage() {
   const [status, setStatus] = useState<OperationsStatus | null>(null)
   const [events, setEvents] = useState<OperationEvent[]>([])
@@ -172,10 +187,10 @@ export function OperationsPage() {
             {events.slice(0, 20).map((event) => (
               <li key={event.id} className="flex flex-wrap items-center gap-2 border-b border-border/50 pb-1 last:border-0">
                 <Badge variant="outline" className={cn(severityTones[event.severity])}>
-                  {event.kind.replace(/_/g, ' ')}
+                  {eventKindLabel(event.kind)}
                 </Badge>
                 <span className="min-w-0 flex-1 truncate" title={event.message ?? ''}>
-                  {event.message || event.source || '—'}
+                  {event.message || event.source || 'No details recorded'}
                 </span>
                 <span className="text-xs text-muted-foreground">{formatAge(event.at)}</span>
               </li>

@@ -43,7 +43,7 @@ const pollIntervalMs = 5000
 
 const limitModes: { value: DownloadLimitMode; label: string; hint: string }[] = [
   { value: 'unlimited', label: 'No speed limit', hint: 'Use the full available speed.' },
-  { value: 'kbps', label: 'Fixed speed', hint: 'Cap every transfer at a speed you choose.' },
+  { value: 'kbps', label: 'Fixed speed', hint: 'Cap the combined speed of all downloads.' },
   {
     value: 'percent',
     label: 'Share of my connection',
@@ -258,7 +258,10 @@ export function DownloadControls() {
 
   const applySnapshot = useCallback((next: DownloadPolicySnapshot) => {
     setSnapshot(next)
-    if (dirtyRef.current) return
+    if (dirtyRef.current) {
+      setDraft((current) => current && { ...current, paused: next.config.paused })
+      return
+    }
     setDraft((current) => (current === null ? null : cloneConfig(next.config)))
     if (openRef.current) setFields(editorFields(next.config))
   }, [])
@@ -411,7 +414,8 @@ export function DownloadControls() {
       return 'No speed cap; downloads use the full available speed.'
     }
     const share =
-      snapshot.config.limit.mode === 'percent' && snapshot.config.connectionMbps > 0
+      snapshot.config.limit.mode === 'percent' && snapshot.config.connectionMbps > 0 &&
+      !snapshot.effective.reason.startsWith('window ')
         ? ` (${snapshot.config.limit.value}% of ${snapshot.config.connectionMbps} Mbps)`
         : ''
     return `Speed capped at ${formatSpeedLimit(snapshot.effective.limitBytesPerSecond / 1024)}${share}.`

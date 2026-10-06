@@ -157,7 +157,7 @@ export function SourcesCard() {
             <SourceRow
               icon={SearchIcon}
               name={sources.indexer.name}
-              detail="Indexer"
+              detail="Usenet indexer"
               configured={sources.indexer.configured}
             />
             <SourceRow

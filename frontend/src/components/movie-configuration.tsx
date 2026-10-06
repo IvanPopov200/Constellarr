@@ -433,19 +433,24 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
                 hint="Leave blank to keep the saved key. Stored on your server only."
                 onChange={(jellyfinAPIKey) => change({ ...draft, jellyfinAPIKey })}
               />
-              <Field
-                id="webhook-url"
-                label="Webhook URL"
-                hint="Optional. Constellarr posts a notification after imports and failures."
-              >
-                <Input
-                  id="webhook-url"
-                  type="url"
-                  value={draft.webhookURL}
-                  placeholder="https://example.com/hooks/constellarr"
-                  onChange={(event) => change({ ...draft, webhookURL: event.target.value })}
-                />
-              </Field>
+              <details className="border-t border-border pt-4">
+                <summary className="cursor-pointer text-sm font-medium">Advanced: webhook notifications</summary>
+                <div className="pt-4">
+                  <Field
+                    id="webhook-url"
+                    label="Webhook URL"
+                    hint="Optional. Constellarr posts a notification after imports and failures."
+                  >
+                    <Input
+                      id="webhook-url"
+                      type="url"
+                      value={draft.webhookURL}
+                      placeholder="https://example.com/hooks/constellarr"
+                      onChange={(event) => change({ ...draft, webhookURL: event.target.value })}
+                    />
+                  </Field>
+                </div>
+              </details>
             </CardContent>
           </Card>
 
@@ -459,14 +464,14 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
       )}
 
       {section === 'storage' && (
-        <div className="grid items-start gap-5 xl:grid-cols-2">
+        <div className="space-y-5">
           <Card className="shadow-none">
             <CardHeader className="border-b border-border">
               <CardTitle className="flex items-center gap-2">
                 <Folder className="size-4 text-muted-foreground" />
                 Library folders
               </CardTitle>
-              <CardDescription>Where imported movies are organized on your server.</CardDescription>
+              <CardDescription>Where imported movies are organized on your server. Add the folder that holds your movies; naming and automation live under advanced options.</CardDescription>
             </CardHeader>
             <CardContent className="gap-5">
               <div className="space-y-3">
@@ -523,95 +528,111 @@ export function MovieConfiguration({ section }: { section: 'connections' | 'stor
                   New folders are registered when you save. Existing files are never moved by saving settings.
                 </p>
               </div>
-
-              <Field id="folder-template" label="Folder naming template" hint="Example: {title} ({year}).">
-                <Input
-                  id="folder-template"
-                  value={draft.folderTemplate}
-                  onChange={(event) => change({ ...draft, folderTemplate: event.target.value })}
-                />
-              </Field>
-              <Field id="file-template" label="File naming template" hint="Example: {title} ({year}) {quality}.">
-                <Input
-                  id="file-template"
-                  value={draft.fileTemplate}
-                  onChange={(event) => change({ ...draft, fileTemplate: event.target.value })}
-                />
-              </Field>
-              <Field id="import-mode" label="Import mode" hint="Hardlink keeps seeding data usable; move relocates the file.">
-                <Select
-                  id="import-mode"
-                  value={draft.importMode}
-                  onChange={(event) => change({ ...draft, importMode: event.target.value })}
-                >
-                  {optionsWith(draft.importMode, importModes).map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Checkbox
-                id="write-nfo"
-                label="Write NFO sidecars"
-                description="Save movie details next to the file for other media tools."
-                checked={draft.writeNFO}
-                onChange={(writeNFO) => change({ ...draft, writeNFO })}
-              />
             </CardContent>
           </Card>
 
-          <Card className="shadow-none">
-            <CardHeader className="border-b border-border">
-              <CardTitle className="flex items-center gap-2">
-                <HardDrive className="size-4 text-muted-foreground" />
-                Automation
-              </CardTitle>
-              <CardDescription>Scheduled searches and how missing movies are handled.</CardDescription>
-            </CardHeader>
-            <CardContent className="gap-5">
-              <Field id="poll-minutes" label="RSS check interval (minutes)" hint="How often Constellarr checks indexer feeds for monitored movies.">
-                <Input
-                  id="poll-minutes"
-                  type="number"
-                  min="1"
-                  className="max-w-32"
-                  value={draft.pollMinutes}
-                  onChange={(event) => change({ ...draft, pollMinutes: Number(event.target.value) || 0 })}
-                />
-              </Field>
-              <Field id="search-hours" label="Missing search interval (hours)" hint="How often missing monitored movies are searched automatically.">
-                <Input
-                  id="search-hours"
-                  type="number"
-                  min="1"
-                  className="max-w-32"
-                  value={draft.searchHours}
-                  onChange={(event) => change({ ...draft, searchHours: Number(event.target.value) || 0 })}
-                />
-              </Field>
-              <Field id="minimum-availability" label="Minimum availability" hint="Do not search until the movie reaches this stage. Release dates come from the metadata provider.">
-                <Select
-                  id="minimum-availability"
-                  value={draft.minimumAvailability}
-                  onChange={(event) => change({ ...draft, minimumAvailability: event.target.value })}
-                >
-                  {optionsWith(draft.minimumAvailability, availabilityOptions).map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Checkbox
-                id="retry-failed"
-                label="Retry failed downloads"
-                description="Failed releases are blocked, and alternate releases are tried on the next search."
-                checked={draft.retryFailed}
-                onChange={(retryFailed) => change({ ...draft, retryFailed })}
-              />
-            </CardContent>
-          </Card>
+          <details className="rounded-xl border border-border">
+            <summary className="cursor-pointer px-4 py-3 text-sm font-medium">Advanced: naming, imports, and automation</summary>
+            <div className="grid items-start gap-5 border-t border-border p-4 xl:grid-cols-2">
+              <Card className="shadow-none">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="flex items-center gap-2">
+                    <Folder className="size-4 text-muted-foreground" />
+                    Naming and imports
+                  </CardTitle>
+                  <CardDescription>How imported movies are named and placed. Changes apply to future imports.</CardDescription>
+                </CardHeader>
+                <CardContent className="gap-5">
+                  <Field id="folder-template" label="Folder naming template" hint="Example: {title} ({year}).">
+                    <Input
+                      id="folder-template"
+                      value={draft.folderTemplate}
+                      onChange={(event) => change({ ...draft, folderTemplate: event.target.value })}
+                    />
+                  </Field>
+                  <Field id="file-template" label="File naming template" hint="Example: {title} ({year}) {quality}.">
+                    <Input
+                      id="file-template"
+                      value={draft.fileTemplate}
+                      onChange={(event) => change({ ...draft, fileTemplate: event.target.value })}
+                    />
+                  </Field>
+                  <Field id="import-mode" label="Import mode" hint="Hardlink keeps seeding data usable; move relocates the file.">
+                    <Select
+                      id="import-mode"
+                      value={draft.importMode}
+                      onChange={(event) => change({ ...draft, importMode: event.target.value })}
+                    >
+                      {optionsWith(draft.importMode, importModes).map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Checkbox
+                    id="write-nfo"
+                    label="Write NFO sidecars"
+                    description="Save movie details next to the file for other media tools."
+                    checked={draft.writeNFO}
+                    onChange={(writeNFO) => change({ ...draft, writeNFO })}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-none">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="flex items-center gap-2">
+                    <HardDrive className="size-4 text-muted-foreground" />
+                    Automation
+                  </CardTitle>
+                  <CardDescription>Monitored movies without a file are searched automatically, and the best allowed release is downloaded. Turn monitoring off in a movie's details to stop this.</CardDescription>
+                </CardHeader>
+                <CardContent className="gap-5">
+                  <Field id="poll-minutes" label="RSS check interval (minutes)" hint="How often Constellarr checks indexer feeds for monitored movies.">
+                    <Input
+                      id="poll-minutes"
+                      type="number"
+                      min="1"
+                      className="max-w-32"
+                      value={draft.pollMinutes}
+                      onChange={(event) => change({ ...draft, pollMinutes: Number(event.target.value) || 0 })}
+                    />
+                  </Field>
+                  <Field id="search-hours" label="Missing search interval (hours)" hint="How often monitored movies without a file are searched, and a release can be downloaded automatically.">
+                    <Input
+                      id="search-hours"
+                      type="number"
+                      min="1"
+                      className="max-w-32"
+                      value={draft.searchHours}
+                      onChange={(event) => change({ ...draft, searchHours: Number(event.target.value) || 0 })}
+                    />
+                  </Field>
+                  <Field id="minimum-availability" label="Minimum availability" hint="Do not search until the movie reaches this stage. Release dates come from the metadata provider.">
+                    <Select
+                      id="minimum-availability"
+                      value={draft.minimumAvailability}
+                      onChange={(event) => change({ ...draft, minimumAvailability: event.target.value })}
+                    >
+                      {optionsWith(draft.minimumAvailability, availabilityOptions).map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Checkbox
+                    id="retry-failed"
+                    label="Retry failed downloads"
+                    description="Failed releases are blocked, and alternate releases are tried on the next search."
+                    checked={draft.retryFailed}
+                    onChange={(retryFailed) => change({ ...draft, retryFailed })}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          </details>
         </div>
       )}
 

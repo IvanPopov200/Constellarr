@@ -2582,6 +2582,7 @@ function MovieReleaseDialog({
   onClose: () => void
   onGrabbed: (id: string) => void
 }) {
+  const { can } = useAuth()
   const [releases, setReleases] = useState<MovieRelease[] | null>(null)
   const [searching, setSearching] = useState(true)
   const [grabbing, setGrabbing] = useState('')
@@ -2676,7 +2677,7 @@ function MovieReleaseDialog({
         {notice && (
           <p role="status" className="rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-sm text-emerald-400">
             <CheckIcon className="mr-2 inline size-4" />
-            {notice}{' '}<a href={queueHref} onClick={onClose} className="underline underline-offset-4">View download</a>
+            {notice}{can('downloads.read') && <>{' '}<a href={queueHref} onClick={onClose} className="underline underline-offset-4">View download</a></>}
           </p>
         )}
 
@@ -3019,14 +3020,22 @@ function MovieDetailDialog({
               </a>
             </Button>
           )}
-          {file && canReadSubtitles && (
+          {canReadSubtitles && (file ? (
             <Button asChild size="sm" variant="outline">
               <a href={`#subtitles?kind=movie&id=${encodeURIComponent(movie.id)}`} onClick={onClose}>
                 <CaptionsIcon data-icon="inline-start" />
                 Subtitles
               </a>
             </Button>
-          )}
+          ) : (
+            <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+              <Button size="sm" variant="outline" disabled>
+                <CaptionsIcon data-icon="inline-start" />
+                Subtitles
+              </Button>
+              Available after the movie is imported
+            </span>
+          ))}
           {canWrite && (
             <Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refresh()}>
               {refreshing ? (

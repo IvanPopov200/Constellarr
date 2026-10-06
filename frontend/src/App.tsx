@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { MouseEvent } from 'react'
 import { AppShell, PageHeading } from '@/components/app-shell'
 import { routeLabels, routePermissions, type Route } from '@/lib/navigation'
@@ -67,12 +67,14 @@ function App() {
 
   const activeDownloads = jobs?.filter(isActiveJob).length ?? 0
   const settingsSection = route === 'connections' || route === 'storage' ? route : null
-  const subtitleParams = new URLSearchParams(hash.split('?')[1])
-  const subtitleKind = subtitleParams.get('kind')
-  const subtitleId = subtitleParams.get('id')
-  const subtitleTarget = (subtitleKind === 'movie' || subtitleKind === 'episode') && subtitleId
-    ? { kind: subtitleKind, id: subtitleId, mode: 'search' as const }
-    : undefined
+  const subtitleTarget = useMemo(() => {
+    const params = new URLSearchParams(hash.split('?')[1])
+    const kind = params.get('kind')
+    const id = params.get('id')
+    return (kind === 'movie' || kind === 'episode') && id
+      ? { kind, id, mode: 'search' as const }
+      : undefined
+  }, [hash])
 
   return (
     <>

@@ -127,6 +127,7 @@ export function NewRequestDialog({ types, initialType, onClose, onCreated }: Pro
                   type="button"
                   onClick={() => setSelected(result)}
                   aria-pressed={selected?.providerId === result.providerId}
+                  title={`Metadata ID ${result.providerId}`}
                   className={cn(
                     'flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors',
                     selected?.providerId === result.providerId ? 'border-primary/60 bg-primary/5' : 'border-border hover:bg-muted/40',
@@ -139,10 +140,7 @@ export function NewRequestDialog({ types, initialType, onClose, onCreated }: Pro
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{result.title}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {result.year > 0 ? `${result.year} · ` : ''}
-                      {result.providerId}
-                    </span>
+                    <span className="block text-xs text-muted-foreground">{result.year > 0 ? result.year : 'Year unknown'}</span>
                   </span>
                   <Badge variant="outline" className="text-muted-foreground">
                     {mediaTypeLabel(result.mediaType)}

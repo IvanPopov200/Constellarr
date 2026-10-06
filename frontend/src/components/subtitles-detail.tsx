@@ -63,6 +63,8 @@ const tasks: { value: Task; label: string; icon: typeof CaptionsIcon }[] = [
 
 const activeJobStatuses = new Set(['queued', 'running'])
 
+const maxJobPolls = 200 // fallback bound; longer jobs stay visible and are followed on the Activity tab.
+
 const syncModes: { value: 'offset' | 'fps' | 'audio' | 'reference'; label: string }[] = [
   { value: 'offset', label: 'Shift by a fixed offset' },
   { value: 'fps', label: 'Convert frame rate' },
@@ -145,15 +147,16 @@ export function SubtitleDetailDialog({
   const [minScore, setMinScore] = useState('')
   const [noFixFramerate, setNoFixFramerate] = useState(false)
   const [goldenSection, setGoldenSection] = useState(false)
-  const [syncPreview, setSyncPreview] = useState(false)
+  const [syncPreview, setSyncPreview] = useState(true)
 
   const [translatePath, setTranslatePath] = useState('')
   const [translateLanguage, setTranslateLanguage] = useState('')
   const [extractStream, setExtractStream] = useState('-1')
   const [extractLanguage, setExtractLanguage] = useState('')
-  const [extractPreview, setExtractPreview] = useState(false)
+  const [extractPreview, setExtractPreview] = useState(true)
 
   const cancelled = useRef(false)
+  const activeTarget = useRef('')
   const outputsRef = useRef(0)
   useEffect(() => {
     cancelled.current = false
@@ -180,6 +183,8 @@ export function SubtitleDetailDialog({
         setResults([])
         setWarnings([])
         setPreviewID('')
+        setSyncPreview(true)
+        setExtractPreview(true)
         const loaded = await subtitlesApi.detail(active.kind, active.id, signal)
         if (signal?.aborted) return
         setDetail(loaded)
@@ -216,6 +221,8 @@ export function SubtitleDetailDialog({
   )
 
   useEffect(() => {
+    // A closed dialog or another video stops the previous job poll from reporting into this one.
+    activeTarget.current = target ? `${target.kind}:${target.id}` : ''
     if (!target) return
     const controller = new AbortController()
     // eslint-disable-next-line react-hooks/set-state-in-effect -- state is set only after the fetch settles
@@ -234,18 +241,23 @@ export function SubtitleDetailDialog({
   const subtitleStreams = streams.filter((stream) => stream.type === 'subtitle')
   const audioStreams = streams.filter((stream) => stream.type === 'audio')
 
-  // waitJob follows a queued job until it reaches a terminal state.
+  // waitJob follows a queued job until it finishes, the dialog closes, or another video is opened.
   const waitJob = useCallback(
     async (created: SubtitleJob, label: string, scope: Task) => {
+      const startedFor = activeTarget.current
       setJob({ job: created, task: scope })
       let failure = ''
       let outcome = 'done'
-      for (let attempt = 0; attempt < 200 && !cancelled.current; attempt++) {
+      let finished = false
+      for (let attempt = 0; attempt < maxJobPolls && !cancelled.current; attempt++) {
         await new Promise((resolve) => window.setTimeout(resolve, 1200))
+        if (startedFor !== activeTarget.current) return
         try {
           const current = await subtitlesApi.job(created.id)
+          if (startedFor !== activeTarget.current) return
           setJob({ job: current, task: scope })
           if (current.status === 'queued' || current.status === 'running') continue
+          finished = true
           if (current.status === 'cancelled') outcome = 'cancelled'
           else if (current.status !== 'done') {
             outcome = 'failed'
@@ -253,13 +265,23 @@ export function SubtitleDetailDialog({
           }
           break
         } catch (cause) {
+          if (startedFor !== activeTarget.current) return
+          finished = true
           outcome = 'failed'
           failure = errorMessage(cause)
           break
         }
       }
+      if (cancelled.current || startedFor !== activeTarget.current) return
       const before = outputsRef.current
       const next = await reload().catch(() => undefined)
+      if (cancelled.current || startedFor !== activeTarget.current) return
+      if (!finished) {
+        // Keep the last job state visible and point at the page that keeps following it.
+        setFeedback({ scope, tone: 'warning', message: `${label} is still running. Follow it under Subtitles → Activity.` })
+        onChanged()
+        return
+      }
       setJob(null)
       if (outcome === 'failed') {
         setFeedback({ scope, tone: 'error', message: `${label} failed: ${failure}` })
@@ -272,7 +294,7 @@ export function SubtitleDetailDialog({
           message: `${label} finished. The result is waiting for review under Subtitles — preview it and save it when it looks right.`,
         })
       } else {
-        setFeedback({ scope, tone: 'success', message: `${label} finished.` })
+        setFeedback({ scope, tone: 'success', message: `${label} finished. Nothing is waiting for review.` })
       }
       onChanged()
     },
@@ -589,8 +611,9 @@ export function SubtitleDetailDialog({
               <Section title={`Waiting for review (${outputs.length})`}>
                 {outputs.length === 0 ? (
                   <EmptyNote>
-                    Nothing is waiting for review. Timing, translation, and extraction results appear here so you can
-                    check them before they replace anything.
+                    Nothing is waiting for review. Timing and extraction results land here while Review before saving is
+                    on; with it off they replace the subtitle as soon as the job finishes, and translations always wait
+                    here.
                   </EmptyNote>
                 ) : (
                   <ul className="divide-y divide-border rounded-lg border border-border">
@@ -881,7 +904,7 @@ export function SubtitleDetailDialog({
               </div>
               <Toggle
                 label="Review before saving"
-                hint="Keep the current file and stage the adjusted copy until you approve it."
+                hint="On: the adjusted copy waits for your approval. Off: it replaces the subtitle as soon as the job finishes."
                 checked={syncPreview}
                 onChange={setSyncPreview}
               />
@@ -1014,7 +1037,7 @@ export function SubtitleDetailDialog({
                 <>
                   <Toggle
                     label="Review before saving"
-                    hint="Stage the extracted subtitles until you approve them."
+                    hint="On: the extracted subtitles wait for your approval. Off: they are written next to the video as soon as extraction finishes."
                     checked={extractPreview}
                     onChange={setExtractPreview}
                   />

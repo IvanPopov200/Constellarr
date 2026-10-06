@@ -58,6 +58,17 @@ function mediaLabel(media: 'movies' | 'tv' | 'music') {
   return 'Movies'
 }
 
+const planStatusLabels: Record<string, string> = {
+  ready: 'Ready to import',
+  applying: 'Importing',
+  applied: 'Import complete',
+  partial: 'Finished with items needing attention',
+}
+
+function planStatusLabel(status: string) {
+  return planStatusLabels[status] ?? (status || 'Unknown')
+}
+
 // Source paths and profile keys become element ids, so keep them to safe characters.
 function elementID(prefix: string, value: string) {
   return `${prefix}-${value.replace(/[^a-zA-Z0-9_-]+/g, '-')}`
@@ -817,7 +828,7 @@ export function MigrationPage() {
                 <div className="mt-4 space-y-2" aria-live="polite">
                   <p className="text-sm">
                     {totals.done} imported · {totals.failed} failed · {totals.skipped} skipped · {totals.pending} remaining
-                    {busy === 'apply' ? ' — working…' : ''}
+                    {busy === 'apply' ? ' (working…)' : ''}
                   </p>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="presentation">
                     <div
@@ -826,7 +837,8 @@ export function MigrationPage() {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Plan status: {plan.status}{plan.status === 'partial' ? ' — fix the listed items, then retry failed items.' : ''}
+                    Plan status: {planStatusLabel(plan.status)}
+                    {plan.status === 'partial' ? '. Fix the listed items, then retry failed items.' : ''}
                   </p>
                 </div>
               )}
@@ -863,7 +875,7 @@ export function MigrationPage() {
                 <ul className="space-y-1 text-sm text-muted-foreground">
                   {applied.slice(0, 100).map(item => (
                     <li key={`${item.position}-${item.target}`}>
-                      <span className="text-foreground">{item.label}</span> — {item.message}
+                      <span className="text-foreground">{item.label}</span>: {item.message}
                     </li>
                   ))}
                 </ul>

@@ -32,7 +32,8 @@ const languageListId = 'subtitle-language-codes'
 
 function emptyProvider(): SubtitleProvider {
   return {
-    id: 'opensubtitles',
+    // Blank id: the server generates a unique one on save, so a new row never collides with a saved provider.
+    id: '',
     name: 'OpenSubtitles',
     type: 'opensubtitles',
     endpoint: 'https://api.opensubtitles.com/api/v1',
@@ -68,6 +69,8 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
   const [testing, setTesting] = useState(false)
   const [error, setError] = useState('')
   const [feedback, setFeedback] = useState<Feedback | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState('')
+  const [savedProviderIds, setSavedProviderIds] = useState<string[]>([])
   const [profileDraft, setProfileDraft] = useState<SubtitleProfile>({
     id: '',
     name: '',
@@ -86,6 +89,7 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
       if (signal?.aborted) return
       setConfig(loaded)
       setStatuses(providerStatuses)
+      setSavedProviderIds((loaded.providers ?? []).map((provider) => provider.id))
       setError('')
       // The translation provider is shared with recommendations; the subtitle UI only reads its status.
       discoveryApi
@@ -297,24 +301,47 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
                     {(profile.languages ?? []).map(languageVariant).join(', ') || 'no languages yet'} · stops at {profile.cutoff}
                   </p>
                 </div>
-                <div className="flex gap-1">
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    onClick={() => setProfileDraft({ ...profile, languages: profile.languages ?? [] })}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    onClick={() => deleteProfile(profile.id)}
-                    disabled={!canWrite}
-                    aria-label={`Delete ${profile.name}`}
-                  >
-                    <Trash2Icon data-icon="inline-start" />
-                  </Button>
-                </div>
+                {confirmDelete === profile.id ? (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      Delete {profile.name || 'this profile'}? This cannot be undone, and a profile still assigned to a
+                      video cannot be deleted.
+                    </span>
+                    <Button
+                      size="xs"
+                      variant="destructive"
+                      disabled={!canWrite}
+                      onClick={() => {
+                        setConfirmDelete('')
+                        void deleteProfile(profile.id)
+                      }}
+                    >
+                      Yes, delete
+                    </Button>
+                    <Button size="xs" variant="outline" onClick={() => setConfirmDelete('')}>
+                      Keep profile
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-1">
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => setProfileDraft({ ...profile, languages: profile.languages ?? [] })}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => setConfirmDelete(profile.id)}
+                      disabled={!canWrite}
+                      aria-label={`Delete ${profile.name}`}
+                    >
+                      <Trash2Icon data-icon="inline-start" />
+                    </Button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -485,8 +512,20 @@ export function SubtitleSettings({ profiles, onChanged }: { profiles: SubtitlePr
                   {test?.ok && test.message && <ActionNote>{test.message}</ActionNote>}
                   <Disclosure label="Advanced options" variant="inline" detail={provider.endpoint}>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label="Provider id" hint="Identifies this provider in jobs and history.">
-                        <Input value={provider.id} onChange={(event) => updateProvider(index, { id: event.target.value })} />
+                      <Field
+                        label="Provider id"
+                        hint={
+                          savedProviderIds.includes(provider.id)
+                            ? 'Saved providers keep their id so the stored API key stays attached. Add a new provider instead of renaming this one.'
+                            : 'Optional until you save: a blank id is generated for you. It identifies this provider in jobs and history.'
+                        }
+                      >
+                        <Input
+                          value={provider.id}
+                          placeholder="Generated on save"
+                          readOnly={savedProviderIds.includes(provider.id)}
+                          onChange={(event) => updateProvider(index, { id: event.target.value })}
+                        />
                       </Field>
                       <Field label="API endpoint">
                         <Input value={provider.endpoint} onChange={(event) => updateProvider(index, { endpoint: event.target.value })} />
