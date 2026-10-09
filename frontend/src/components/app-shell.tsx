@@ -20,11 +20,14 @@ import {
   PanelLeftIcon,
   SettingsIcon,
   ShieldCheckIcon,
+  SmartphoneIcon,
   TvIcon,
   UsersIcon,
   XIcon,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { BrandMark } from '@/components/brand-mark'
+import { MobileNavigation } from '@/components/mobile-navigation'
 import { BackendStatusChip } from '@/components/backend-status'
 import { Button } from '@/components/ui/button'
 import { cn } from 'cn'
@@ -44,6 +47,7 @@ const routeSections: Record<Route, string> = {
   connections: 'System',
   storage: 'System',
   users: 'System',
+  companion: 'System',
   migration: 'System',
   backups: 'System',
   system: 'System',
@@ -75,6 +79,7 @@ const navSections: { label: string; items: { route: Route; icon: LucideIcon }[] 
       { route: 'connections', icon: CableIcon },
       { route: 'storage', icon: HardDriveIcon },
       { route: 'users', icon: UsersIcon },
+      { route: 'companion', icon: SmartphoneIcon },
       { route: 'migration', icon: ImportIcon },
       { route: 'backups', icon: ShieldCheckIcon },
       { route: 'system', icon: SettingsIcon },
@@ -92,28 +97,10 @@ function readCollapsed() {
   }
 }
 
-function ConstellationMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
-      <path
-        d="M5 18 9 9l7 3 3-7"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.5"
-      />
-      <circle cx="5" cy="18" r="1.7" fill="currentColor" />
-      <circle cx="9" cy="9" r="1.7" fill="currentColor" />
-      <circle cx="16" cy="12" r="1.7" fill="currentColor" />
-      <circle cx="19" cy="5" r="1.7" fill="currentColor" />
-    </svg>
-  )
-}
-
 function Brand({ collapsed = false }: { collapsed?: boolean }) {
   return (
     <div className={cn('flex h-14 items-center gap-2.5 px-4', collapsed && 'justify-center px-0')}>
-      <ConstellationMark className="size-6 shrink-0 text-primary" />
+      <BrandMark className="size-6 shrink-0 text-primary" />
       {!collapsed && (
         <span className="font-heading text-sm font-semibold tracking-tight">Constellarr</span>
       )}
@@ -283,6 +270,8 @@ export function AppShell({
     window.scrollTo({ top: 0 })
   }, [route])
 
+  const mobileMoreTrigger = useRef<HTMLButtonElement | null>(null)
+
   const navigateFromDialog = () => {
     navigatedRef.current = true
     setMobileOpen(false)
@@ -318,10 +307,15 @@ export function AppShell({
               <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 motion-reduce:animate-none" />
               <Dialog.Content
                 onCloseAutoFocus={(event) => {
-                  if (!navigatedRef.current) return
-                  navigatedRef.current = false
-                  event.preventDefault()
-                  mainRef.current?.focus()
+                  if (navigatedRef.current) {
+                    navigatedRef.current = false
+                    event.preventDefault()
+                    mainRef.current?.focus()
+                  } else if (mobileMoreTrigger.current) {
+                    event.preventDefault()
+                    mobileMoreTrigger.current.focus()
+                  }
+                  mobileMoreTrigger.current = null
                 }}
                 className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-xl data-[state=open]:animate-in data-[state=open]:slide-in-from-left data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left motion-reduce:animate-none"
               >
@@ -387,10 +381,11 @@ export function AppShell({
               section = section.parentElement?.closest('details') ?? null
             }
           }}
-          className="flex-1 px-4 py-6 outline-none sm:px-8 sm:py-8 lg:px-10 xl:px-12"
+          className="flex-1 px-4 pt-6 pb-[calc(104px+env(safe-area-inset-bottom))] outline-none sm:px-8 sm:pt-8 lg:px-10 lg:pb-8 xl:px-12"
         >
           <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
+        <MobileNavigation route={route} activeDownloads={activeDownloads} onMore={trigger => { mobileMoreTrigger.current = trigger; setMobileOpen(true) }} />
       </div>
     </div>
   )

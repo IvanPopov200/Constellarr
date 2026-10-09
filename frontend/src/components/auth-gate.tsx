@@ -6,22 +6,12 @@ import { useAuth } from '@/lib/auth-context'
 import { cn } from 'cn'
 import { AuthLogin } from '@/components/auth-login'
 import { AuthSetup } from '@/components/auth-setup'
-
-export function BrandMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
-      <path d="M5 18 9 9l7 3 3-7" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
-      <circle cx="5" cy="18" r="1.7" fill="currentColor" />
-      <circle cx="9" cy="9" r="1.7" fill="currentColor" />
-      <circle cx="16" cy="12" r="1.7" fill="currentColor" />
-      <circle cx="19" cy="5" r="1.7" fill="currentColor" />
-    </svg>
-  )
-}
+import { BrandMark } from '@/components/brand-mark'
+export { BrandMark } from '@/components/brand-mark'
 
 export function AuthCard({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-svh items-center justify-center bg-background px-4 py-10">
+    <div className="flex min-h-svh items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <div className="mb-6 flex items-center justify-center gap-2.5">
           <BrandMark className="size-7 text-primary" />

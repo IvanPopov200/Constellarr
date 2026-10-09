@@ -27,7 +27,7 @@ TEST_HELPERS = $(if $(wildcard $(SUBTITLE_HELPER)),TEST_FFSUBSYNC_PATH="$(SUBTIT
 check:
 	npm --prefix frontend run lint
 	npm --prefix frontend run build
-	node --test frontend/src/lib/operations-envelope.test.ts
+	node --test frontend/src/lib/*.test.ts
 	go -C backend vet ./...
 	$(TEST_HELPERS) go -C backend test ./...
 

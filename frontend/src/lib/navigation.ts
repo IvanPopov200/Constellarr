@@ -11,6 +11,7 @@ export const routeLabels = {
   connections: 'Connections',
   storage: 'Storage & Paths',
   users: 'Users & Access',
+  companion: 'Connect iOS',
   migration: 'Migration',
   backups: 'Backups & Imports',
   system: 'System',

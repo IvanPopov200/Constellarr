@@ -4,6 +4,7 @@ import { AppShell, PageHeading } from '@/components/app-shell'
 import { routeLabels, routePermissions, type Route } from '@/lib/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { UsersPage } from '@/components/users-page'
+import { CompanionPage } from '@/components/companion-page'
 import { RequestsPage } from '@/components/requests-page'
 import { CalendarPage } from '@/components/calendar-page'
 import { RecommendationsPanel } from '@/components/recommendations-panel'
@@ -108,6 +109,7 @@ function App() {
         </div>}
 
         {route === 'users' && <UsersPage />}
+        {route === 'companion' && <CompanionPage />}
         {route === 'requests' && <RequestsPage />}
         {route === 'calendar' && <CalendarPage />}
         {route === 'migration' && <MigrationPage />}

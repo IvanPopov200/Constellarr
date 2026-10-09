@@ -1,0 +1,12 @@
+export function BrandMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
+      <path d="m5 6 7-2 6 4M5 6l4 7 6 4 3-9m-3 9 5-2" fill="none" stroke="currentColor" strokeOpacity=".5" strokeWidth=".9" />
+      <g fill="currentColor">
+        <circle cx="5" cy="6" r="1.4" /><circle cx="12" cy="4" r="1.1" />
+        <circle cx="18" cy="8" r="1.6" /><circle cx="9" cy="13" r="1.2" />
+        <circle cx="15" cy="17" r="1.4" /><circle cx="20" cy="15" r="1" />
+      </g>
+    </svg>
+  )
+}

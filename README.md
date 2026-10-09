@@ -76,6 +76,23 @@ events, and alerts. AI provider settings are shared by recommendations and subti
 For access through a custom hostname, set `ALLOWED_HOSTS` to a comma-separated
 list of exact names. Localhost and IP addresses work by default.
 
+## Connect the iOS app
+
+Open **System → Connect iOS** to create access for your phone. Enter a LAN or VPN server address
+that the phone can reach, choose the device name and expiry, and create a scoped personal token.
+Copy setup, then use **Paste connection** in the native app and connect. Manual address/token
+entry is also available. Existing iOS installations find this in **Settings → Constellarr server**.
+
+The native workspace browses movies and TV, follows Usenet and torrent downloads, shows requests
+and the calendar, and offers pause/resume (plus Usenet retry) when download controls are allowed.
+Library editing and advanced administration remain in the web companion. Existing direct-service
+iOS connections, widgets, Live Activities, and playback remain separate from the companion API.
+
+Tokens are restricted to the selected capabilities within your own permissions. They expire and
+can be revoked from Connect iOS or Users & Access. The setup payload is shown once, stays in memory
+only, and contains the server URL and token. Open-app links carry the server address only.
+A `localhost` address will not reach your server from a physical phone.
+
 ## Movie library
 
 Add movies through metadata search, an IMDb ID, or manual title/year entry when

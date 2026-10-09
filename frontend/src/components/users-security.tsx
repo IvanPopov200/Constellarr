@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { ClipboardCopy, KeyRound, LoaderCircle, Plus } from 'lucide-react'
+import { ClipboardCopy, KeyRound, LoaderCircle, Plus, Smartphone } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Field, FormError } from '@/components/auth-gate'
 import { Button } from '@/components/ui/button'
@@ -10,15 +10,8 @@ import { Confirm, EmptyState, LoadError, LoadingRows, Modal } from '@/components
 import { errorMessage } from '@/lib/api'
 import { authApi, type ApiToken } from '@/lib/auth-api'
 import { useAuth } from '@/lib/auth-context'
+import { expiryLabel } from '@/lib/companion'
 import { formatAge } from '@/lib/format'
-
-function expiryLabel(value: string | null) {
-  if (!value) return 'Never expires'
-  const days = Math.ceil((Date.parse(value) - Date.now()) / 86_400_000)
-  if (!Number.isFinite(days)) return 'No expiry date'
-  if (days <= 0) return 'Expired'
-  return `Expires in ${days} ${days === 1 ? 'day' : 'days'}`
-}
 
 function ChangePassword() {
   const { logout } = useAuth()
@@ -271,7 +264,13 @@ function Tokens() {
         <CardDescription>Personal tokens for the native app, scripts, or other automation.</CardDescription>
       </CardHeader>
       <CardContent className="gap-4">
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button asChild variant="outline" size="sm">
+            <a href="#companion">
+              <Smartphone aria-hidden="true" />
+              Connect the iOS app
+            </a>
+          </Button>
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus aria-hidden="true" />
             Create token
